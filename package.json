@@ -7,7 +7,10 @@
   },
   "scripts": {
     "test": "vitest run",
-    "lint": "prettier --check .",
+    "lint": "npm run lint:js && npm run lint:html && npm run lint:css && prettier --check .",
+    "lint:js": "eslint index.js",
+    "lint:html": "html-validate index.html",
+    "lint:css": "prettier --check style.css",
     "spell-check": "cspell \"**/*.{html,css,js,md}\"",
     "format": "prettier --write ."
   },
@@ -25,6 +28,9 @@
   "description": "",
   "devDependencies": {
     "cspell": "^9.6.4",
+    "eslint": "^10.0.0",
+    "eslint-config-prettier": "^10.1.8",
+    "html-validate": "^10.8.0",
     "prettier": "^3.8.1",
     "vitest": "^4.0.18"
   }

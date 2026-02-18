@@ -1,25 +1,72 @@
-# Mission: Add GitHub Repositories Feature
+# Design Document: Quality Assurance & Publishing Pipeline
 
-## Mission Goal
+## 1. Mission Overview
+**Objective:** Establish a robust error-checking pipeline and automated publishing workflow for the `charles-forsyth.github.io` portfolio.
+**Mission:** "Check for errors and publish."
+**Target Audience:** Charles Forsyth (Director of Research Computing).
 
-Display a searchable list of GitHub repositories from `https://github.com/charles-forsyth` at the bottom of the portfolio page, with a navigation link in the header.
+## 2. Technology Stack & Language
+The project is a static website. We will use a **Node.js-based toolchain** for development hygiene and **GitHub Actions** for CI/CD.
 
-## Technical Design
+*   **Core:**
+    *   HTML5 (Semantic Markup)
+    *   CSS3 (Custom Properties, Flexbox/Grid)
+    *   JavaScript (ES6+, Vanilla)
+*   **Dev Tooling (Node.js):**
+    *   **Package Manager:** `npm`
+    *   **Formatter:** `prettier` (Code style enforcement)
+    *   **Linter:** `eslint` (JavaScript error checking)
+    *   **Validator:** `html-validate` (HTML standards compliance)
 
-- **Fetching:** Use `fetch('https://api.github.com/users/charles-forsyth/repos')` on page load.
-- **Rendering:**
-  - Create a `<section id="github-repos">` at the bottom of `index.html`.
-  - Add a search input: `<input type="text" id="repo-search" placeholder="Search repos...">`.
-  - Display repositories as cards (`.repo-card`) inside a container (`#repo-list`).
-  - Show name, description, stars (`stargazers_count`), and language.
-- **Filtering:** Add an event listener to `#repo-search` to filter the displayed list by name.
-- **Navigation:** Add a link `<a href="#github-repos">Projects</a>` to the main navigation.
-- **Styling:** Update `style.css` to style the repo cards and search input (grid layout, responsive).
+## 3. Toolchain Definition
 
-## Workflow
+### 3.1. Dependencies (`package.json`)
+*   `prettier`: Formatting for HTML, CSS, JS, JSON.
+*   `eslint`: Static analysis for `index.js`.
+*   `eslint-config-prettier`: Disables conflicting ESLint rules.
+*   `html-validate`: Checks for HTML errors (unclosed tags, invalid attributes).
 
-1. **DevOps:** Bump version to `1.1.0`.
-2. **Sentinel:** Create `tests/repos.test.js` to verify section existence.
-3. **Grunt:** Implement HTML structure, CSS styles, and JavaScript logic.
-4. **Gatekeeper:** Verify tests pass (`npm test`).
-5. **UAT:** Verify functionality manually/visually.
+### 3.2. Configuration
+*   **`.gitignore`**: Standard exclusions (`node_modules/`, `.DS_Store`, `.gemini/`, etc.).
+*   **`.prettierrc`**: Standard formatting rules (2 spaces, single quotes).
+*   **`.eslintrc.json`**: Basic recommended JS rules (`eslint:recommended`).
+*   **`.htmlvalidate.json`**: HTML validation rules (`"extends": ["html-validate:recommended"]`).
+
+## 4. Architecture & Directory Structure
+The structure remains flat for simplicity, with configuration files at the root.
+
+```
+/
+├── .github/
+│   └── workflows/
+│       ├── ci.yml          # [NEW] Lint & Test workflow
+│       └── deploy.yml      # [NEW] Deploy to GitHub Pages workflow
+├── .gitignore              # [NEW] Git ignore definitions
+├── .prettierrc             # [NEW] Prettier config
+├── .eslintrc.json          # [NEW] ESLint config
+├── package.json            # [NEW] Dependencies
+├── index.html              # [EXISTING] Main content
+├── index.js                # [EXISTING] Interactive logic
+├── style.css               # [EXISTING] Styles
+└── GEMINI.md               # [EXISTING] Project context
+```
+
+## 5. CI/CD Workflows (`.github/workflows/`)
+
+### 5.1. Continuous Integration (`ci.yml`)
+*   **Trigger:** Push to any branch, Pull Requests.
+*   **Jobs:**
+    *   `lint`: Runs `eslint`, `prettier --check`, and `html-validate`.
+
+### 5.2. Continuous Deployment (`deploy.yml`)
+*   **Trigger:** Push to `master` (or `main`) *only after CI passes*.
+*   **Job:** `deploy`
+    *   Uses `actions/upload-pages-artifact` and `actions/deploy-pages`.
+    *   Ensures the live site is always a clean, validated build.
+
+## 6. Implementation Plan
+1.  **Initialize:** Create `package.json` and install dev dependencies.
+2.  **Configure:** Create `.gitignore`, `.prettierrc`, `.eslintrc.json`.
+3.  **Baseline:** Run `prettier --write .` and fix any initial linting errors.
+4.  **Automate:** Create `.github/workflows/ci.yml` and `.github/workflows/deploy.yml`.
+5.  **Verify:** Run the full lint command locally to ensure "zero errors" before pushing.
