@@ -1,6 +1,6 @@
 {
   "name": "charles-forsyth.github.io",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "main": "index.js",
   "directories": {
     "test": "tests"
@@ -8,6 +8,7 @@
   "scripts": {
     "test": "vitest run",
     "lint": "prettier --check .",
+    "spell-check": "cspell \"**/*.{html,css,js,md}\"",
     "format": "prettier --write ."
   },
   "repository": {
@@ -23,6 +24,7 @@
   "homepage": "https://github.com/charles-forsyth/charles-forsyth.github.io#readme",
   "description": "",
   "devDependencies": {
+    "cspell": "^9.6.4",
     "prettier": "^3.8.1",
     "vitest": "^4.0.18"
   }

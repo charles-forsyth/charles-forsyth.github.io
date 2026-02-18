@@ -1,0 +1,22 @@
+{
+  "version": "0.2",
+  "language": "en",
+  "words": [
+    "Agentic",
+    "Skywalker",
+    "Flexbox",
+    "nojekyll",
+    "Deckplates",
+    "Outdoorsman",
+    "Tioga",
+    "vitest",
+    "prettierrc",
+    "Forsyth",
+    "AlphaFold",
+    "petabyte",
+    "UCR",
+    "HPC",
+    "DAE"
+  ],
+  "ignorePaths": ["node_modules/**", "package-lock.json"]
+}
