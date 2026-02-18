@@ -25,6 +25,7 @@
           </p>
           <div class="cta-buttons">
             <a href="#portfolio" class="btn btn-primary">View Innovations</a>
+            <a href="#github-repos" class="btn btn-secondary">All Repos</a>
             <a href="#contact" class="btn btn-secondary">Contact Me</a>
           </div>
         </div>
@@ -164,6 +165,23 @@
       </div>
     </section>
 
+    <section id="github-repos" class="section-light">
+      <div class="container">
+        <h3><i class="fab fa-github"></i> All GitHub Repositories</h3>
+        <div class="repo-controls">
+          <input
+            type="text"
+            id="repo-search"
+            class="repo-search"
+            placeholder="Search repositories..."
+          />
+        </div>
+        <div id="repo-list" class="repo-grid">
+          <!-- Repos will be injected here -->
+        </div>
+      </div>
+    </section>
+
     <section id="contact" class="section-dark">
       <div class="container text-center">
         <h3>Connect</h3>
@@ -188,5 +206,54 @@
         </p>
       </div>
     </section>
+    <script>
+      async function fetchRepos() {
+        try {
+          const response = await fetch(
+            'https://api.github.com/users/charles-forsyth/repos?sort=updated',
+          );
+          if (!response.ok) {
+            console.error('Failed to fetch repos');
+            return;
+          }
+          const repos = await response.json();
+          renderRepos(repos);
+
+          document
+            .getElementById('repo-search')
+            .addEventListener('input', (e) => {
+              const term = e.target.value.toLowerCase();
+              const filtered = repos.filter((repo) =>
+                repo.name.toLowerCase().includes(term),
+              );
+              renderRepos(filtered);
+            });
+        } catch (error) {
+          console.error('Error fetching repos:', error);
+        }
+      }
+
+      function renderRepos(repos) {
+        const container = document.getElementById('repo-list');
+        if (!container) return;
+        
+        container.innerHTML = repos
+          .map(
+            (repo) => `
+          <div class="repo-card">
+            <h4><a href="${repo.html_url}" target="_blank">${repo.name}</a></h4>
+            <p>${repo.description || 'No description available.'}</p>
+            <div class="repo-meta">
+              <span><i class="fas fa-star"></i> ${repo.stargazers_count}</span>
+              <span><i class="fas fa-code"></i> ${repo.language || 'N/A'}</span>
+            </div>
+          </div>
+        `,
+          )
+          .join('');
+      }
+
+      document.addEventListener('DOMContentLoaded', fetchRepos);
+    </script>
   </body>
 </html>
