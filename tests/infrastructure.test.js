@@ -45,8 +45,8 @@ describe('Project Hygiene Checks', () => {
       expect(fs.existsSync(prettierrcPath)).toBe(true);
     });
 
-    it('should have an .eslintrc.json file', () => {
-      const eslintrcPath = path.join(projectRoot, '.eslintrc.json');
+    it('should have an .eslintrc.mjs file', () => {
+      const eslintrcPath = path.join(projectRoot, 'eslint.config.mjs');
       expect(fs.existsSync(eslintrcPath)).toBe(true);
     });
 
