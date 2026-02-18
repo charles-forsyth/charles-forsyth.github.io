@@ -12,7 +12,7 @@ describe('Content Checks', () => {
 
   it('index.html should be valid HTML5', () => {
     const html = fs.readFileSync(indexHtmlPath, 'utf-8');
-    expect(html).toContain('<!DOCTYPE html>');
+    expect(html).toContain('<!doctype html>');
     expect(html).toContain('<html');
     expect(html).toContain('</html>');
     expect(html).toContain('<body');
