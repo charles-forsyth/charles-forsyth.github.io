@@ -1,0 +1,26 @@
+{
+  "name": "charles-forsyth.github.io",
+  "version": "1.0.0",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/charles-forsyth/charles-forsyth.github.io.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/charles-forsyth/charles-forsyth.github.io/issues"
+  },
+  "homepage": "https://github.com/charles-forsyth/charles-forsyth.github.io#readme",
+  "description": "",
+  "devDependencies": {
+    "prettier": "^3.8.1"
+  }
+}
