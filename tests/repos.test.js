@@ -28,7 +28,7 @@ describe('GitHub Repos Section', () => {
   it('should include JavaScript for fetching repositories', () => {
      // Check for either an inline script or external script file reference
     const hasInlineScript = htmlContent.includes('<script>') && htmlContent.includes('fetch(');
-    const hasExternalScript = htmlContent.includes('<script src="script.js"></script>');
+    const hasExternalScript = htmlContent.includes('<script src="index.js"></script>');
     expect(hasInlineScript || hasExternalScript).toBe(true);
   });
 });
