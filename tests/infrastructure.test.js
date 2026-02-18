@@ -65,7 +65,10 @@ describe('Project Hygiene Checks', () => {
     });
 
     it('should have a Deploy workflow file', () => {
-      const workflowPath = path.join(projectRoot, '.github/workflows/deploy.yml');
+      const workflowPath = path.join(
+        projectRoot,
+        '.github/workflows/deploy.yml',
+      );
       expect(fs.existsSync(workflowPath)).toBe(true);
     });
   });

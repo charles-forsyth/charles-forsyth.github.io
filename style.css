@@ -205,7 +205,9 @@ body {
   border: 1px solid #eee;
   padding: 20px;
   border-radius: 8px;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
   display: flex;
   flex-direction: column;
   justify-content: space-between;

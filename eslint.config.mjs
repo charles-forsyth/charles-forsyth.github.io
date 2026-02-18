@@ -1,6 +1,6 @@
-import js from "@eslint/js";
-import prettierConfig from "eslint-config-prettier";
-import globals from "globals";
+import js from '@eslint/js';
+import prettierConfig from 'eslint-config-prettier';
+import globals from 'globals';
 
 export default [
   js.configs.recommended,
@@ -8,13 +8,13 @@ export default [
   {
     languageOptions: {
       ecmaVersion: 2022,
-      sourceType: "module",
+      sourceType: 'module',
       globals: {
         ...globals.browser,
       },
     },
     rules: {
-      "no-unused-vars": "warn",
+      'no-unused-vars': 'warn',
     },
   },
 ];
