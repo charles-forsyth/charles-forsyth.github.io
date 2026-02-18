@@ -1,0 +1,174 @@
+:root {
+    --primary: #003087; /* UCR Blue-ish */
+    --accent: #F1AB00;  /* UCR Gold-ish */
+    --dark: #1a1a1a;
+    --light: #f4f4f4;
+    --text: #333;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    line-height: 1.6;
+    color: var(--text);
+}
+
+/* Hero Section */
+.hero {
+    background: linear-gradient(135deg, var(--primary) 0%, #001530 100%);
+    color: white;
+    padding: 100px 20px;
+    text-align: center;
+}
+
+.hero h1 {
+    font-size: 3.5rem;
+    margin-bottom: 10px;
+}
+
+.hero h2 {
+    font-size: 1.8rem;
+    font-weight: 300;
+    color: var(--accent);
+    margin-bottom: 20px;
+}
+
+.cta-buttons {
+    margin-top: 30px;
+}
+
+.btn {
+    display: inline-block;
+    padding: 12px 30px;
+    border-radius: 5px;
+    text-decoration: none;
+    font-weight: bold;
+    margin: 0 10px;
+    transition: transform 0.2s;
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+}
+
+.btn-primary {
+    background-color: var(--accent);
+    color: var(--primary);
+}
+
+.btn-secondary {
+    border: 2px solid white;
+    color: white;
+}
+
+/* Sections */
+.section-light {
+    background-color: white;
+    padding: 80px 20px;
+}
+
+.section-dark {
+    background-color: var(--dark);
+    color: white;
+    padding: 80px 20px;
+}
+
+.container {
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+.text-center {
+    text-align: center;
+}
+
+/* About Grid */
+.about-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+    align-items: center;
+}
+
+.stat-card {
+    background: var(--light);
+    padding: 20px;
+    text-align: center;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.stat-card i {
+    font-size: 2rem;
+    color: var(--primary);
+    margin-bottom: 10px;
+}
+
+/* Portfolio Grid */
+.project-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 30px;
+    margin-top: 40px;
+}
+
+.project-card {
+    background: white;
+    border: 1px solid #eee;
+    padding: 30px;
+    border-radius: 8px;
+    transition: box-shadow 0.3s;
+    position: relative;
+    top: 0;
+}
+
+.project-card:hover {
+    box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    top: -5px;
+}
+
+.card-icon {
+    font-size: 2.5rem;
+    color: var(--accent);
+    margin-bottom: 20px;
+}
+
+.btn-link {
+    display: inline-block;
+    margin-top: 15px;
+    color: var(--primary);
+    text-decoration: none;
+    font-weight: bold;
+}
+
+/* Contact */
+.social-links {
+    margin: 30px 0;
+}
+
+.social-links a {
+    color: white;
+    font-size: 1.5rem;
+    margin: 0 20px;
+    text-decoration: none;
+}
+
+.social-links a:hover {
+    color: var(--accent);
+}
+
+.footer-note {
+    font-size: 0.8rem;
+    color: #777;
+    margin-top: 50px;
+}
+
+@media (max-width: 768px) {
+    .about-grid {
+        grid-template-columns: 1fr;
+    }
+    .hero h1 {
+        font-size: 2.5rem;
+    }
+}
