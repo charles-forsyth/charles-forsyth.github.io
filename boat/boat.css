@@ -1,7 +1,11 @@
 /* Boat Specific Styles */
 .boat-hero {
-  background: linear-gradient(135deg, rgba(10, 25, 47, 0.9) 0%, rgba(2, 12, 27, 0.9) 100%),
-              url('https://images.unsplash.com/photo-1534447677768-be436bb09401?ixlib=rb-1.2.1&auto=format&fit=crop&w=1920&q=80') center/cover;
+  background: linear-gradient(
+      135deg,
+      rgba(10, 25, 47, 0.7) 0%,
+      rgba(2, 12, 27, 0.7) 100%
+    ),
+    url('arcturus.png') center/cover;
 }
 
 .spec-grid {
