@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://charles-forsyth.github.io/sitemap.xml
