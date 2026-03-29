@@ -220,6 +220,173 @@
         </div>
       </section>
 
+      
+      <section id="experiments" class="section-dark">
+        <style>
+          .experiment-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+          }
+          .experiment-card {
+            background: var(--card-bg, #1a1e29);
+            border: 1px solid var(--border-color, #2ea043);
+            border-radius: 6px;
+            padding: 20px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            flex-direction: column;
+          }
+          .experiment-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 15px rgba(46, 160, 67, 0.2);
+          }
+          .experiment-card h4 {
+            color: var(--primary-color, #2ea043);
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+          }
+          .experiment-card p {
+            font-size: 0.9rem;
+            color: var(--text-secondary, #8b949e);
+            flex-grow: 1;
+            margin-bottom: 20px;
+            line-height: 1.5;
+          }
+          .experiment-link {
+            display: inline-block;
+            text-decoration: none;
+            color: #ffffff;
+            background: var(--primary-color, #2ea043);
+            padding: 8px 15px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            text-align: center;
+            transition: background 0.2s;
+            font-family: 'Share Tech Mono', monospace;
+          }
+          .experiment-link:hover {
+            background: #238636;
+            color: #ffffff;
+          }
+        </style>
+        <div class="container">
+          <h3><i class="fas fa-flask"></i> Applied Research & Experiments</h3>
+          <p style="color: var(--text-secondary);">Discover my latest projects that explore cutting-edge computing solutions, AI research, and data-driven innovations hosted in my experimental sandbox.</p>
+          
+          <div class="experiment-grid">
+            
+            <div class="experiment-card">
+              <h4><i class="fas fa-server"></i> Research Computing Portal</h4>
+              <p>A user-friendly management interface for HPC resources, researchers, and projects.</p>
+              <a href="https://lordivxx.github.io/research-manage.html" target="_blank" class="experiment-link">View Project <i class="fas fa-external-link-alt"></i></a>
+            </div>
+
+            <div class="experiment-card">
+              <h4><i class="fas fa-space-shuttle"></i> Auto-Galaga Enhanced</h4>
+              <p>An AI-driven version of the classic Galaga shooter featuring automated gameplay and top score tracking.</p>
+              <a href="https://lordivxx.github.io/galaga-top-score-ai.html" target="_blank" class="experiment-link">Play Now <i class="fas fa-external-link-alt"></i></a>
+            </div>
+
+            <div class="experiment-card">
+              <h4><i class="fas fa-gamepad"></i> Auto-Galaga (Gemini 2.5)</h4>
+              <p>An AI-driven game with adjustments created with Gemini 2.5.</p>
+              <a href="https://lordivxx.github.io/rl-gem25.html" target="_blank" class="experiment-link">Play Now <i class="fas fa-external-link-alt"></i></a>
+            </div>
+
+            <div class="experiment-card">
+              <h4><i class="fas fa-network-wired"></i> HPC Research Network</h4>
+              <p>An interactive network map showcasing HPC connectivity and resources.</p>
+              <a href="https://lordivxx.github.io/hprn.html" target="_blank" class="experiment-link">Explore Map <i class="fas fa-external-link-alt"></i></a>
+            </div>
+
+            <div class="experiment-card">
+              <h4><i class="fas fa-dungeon"></i> Dungeon Hero</h4>
+              <p>A reinforcement learning environment set in a procedurally generated dungeon.</p>
+              <a href="https://lordivxx.github.io/rl-dungeon.html" target="_blank" class="experiment-link">Try It Out <i class="fas fa-external-link-alt"></i></a>
+            </div>
+
+            <div class="experiment-card">
+              <h4><i class="fas fa-hand-paper"></i> Live Hand Tracking</h4>
+              <p>Webcam-based real-time hand and gesture tracking.</p>
+              <a href="https://lordivxx.github.io/hand-track-web.html" target="_blank" class="experiment-link">Try It Out <i class="fas fa-external-link-alt"></i></a>
+            </div>
+
+            <div class="experiment-card">
+              <h4><i class="fas fa-lock"></i> Text Encryptor & Decryptor</h4>
+              <p>A simple web-based tool for encrypting and decrypting text using Caesar cipher logic.</p>
+              <a href="https://lordivxx.github.io/encrypt.html" target="_blank" class="experiment-link">Try It Out <i class="fas fa-external-link-alt"></i></a>
+            </div>
+
+            <div class="experiment-card">
+              <h4><i class="fas fa-user-astronaut"></i> NASA APOD</h4>
+              <p>Displays the daily Astronomy Picture of the Day directly from NASA's REST API.</p>
+              <a href="https://lordivxx.github.io/nspod.html" target="_blank" class="experiment-link">View APOD <i class="fas fa-external-link-alt"></i></a>
+            </div>
+
+            <div class="experiment-card">
+              <h4><i class="fas fa-hiking"></i> Trailblazer Maps</h4>
+              <p>An interactive map with hiking trails, user location, and custom campsite markers.</p>
+              <a href="https://lordivxx.github.io/map.html" target="_blank" class="experiment-link">Explore Map <i class="fas fa-external-link-alt"></i></a>
+            </div>
+
+            <div class="experiment-card">
+              <h4><i class="fas fa-broadcast-tower"></i> HAM Callsign Lookup</h4>
+              <p>Quickly find detailed amateur radio callsign information using a clean, dark-themed interface.</p>
+              <a href="https://lordivxx.github.io/callsign-lookup.html" target="_blank" class="experiment-link">View Tool <i class="fas fa-external-link-alt"></i></a>
+            </div>
+
+            <div class="experiment-card">
+              <h4><i class="fas fa-wifi"></i> LoRaWAN Visualization</h4>
+              <p>Interactively explore LoRaWAN sensor and gateway RF coverage on a dynamic geographic map.</p>
+              <a href="https://lordivxx.github.io/lorawan_viz.html" target="_blank" class="experiment-link">View Tool <i class="fas fa-external-link-alt"></i></a>
+            </div>
+
+            <div class="experiment-card">
+              <h4><i class="fas fa-seedling"></i> MJ Plant Simulation</h4>
+              <p>A comprehensive research report and simulation guide covering soil, light, and biochemistry.</p>
+              <a href="https://lordivxx.github.io/mj-wp2.html" target="_blank" class="experiment-link">View Project <i class="fas fa-external-link-alt"></i></a>
+            </div>
+
+            <div class="experiment-card">
+              <h4><i class="fas fa-microchip"></i> HPC Workflow Simulator</h4>
+              <p>Model, analyze, and optimize the execution of complex scientific applications on parallel compute systems.</p>
+              <a href="https://lordivxx.github.io/hpc-workflow-sim.html" target="_blank" class="experiment-link">View Project <i class="fas fa-external-link-alt"></i></a>
+            </div>
+
+            <div class="experiment-card">
+              <h4><i class="fas fa-tachometer-alt"></i> UCR Research Dashboard</h4>
+              <p>Management interface for UCR Research Computing, HPC clusters, and Google Cloud operations.</p>
+              <a href="https://ucr-research-computing.github.io/" target="_blank" class="experiment-link">View Dashboard <i class="fas fa-external-link-alt"></i></a>
+            </div>
+
+            <div class="experiment-card">
+              <h4><i class="fas fa-comment-dots"></i> Researcher AI Prompts</h4>
+              <p>A curated gallery of engineered AI prompts designed to assist researchers with complex data tasks.</p>
+              <a href="https://ucr-research-computing.github.io/" target="_blank" class="experiment-link">View Gallery <i class="fas fa-external-link-alt"></i></a>
+            </div>
+
+            <div class="experiment-card">
+              <h4><i class="fas fa-mountain"></i> AI-Generated Adventure</h4>
+              <p>A multimedia adventure page about hiking and kayaking, 100% autonomously generated by AI.</p>
+              <a href="https://lordivxx.github.io/adv-test/adventure.html" target="_blank" class="experiment-link">View Page <i class="fas fa-external-link-alt"></i></a>
+            </div>
+
+            <div class="experiment-card">
+              <h4><i class="fas fa-project-diagram"></i> Workflow Builder</h4>
+              <p>A drag-and-drop visual node tool to architect, connect, and run custom data pipelines.</p>
+              <a href="https://lordivxx.github.io/workflow-builder/" target="_blank" class="experiment-link">Try It Out <i class="fas fa-external-link-alt"></i></a>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
       <section id="github-repos" class="section-light">
         <div class="container">
           <h3><i class="fab fa-github"></i> All GitHub Repositories</h3>
