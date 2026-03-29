@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced SIGINT Data Lake | Architecture</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Inter:wght@300;400;600&display=swap');
+        
+        :root {
+            --bg-color: #090a0f;
+            --panel-bg: rgba(18, 21, 31, 0.85);
+            --border-color: #00ff41;
+            --text-main: #c9d1d9;
+            --accent: #00ff41;
+            --accent-glow: rgba(0, 255, 65, 0.4);
+            --secondary: #00a8ff;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+        }
+
+        /* Canvas Background */
+        #network-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: -1;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 50px;
+            border-bottom: 1px solid rgba(0, 255, 65, 0.3);
+            padding-bottom: 30px;
+        }
+
+        h1, h2, h3, .mono {
+            font-family: 'Share Tech Mono', monospace;
+        }
+
+        h1 {
+            color: var(--accent);
+            font-size: 3rem;
+            letter-spacing: 2px;
+            text-shadow: 0 0 15px var(--accent-glow);
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: var(--secondary);
+            font-size: 1.2rem;
+            letter-spacing: 1px;
+        }
+
+        .diagram-container {
+            background: var(--panel-bg);
+            border: 1px solid var(--accent);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 0 30px rgba(0, 255, 65, 0.15);
+            margin-bottom: 50px;
+            backdrop-filter: blur(10px);
+        }
+
+        .diagram-container img {
+            width: 100%;
+            height: auto;
+            border-radius: 4px;
+            display: block;
+        }
+
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+
+        @media (max-width: 768px) {
+            .content-grid { grid-template-columns: 1fr; }
+        }
+
+        .card {
+            background: var(--panel-bg);
+            border-left: 3px solid var(--accent);
+            padding: 25px;
+            border-radius: 0 8px 8px 0;
+            backdrop-filter: blur(10px);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 255, 65, 0.1);
+        }
+
+        .card h3 {
+            color: var(--accent);
+            font-size: 1.4rem;
+            margin-top: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card p {
+            line-height: 1.6;
+            color: #a3b3c4;
+            font-size: 0.95rem;
+        }
+
+        .tech-stack {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .tag {
+            background: rgba(0, 255, 65, 0.1);
+            color: var(--accent);
+            border: 1px solid var(--accent);
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-family: 'Share Tech Mono', monospace;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: var(--text-main);
+            text-decoration: none;
+            font-family: 'Share Tech Mono', monospace;
+            transition: color 0.3s;
+        }
+
+        .back-link:hover {
+            color: var(--accent);
+            text-shadow: 0 0 8px var(--accent-glow);
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="network-canvas"></canvas>
+
+    <div class="container">
+        <a href="index.html" class="back-link"><i class="fas fa-arrow-left"></i> RETURN TO MAIN</a>
+        
+        <header>
+            <h1>ADVANCED SIGINT DATA LAKE</h1>
+            <div class="subtitle">Distributed Edge Telemetry & Graph-Native Intelligence</div>
+        </header>
+
+        <div class="diagram-container">
+            <img src="assets/camp_tioga_sigint_arch.png" alt="SIGINT Architecture Diagram">
+        </div>
+
+        <div class="content-grid">
+            <div class="card">
+                <h3><i class="fas fa-microchip"></i> 1. The Edge Collection Layer</h3>
+                <p>The foundation of the architecture relies on distributed, low-power embedded edge nodes (ESP32). These headless payloads are deployed into high-density environments to passively ingest, filter, and compress multi-spectrum telemetry (802.11, BLE). Utilizing local RAM caches, the edge nodes perform on-device deduplication before transmission, ensuring maximal bandwidth conservation and system stability in congested RF environments.</p>
+                <div class="tech-stack">
+                    <span class="tag">C++</span>
+                    <span class="tag">ESP32-S3</span>
+                    <span class="tag">FreeRTOS</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3><i class="fas fa-network-wired"></i> 2. Secure Transport & Broker</h3>
+                <p>Data exfiltration is handled via persistent, encrypted MQTT tunnels. A centralized cloud broker handles thousands of asynchronous telemetry packets per minute. Sensor fusion algorithms execute on the ingestion server, marrying static edge observations with dynamic geospatial metadata (GPS) in real-time before committing the fused payload to the primary data lake.</p>
+                <div class="tech-stack">
+                    <span class="tag">MQTT</span>
+                    <span class="tag">Python</span>
+                    <span class="tag">Sensor Fusion</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3><i class="fas fa-database"></i> 3. Graph-Native Storage</h3>
+                <p>Traditional relational databases struggle with highly interconnected, unstructured telemetry. This architecture abandons standard SQL in favor of a Graph-Native approach (Neo4j). Every physical device, network node, and geospatial intercept becomes a distinct entity within the graph, allowing for the rapid querying of complex, multi-hop relationships across vast datasets.</p>
+                <div class="tech-stack">
+                    <span class="tag">Neo4j</span>
+                    <span class="tag">Cypher</span>
+                    <span class="tag">Docker</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3><i class="fas fa-brain"></i> 4. Semantic AI Synthesis</h3>
+                <p>To extract strategic value from millions of raw data points, the system utilizes Large Language Model (LLM) embeddings. Raw intelligence reports and telemetry logs are mathematically encoded using 3,072-dimension vectors. This GraphRAG (Retrieval-Augmented Generation) pipeline enables an autonomous AI agent to instantly query, comprehend, and summarize the entire tactical landscape through natural language.</p>
+                <div class="tech-stack">
+                    <span class="tag">GraphRAG</span>
+                    <span class="tag">Vector Embeddings</span>
+                    <span class="tag">Gemini 2.5</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Interactive Canvas Network Effect
+        const canvas = document.getElementById('network-canvas');
+        const ctx = canvas.getContext('2d');
+
+        let width, height;
+        let particles = [];
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+
+        window.addEventListener('resize', resize);
+        resize();
+
+        class Particle {
+            constructor() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height;
+                this.vx = (Math.random() - 0.5) * 0.5;
+                this.vy = (Math.random() - 0.5) * 0.5;
+                this.radius = Math.random() * 1.5 + 0.5;
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+
+                if (this.x < 0 || this.x > width) this.vx *= -1;
+                if (this.y < 0 || this.y > height) this.vy *= -1;
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(0, 255, 65, 0.5)';
+                ctx.fill();
+            }
+        }
+
+        function initParticles() {
+            particles = [];
+            let numParticles = Math.floor((width * height) / 15000); // Responsive density
+            for (let i = 0; i < numParticles; i++) {
+                particles.push(new Particle());
+            }
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, width, height);
+            
+            for (let i = 0; i < particles.length; i++) {
+                particles[i].update();
+                particles[i].draw();
+                
+                for (let j = i + 1; j < particles.length; j++) {
+                    let dx = particles[i].x - particles[j].x;
+                    let dy = particles[i].y - particles[j].y;
+                    let dist = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (dist < 120) {
+                        ctx.beginPath();
+                        ctx.strokeStyle = `rgba(0, 255, 65, ${0.15 - dist/800})`;
+                        ctx.lineWidth = 0.5;
+                        ctx.moveTo(particles[i].x, particles[i].y);
+                        ctx.lineTo(particles[j].x, particles[j].y);
+                        ctx.stroke();
+                    }
+                }
+            }
+            requestAnimationFrame(animate);
+        }
+
+        initParticles();
+        animate();
+    </script>
+</body>
+</html>
