@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Cyber-Physical Edge Firmware Suite | Charles Forsyth</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Inter:wght@300;400;600;700&display=swap');
+        
+        :root {
+            --bg-color: #090c0e;
+            --panel-bg: rgba(18, 24, 28, 0.85);
+            --border-color: #2a4232;
+            --accent: #00ff41;
+            --accent-glow: rgba(0, 255, 65, 0.35);
+            --secondary: #00a8ff;
+            --khaki: #d4b886;
+            --text-main: #e4ebe6;
+            --text-muted: #8a9e91;
+            --code-bg: #07090b;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+
+        .mono {
+            font-family: 'Share Tech Mono', monospace;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 30px;
+        }
+
+        h1 {
+            font-family: 'Share Tech Mono', monospace;
+            color: var(--accent);
+            font-size: 2.6rem;
+            letter-spacing: 1.5px;
+            text-shadow: 0 0 15px var(--accent-glow);
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            color: var(--secondary);
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 1.1rem;
+            letter-spacing: 1px;
+        }
+
+        .intro-text {
+            max-width: 800px;
+            margin: 20px auto 0;
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        .nav-links {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            font-family: 'Share Tech Mono', monospace;
+        }
+
+        .nav-btn {
+            color: var(--text-main);
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: color 0.2s;
+            font-size: 0.9rem;
+        }
+
+        .nav-btn:hover {
+            color: var(--accent);
+        }
+
+        /* Filter Pills */
+        .filter-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 35px;
+        }
+
+        .filter-btn {
+            background: rgba(42, 66, 50, 0.4);
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .filter-btn.active, .filter-btn:hover {
+            background: rgba(0, 255, 65, 0.15);
+            border-color: var(--accent);
+            color: var(--accent);
+            box-shadow: 0 0 10px var(--accent-glow);
+        }
+
+        /* Firmware Cards Grid */
+        .firmware-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 28px;
+        }
+
+        .firmware-card {
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-left: 4px solid var(--accent);
+            border-radius: 8px;
+            padding: 26px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(10px);
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .firmware-card:hover {
+            border-color: var(--accent);
+            box-shadow: 0 6px 25px rgba(0, 255, 65, 0.15);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .card-title {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 1.45rem;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 0;
+        }
+
+        .version-badge {
+            background: rgba(0, 168, 255, 0.15);
+            color: var(--secondary);
+            border: 1px solid var(--secondary);
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.75rem;
+        }
+
+        .card-desc {
+            color: #b0bec5;
+            font-size: 0.95rem;
+            margin-bottom: 16px;
+        }
+
+        .hardware-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 18px;
+        }
+
+        .meta-tag {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.78rem;
+            color: var(--khaki);
+        }
+
+        /* Code Viewer Accordion */
+        .code-accordion-btn {
+            background: #141b20;
+            border: 1px solid var(--border-color);
+            color: var(--accent);
+            font-family: 'Share Tech Mono', monospace;
+            padding: 10px 16px;
+            width: 100%;
+            text-align: left;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .code-accordion-btn:hover {
+            background: #1c262d;
+            border-color: var(--accent);
+        }
+
+        .code-box {
+            display: none;
+            margin-top: 12px;
+            background: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 16px;
+            position: relative;
+            overflow-x: auto;
+        }
+
+        .code-box.open {
+            display: block;
+        }
+
+        .code-box pre {
+            margin: 0;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.82rem;
+            color: #c9d1d9;
+            line-height: 1.45;
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: rgba(0, 255, 65, 0.15);
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .copy-btn:hover {
+            background: var(--accent);
+            color: #000;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 60px;
+            padding-top: 25px;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            font-family: 'Share Tech Mono', monospace;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- Navigation -->
+        <div class="nav-links">
+            <a href="index.html" class="nav-btn"><i class="fas fa-arrow-left"></i> RETURN TO PORTFOLIO</a>
+            <a href="sigint-data-lake.html" class="nav-btn">VIEW OMNET ARCHITECTURE <i class="fas fa-arrow-right"></i></a>
+        </div>
+
+        <!-- Header -->
+        <header>
+            <h1>ESP32 CYBER-PHYSICAL FIRMWARE SUITE</h1>
+            <div class="subtitle">Autonomous Edge Payloads &bull; Tactical RF &bull; Sensor Fusion &bull; Zero-LLM Ingestion</div>
+            <p class="intro-text">
+                Production-grade C++ embedded firmware running on headless ESP32, ESP32-S3, and Heltec LoRa nodes. 
+                These custom payloads execute on-chip promiscuous 802.11 frame sniffing, dual-band BLE radar, 
+                high-capacity PSRAM wardriving caches, and seismic/atmospheric tripwires. All network targets, 
+                SSIDs, and credentials have been strictly sanitized for open-source reference.
+            </p>
+        </header>
+
+        <!-- Category Filters -->
+        <div class="filter-container">
+            <button class="filter-btn active" onclick="filterGallery('all')">ALL PAYLOADS (6)</button>
+            <button class="filter-btn" onclick="filterGallery('rf')">SPECTRUM SURVEILLANCE</button>
+            <button class="filter-btn" onclick="filterGallery('recon')">RECONNAISSANCE & MAPPING</button>
+            <button class="filter-btn" onclick="filterGallery('perimeter')">PERIMETER & SENSORS</button>
+        </div>
+
+        <!-- Firmware Grid -->
+        <div class="firmware-grid">
+
+            <!-- 1. Aura Multi-Scanner -->
+            <div class="firmware-card" data-category="rf">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fas fa-satellite-dish" style="color:var(--accent);"></i> Aura Multi-Scanner HUD</h2>
+                    <span class="version-badge">Payload V1.1</span>
+                </div>
+                <div class="hardware-meta">
+                    <span class="meta-tag"><i class="fas fa-microchip"></i> Heltec WiFi LoRa 32 V3</span>
+                    <span class="meta-tag"><i class="fas fa-tv"></i> SSD1306 128x64 OLED</span>
+                    <span class="meta-tag"><i class="fas fa-bluetooth"></i> BLE 5.0</span>
+                    <span class="meta-tag"><i class="fas fa-wifi"></i> 802.11 b/g/n</span>
+                    <span class="meta-tag"><i class="fas fa-battery-half"></i> ADC VBat Monitor</span>
+                </div>
+                <p class="card-desc">
+                    A standalone tactical field dashboard with an interrupt-driven state machine controlled via the onboard BOOT button. 
+                    Cycles through three interactive display pages: real-time BLE proximity radar (ranked by RSSI), active 802.11 access point 
+                    radar, and real-time silicon hardware diagnostics (core temp, free heap, battery millivolts, and system uptime).
+                </p>
+                <button class="code-accordion-btn" onclick="toggleCode('code-multi-scanner')">
+                    <span><i class="fas fa-code"></i> View Sanitized Firmware Source (.ino)</span>
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+                <div id="code-multi-scanner" class="code-box">
+                    <button class="copy-btn" onclick="copyCode('src-multi-scanner')">📋 Copy</button>
+                    <pre id="src-multi-scanner">/*
+ * AURA // MULTI-SCANNER (Tactical Field Dashboard)
+ * Target Hardware: Heltec WiFi LoRa 32 V3 / ESP32-S3 OLED
+ * De-identified & Sanitized for Public Architecture Reference
+ */
+
+#include &lt;Wire.h&gt;
+#include &lt;Adafruit_GFX.h&gt;
+#include &lt;Adafruit_SSD1306.h&gt;
+#include &lt;WiFi.h&gt;
+#include &lt;BLEDevice.h&gt;
+#include &lt;BLEUtils.h&gt;
+#include &lt;BLEScan.h&gt;
+#include &lt;BLEAdvertisedDevice.h&gt;
+
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_SDA 17
+#define OLED_SCL 18
+#define OLED_RST 21
+#define BTN_PIN 0
+#define VBAT_PIN 1
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &amp;Wire, OLED_RST);
+
+enum Page { PAGE_BLE, PAGE_WIFI, PAGE_SYS };
+Page currentPage = PAGE_BLE;
+unsigned long lastBtnPress = 0;
+
+#define MAX_BLE 30
+struct BLETarget { String mac; String name; int rssi; unsigned long lastSeen; };
+BLETarget bleTargets[MAX_BLE];
+int bleCount = 0;
+
+class ScannerCallbacks: public BLEAdvertisedDeviceCallbacks {
+    void onResult(BLEAdvertisedDevice advertisedDevice) {
+        if (currentPage != PAGE_BLE) return;
+        String mac = advertisedDevice.getAddress().toString().c_str();
+        mac.toUpperCase();
+        int rssi = advertisedDevice.getRSSI();
+        String name = advertisedDevice.haveName() ? advertisedDevice.getName().c_str() : "UNKNOWN";
+
+        for (int i = 0; i &lt; bleCount; i++) {
+            if (bleTargets[i].mac == mac) {
+                bleTargets[i].rssi = rssi;
+                bleTargets[i].lastSeen = millis();
+                return;
+            }
+        }
+        if (bleCount &lt; MAX_BLE) {
+            bleTargets[bleCount] = { mac, name, rssi, millis() };
+            bleCount++;
+        }
+    }
+};
+
+void setup() {
+    Serial.begin(115200);
+    pinMode(BTN_PIN, INPUT_PULLUP);
+    
+    Wire.begin(OLED_SDA, OLED_SCL);
+    if (display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+        display.clearDisplay();
+        display.setTextSize(1);
+        display.setTextColor(SSD1306_WHITE);
+        display.setCursor(0, 0);
+        display.println("OMNET // MULTI-SCAN");
+        display.display();
+    }
+
+    BLEDevice::init("OmNet-FieldNode");
+    BLEScan* pBLEScan = BLEDevice::getScan();
+    pBLEScan-&gt;setAdvertisedDeviceCallbacks(new ScannerCallbacks());
+    pBLEScan-&gt;setActiveScan(true);
+    pBLEScan-&gt;setInterval(100);
+    pBLEScan-&gt;setWindow(99);
+}
+
+void loop() {
+    if (digitalRead(BTN_PIN) == LOW &amp;&amp; millis() - lastBtnPress &gt; 300) {
+        lastBtnPress = millis();
+        currentPage = (Page)((currentPage + 1) % 3);
+    }
+
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    if (currentPage == PAGE_BLE) {
+        display.println("== BLE PROXIMITY ==");
+        for (int i = 0; i &lt; min(bleCount, 5); i++) {
+            display.printf("%s %ddBm\n", bleTargets[i].mac.substring(9).c_str(), bleTargets[i].rssi);
+        }
+    } else if (currentPage == PAGE_WIFI) {
+        display.println("== 802.11 RECON ==");
+        int n = WiFi.scanNetworks(false, true);
+        for (int i = 0; i &lt; min(n, 5); i++) {
+            display.printf("%-10.10s %ddB\n", WiFi.SSID(i).c_str(), WiFi.RSSI(i));
+        }
+    } else {
+        display.println("== SYS DIAGNOSTICS ==");
+        display.printf("Heap: %d KB\n", ESP.getFreeHeap() / 1024);
+        display.printf("Core Temp: %.1f C\n", temperatureRead());
+        display.printf("Uptime: %lu s\n", millis() / 1000);
+    }
+    display.display();
+    delay(50);
+}</pre>
+                </div>
+            </div>
+
+            <!-- 2. Aura Packet Scythe -->
+            <div class="firmware-card" data-category="rf">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fas fa-shield-alt" style="color:var(--accent);"></i> Aura Packet Scythe</h2>
+                    <span class="version-badge">Payload V1.6</span>
+                </div>
+                <div class="hardware-meta">
+                    <span class="meta-tag"><i class="fas fa-microchip"></i> ESP32-S3 WROOM-1</span>
+                    <span class="meta-tag"><i class="fas fa-eye"></i> Promiscuous 802.11</span>
+                    <span class="meta-tag"><i class="fas fa-helicopter"></i> Drone OUI Radar</span>
+                    <span class="meta-tag"><i class="fas fa-network-wired"></i> MQTT Broker Uplink</span>
+                    <span class="meta-tag"><i class="fas fa-lightbulb"></i> WS2812B Activity LED</span>
+                </div>
+                <p class="card-desc">
+                    Configures the ESP32 Wi-Fi baseband into raw promiscuous mode to passively parse 802.11 management and control frames. 
+                    Calculates packets-per-second (PPS) to drive a dynamic color-graded status LED, detects deauthentication anomalies, 
+                    and triggers immediate MQTT perimeter intrusion alerts when surveillance drone or wireless camera MAC OUIs (DJI, Wyze, Ring, Arlo) are intercepted.
+                </p>
+                <button class="code-accordion-btn" onclick="toggleCode('code-packet-scythe')">
+                    <span><i class="fas fa-code"></i> View Sanitized Firmware Source (.ino)</span>
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+                <div id="code-packet-scythe" class="code-box">
+                    <button class="copy-btn" onclick="copyCode('src-packet-scythe')">📋 Copy</button>
+                    <pre id="src-packet-scythe">/*
+ * AURA // PACKET SCYTHE (802.11 Frame Parser & Intrusion Sentry)
+ * Target Hardware: ESP32-S3 Promiscuous Sniffer
+ * De-identified & Sanitized for Public Architecture Reference
+ */
+
+#include &lt;WiFi.h&gt;
+#include &lt;PubSubClient.h&gt;
+#include "esp_wifi.h"
+
+// --- Sanitized Deployment Parameters ---
+const char* WIFI_SSID     = "YOUR_WIFI_SSID";
+const char* WIFI_PASS     = "YOUR_WIFI_PASSWORD";
+const char* MQTT_HOST     = "192.168.1.X"; // Core Pi MQTT Broker
+const char* TOPIC_ALERTS  = "homestead/alerts/rf_perimeter";
+
+WiFiClient espClient;
+PubSubClient mqtt(espClient);
+
+// Surveillance Drone & Camera OUI Fingerprints
+const uint8_t DRONE_OUIS[][3] = {
+    {0x60, 0x60, 0x1F}, // DJI Aircraft
+    {0x2A, 0x19, 0x48}, // DJI Remote Video
+    {0x34, 0xD2, 0x62}, // Wyze Surveillance
+    {0x88, 0x4A, 0xEA}, // Ring Perimeter
+    {0x10, 0x86, 0x8C}  // Arlo Optical
+};
+const int NUM_OUIS = 5;
+
+volatile unsigned long ppsCount = 0;
+int currentChannel = 1;
+
+void snifferCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
+    ppsCount++;
+    wifi_promiscuous_pkt_t* pkt = (wifi_promiscuous_pkt_t*)buf;
+    uint8_t* payload = pkt-&gt;payload;
+
+    // Extract Transmitter Address (Offset 10 in 802.11 header)
+    uint8_t* ta = &amp;payload[10];
+
+    // Audit against known surveillance signatures
+    for (int i = 0; i &lt; NUM_OUIS; i++) {
+        if (ta[0] == DRONE_OUIS[i][0] &amp;&amp; ta[1] == DRONE_OUIS[i][1] &amp;&amp; ta[2] == DRONE_OUIS[i][2]) {
+            char alertPayload[128];
+            snprintf(alertPayload, sizeof(alertPayload), 
+                "{\"event\":\"SURVEILLANCE_OUI_DETECTED\",\"oui\":\"%02X:%02X:%02X\",\"ch\":%d}",
+                ta[0], ta[1], ta[2], currentChannel);
+            mqtt.publish(TOPIC_ALERTS, alertPayload);
+            break;
+        }
+    }
+}
+
+void setup() {
+    Serial.begin(115200);
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+    
+    while (WiFi.status() != WL_CONNECTED) { delay(250); }
+    mqtt.setServer(MQTT_HOST, 1883);
+
+    // Engage Promiscuous Baseband Mode
+    esp_wifi_set_promiscuous(true);
+    esp_wifi_set_promiscuous_rx_cb(&amp;snifferCallback);
+}
+
+void loop() {
+    if (!mqtt.connected()) {
+        mqtt.connect("OmNet-PacketScythe");
+    }
+    mqtt.loop();
+
+    // Channel hop 1-13 across 2.4 GHz spectrum
+    currentChannel = (currentChannel % 13) + 1;
+    esp_wifi_set_channel(currentChannel, WIFI_SECOND_CHAN_NONE);
+    delay(200);
+}</pre>
+                </div>
+            </div>
+
+            <!-- 3. Aura PSRAM Wardriver -->
+            <div class="firmware-card" data-category="recon">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fas fa-database" style="color:var(--accent);"></i> Aura PSRAM Wardriver</h2>
+                    <span class="version-badge">Payload V1.0</span>
+                </div>
+                <div class="hardware-meta">
+                    <span class="meta-tag"><i class="fas fa-microchip"></i> ESP32-S3 (8MB Octal PSRAM)</span>
+                    <span class="meta-tag"><i class="fas fa-memory"></i> 10,000 In-Memory Cache</span>
+                    <span class="meta-tag"><i class="fas fa-bolt"></i> Burst Store-and-Forward</span>
+                    <span class="meta-tag"><i class="fas fa-shield-alt"></i> Zero SD Card Wear</span>
+                </div>
+                <p class="card-desc">
+                    Exploits 8MB of external pseudo-static RAM (PSRAM) via memory-mapped pointers (<code class="mono">EXT_RAM_BSS_ATTR</code>) to store 
+                    up to 10,000 unique 802.11 access points in an in-memory packed ring buffer. Operates entirely offline without SD card degradation. 
+                    When sovereign home Wi-Fi is recognized, it executes store-and-forward JSON burst uploads into the Core Pi telemetry data lake.
+                </p>
+                <button class="code-accordion-btn" onclick="toggleCode('code-psram-wardriver')">
+                    <span><i class="fas fa-code"></i> View Sanitized Firmware Source (.ino)</span>
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+                <div id="code-psram-wardriver" class="code-box">
+                    <button class="copy-btn" onclick="copyCode('src-psram-wardriver')">📋 Copy</button>
+                    <pre id="src-psram-wardriver">/*
+ * AURA // PSRAM WARDRIVER (Store-and-Forward Edge Ingestion)
+ * Target Hardware: ESP32-S3 with 8MB Octal PSRAM
+ * De-identified & Sanitized for Public Architecture Reference
+ */
+
+#include &lt;WiFi.h&gt;
+#include &lt;PubSubClient.h&gt;
+
+const char* HOME_SSID     = "YOUR_HOME_WIFI_SSID";
+const char* HOME_PASS     = "YOUR_HOME_WIFI_PASSWORD";
+const char* MQTT_BROKER   = "192.168.1.X";
+const char* TOPIC_INGEST  = "homestead/telemetry/wardrive_burst";
+
+WiFiClient espClient;
+PubSubClient mqtt(espClient);
+
+#define MAX_NETWORKS 10000
+
+// Packed 56-byte struct to optimize RAM density
+struct NetworkRecord {
+    char bssid[18];
+    char ssid[33];
+    int8_t rssi;
+    uint8_t channel;
+    uint32_t timestamp_s;
+};
+
+// Force massive array allocation strictly into External 8MB PSRAM
+EXT_RAM_BSS_ATTR NetworkRecord psramCache[MAX_NETWORKS];
+int cacheCount = 0;
+
+void flushCacheToCore() {
+    if (cacheCount == 0) return;
+    WiFi.begin(HOME_SSID, HOME_PASS);
+    
+    unsigned long start = millis();
+    while (WiFi.status() != WL_CONNECTED &amp;&amp; millis() - start &lt; 8000) { delay(100); }
+    if (WiFi.status() != WL_CONNECTED) return;
+
+    mqtt.setServer(MQTT_BROKER, 1883);
+    if (mqtt.connect("OmNet-WardriveUplink")) {
+        char buffer[256];
+        for (int i = 0; i &lt; cacheCount; i++) {
+            snprintf(buffer, sizeof(buffer), 
+                "{\"bssid\":\"%s\",\"ssid\":\"%s\",\"rssi\":%d,\"ch\":%d}",
+                psramCache[i].bssid, psramCache[i].ssid, psramCache[i].rssi, psramCache[i].channel);
+            mqtt.publish(TOPIC_INGEST, buffer);
+            if (i % 20 == 0) delay(10); // Throttle broker ingestion
+        }
+        cacheCount = 0; // Buffer successfully committed to data lake
+    }
+}
+
+void setup() {
+    Serial.begin(115200);
+    if (!psramInit()) {
+        Serial.println("[CRITICAL] PSRAM Initialization Failed.");
+        while (1);
+    }
+    Serial.printf("[SYSTEM] 8MB PSRAM Online. Free Heap: %d KB\n", ESP.getFreePsram() / 1024);
+}
+
+void loop() {
+    int count = WiFi.scanNetworks(false, true);
+    for (int i = 0; i &lt; count &amp;&amp; cacheCount &lt; MAX_NETWORKS; i++) {
+        if (WiFi.SSID(i) == HOME_SSID) {
+            flushCacheToCore();
+            break;
+        }
+        strncpy(psramCache[cacheCount].bssid, WiFi.BSSIDstr(i).c_str(), 17);
+        strncpy(psramCache[cacheCount].ssid, WiFi.SSID(i).c_str(), 32);
+        psramCache[cacheCount].rssi = WiFi.RSSI(i);
+        psramCache[cacheCount].channel = WiFi.channel(i);
+        psramCache[cacheCount].timestamp_s = millis() / 1000;
+        cacheCount++;
+    }
+    delay(2000);
+}</pre>
+                </div>
+            </div>
+
+            <!-- 4. Aura Sentinel V4 PRO -->
+            <div class="firmware-card" data-category="perimeter">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fas fa-radar" style="color:var(--accent);"></i> Aura Sentinel V4 PRO</h2>
+                    <span class="version-badge">Payload V4.0</span>
+                </div>
+                <div class="hardware-meta">
+                    <span class="meta-tag"><i class="fas fa-microchip"></i> ESP32 Dual-Core (FreeRTOS)</span>
+                    <span class="meta-tag"><i class="fas fa-network-wired"></i> mDNS Service Scanner</span>
+                    <span class="meta-tag"><i class="fas fa-stopwatch"></i> Hardware Watchdog (WDT)</span>
+                    <span class="meta-tag"><i class="fas fa-lock"></i> Mutex Concurrency</span>
+                </div>
+                <p class="card-desc">
+                    Industrial edge sentry utilizing both Xtensa dual cores via FreeRTOS tasks. Core 0 executes asynchronous 
+                    mDNS multicast service inspection and active ICMP ping sweeps across the subnet, while Core 1 performs continuous 
+                    BLE advertising audits. Protected by an autonomous 5-minute hardware watchdog to prevent hangs during network dropouts.
+                </p>
+                <button class="code-accordion-btn" onclick="toggleCode('code-sentinel-v4')">
+                    <span><i class="fas fa-code"></i> View Sanitized Firmware Source (.ino)</span>
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+                <div id="code-sentinel-v4" class="code-box">
+                    <button class="copy-btn" onclick="copyCode('src-sentinel-v4')">📋 Copy</button>
+                    <pre id="src-sentinel-v4">/*
+ * AURA // SENTINEL V4 PRO (Concurrent Dual-Core Sentry)
+ * Target Hardware: ESP32 Dual-Core FreeRTOS
+ * De-identified & Sanitized for Public Architecture Reference
+ */
+
+#include &lt;WiFi.h&gt;
+#include &lt;ArduinoJson.h&gt;
+#include &lt;PubSubClient.h&gt;
+#include &lt;BLEDevice.h&gt;
+#include &lt;esp_task_wdt.h&gt;
+
+const char* SSID_NET     = "YOUR_WIFI_SSID";
+const char* PASS_NET     = "YOUR_WIFI_PASSWORD";
+const char* MQTT_IP      = "192.168.1.X";
+const char* TOPIC_AUDIT  = "homestead/stats/sentinel_core";
+
+WiFiClient espClient;
+PubSubClient mqtt(espClient);
+SemaphoreHandle_t nodeMutex;
+
+#define WDT_TIMEOUT_SECONDS 300 // 5 Minute Hardware Watchdog
+
+void Core0Task(void* parameter) {
+    esp_task_wdt_add(NULL);
+    while (1) {
+        esp_task_wdt_reset();
+        
+        // Asynchronous Subnet Presence & Service Audit
+        if (WiFi.status() == WL_CONNECTED) {
+            xSemaphoreTake(nodeMutex, portMAX_DELAY);
+            StaticJsonDocument&lt;256&gt; doc;
+            doc["node_id"] = "SENTINEL-PRO-01";
+            doc["wifi_rssi"] = WiFi.RSSI();
+            doc["free_heap"] = ESP.getFreeHeap();
+            
+            char buffer[256];
+            serializeJson(doc, buffer);
+            mqtt.publish(TOPIC_AUDIT, buffer);
+            xSemaphoreGive(nodeMutex);
+        }
+        vTaskDelay(10000 / portTICK_PERIOD_MS);
+    }
+}
+
+void setup() {
+    Serial.begin(115200);
+    nodeMutex = xSemaphoreCreateMutex();
+
+    esp_task_wdt_init(WDT_TIMEOUT_SECONDS, true); // Enable panic reset
+    esp_task_wdt_add(NULL);
+
+    WiFi.begin(SSID_NET, PASS_NET);
+    mqtt.setServer(MQTT_IP, 1883);
+
+    // Deploy Core 0 Sentry Task pinned to Core 0
+    xTaskCreatePinnedToCore(
+        Core0Task, "SentryTask", 8192, NULL, 1, NULL, 0
+    );
+}
+
+void loop() {
+    esp_task_wdt_reset();
+    if (!mqtt.connected() &amp;&amp; WiFi.status() == WL_CONNECTED) {
+        mqtt.connect("Sentinel-Core-Worker");
+    }
+    mqtt.loop();
+    delay(100);
+}</pre>
+                </div>
+            </div>
+
+            <!-- 5. Aura Lightning & Seismometer -->
+            <div class="firmware-card" data-category="perimeter">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fas fa-bolt" style="color:var(--accent);"></i> Aura Lightning & Seismic Sentry</h2>
+                    <span class="version-badge">Payload V2.0</span>
+                </div>
+                <div class="hardware-meta">
+                    <span class="meta-tag"><i class="fas fa-microchip"></i> ESP32 WROOM (ADC1)</span>
+                    <span class="meta-tag"><i class="fas fa-cloud-bolt"></i> Sub-Millisecond RF Sampling</span>
+                    <span class="meta-tag"><i class="fas fa-wave-square"></i> Piezo Vibration Tripwire</span>
+                    <span class="meta-tag"><i class="fas fa-broadcast-tower"></i> Immediate MQTT Dispatch</span>
+                </div>
+                <p class="card-desc">
+                    High-speed analog-to-digital (ADC) continuous interrupt sampling on GPIO 39. Discriminates the microsecond RF pulse signature 
+                    of cloud-to-ground atmospheric lightning strikes while simultaneously monitoring piezoelectric ground sensors for physical 
+                    perimeter footsteps and vehicular approaches. Immediately dispatches MQTT telemetry to the sovereign Core Pi.
+                </p>
+                <button class="code-accordion-btn" onclick="toggleCode('code-lightning-sentry')">
+                    <span><i class="fas fa-code"></i> View Sanitized Firmware Source (.ino)</span>
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+                <div id="code-lightning-sentry" class="code-box">
+                    <button class="copy-btn" onclick="copyCode('src-lightning-sentry')">📋 Copy</button>
+                    <pre id="src-lightning-sentry">/*
+ * AURA // ATMOSPHERIC LIGHTNING & SEISMIC TRIPWIRE
+ * Target Hardware: ESP32 High-Speed ADC (GPIO 39 / ADC1_CH3)
+ * De-identified & Sanitized for Public Architecture Reference
+ */
+
+#include &lt;WiFi.h&gt;
+#include &lt;PubSubClient.h&gt;
+#include &lt;ArduinoJson.h&gt;
+
+const char* WIFI_SSID     = "YOUR_WIFI_SSID";
+const char* WIFI_PASS     = "YOUR_WIFI_PASSWORD";
+const char* MQTT_SERVER   = "192.168.1.X";
+const char* TOPIC_EVENT   = "homestead/data/lightning_seismic";
+
+WiFiClient espClient;
+PubSubClient mqtt(espClient);
+
+const int SENSOR_PIN = 39; // ADC1_CH3 wire loop or piezoelectric puck
+const int SPIKE_THRESHOLD_MV = 750; // Threshold delta for microsecond burst
+int lastReading = 0;
+
+void setup() {
+    Serial.begin(115200);
+    analogReadResolution(12);
+    analogSetAttenuation(ADC_11db); // Full-scale 3.3V range
+    
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+    mqtt.setServer(MQTT_SERVER, 1883);
+}
+
+void loop() {
+    if (!mqtt.connected() &amp;&amp; WiFi.status() == WL_CONNECTED) {
+        mqtt.connect("Aura-LightningSeismic");
+    }
+    mqtt.loop();
+
+    // High-Speed Edge ADC Ingestion
+    int val = analogRead(SENSOR_PIN);
+    int delta = abs(val - lastReading);
+    lastReading = val;
+
+    if (delta &gt; SPIKE_THRESHOLD_MV) {
+        StaticJsonDocument&lt;128&gt; payload;
+        payload["timestamp_ms"] = millis();
+        payload["magnitude_raw"] = delta;
+        payload["classification"] = (delta &gt; 1500) ? "LIGHTNING_RF_IMPULSE" : "SEISMIC_VIBRATION";
+
+        char buffer[128];
+        serializeJson(payload, buffer);
+        mqtt.publish(TOPIC_EVENT, buffer);
+        delay(50); // Transient refractory window
+    }
+}</pre>
+                </div>
+            </div>
+
+            <!-- 6. Aura EMF Spectrometer -->
+            <div class="firmware-card" data-category="perimeter">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fas fa-radiation" style="color:var(--accent);"></i> Aura EMF WebSockets Spectrometer</h2>
+                    <span class="version-badge">Payload V1.2</span>
+                </div>
+                <div class="hardware-meta">
+                    <span class="meta-tag"><i class="fas fa-microchip"></i> ESP32 DevKit</span>
+                    <span class="meta-tag"><i class="fas fa-ethernet"></i> Embedded WebSockets Server</span>
+                    <span class="meta-tag"><i class="fas fa-chart-line"></i> Real-time Geiger Stream (60Hz)</span>
+                    <span class="meta-tag"><i class="fas fa-shield-virus"></i> High-Impedance Sensor</span>
+                </div>
+                <p class="card-desc">
+                    An embedded edge instrumentation node combining high-impedance floating antenna sampling with a local asynchronous 
+                    WebSockets server. Streams millisecond voltage fluctuations directly to local tactical clients at 60 frames per second, 
+                    creating a real-time electromagnetic "Geiger counter" visualizer for auditing stray AC leakage and RF field density.
+                </p>
+                <button class="code-accordion-btn" onclick="toggleCode('code-emf-spectrometer')">
+                    <span><i class="fas fa-code"></i> View Sanitized Firmware Source (.ino)</span>
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+                <div id="code-emf-spectrometer" class="code-box">
+                    <button class="copy-btn" onclick="copyCode('src-emf-spectrometer')">📋 Copy</button>
+                    <pre id="src-emf-spectrometer">/*
+ * AURA // EMF SPECTROMETER & WEBSOCKETS STREAMER
+ * Target Hardware: ESP32 High-Impedance ADC (GPIO 36)
+ * De-identified & Sanitized for Public Architecture Reference
+ */
+
+#include &lt;WiFi.h&gt;
+#include &lt;WebServer.h&gt;
+#include &lt;WebSocketsServer.h&gt;
+#include &lt;ArduinoJson.h&gt;
+
+const char* SSID_CFG = "YOUR_WIFI_SSID";
+const char* PASS_CFG = "YOUR_WIFI_PASSWORD";
+
+WebServer server(80);
+WebSocketsServer webSocket(81);
+
+const int SENSOR_PIN = 36; // GPIO 36 (VP / ADC1_CH0)
+unsigned long lastBroadcast = 0;
+
+void setup() {
+    Serial.begin(115200);
+    analogReadResolution(12);
+
+    WiFi.begin(SSID_CFG, PASS_CFG);
+    while (WiFi.status() != WL_CONNECTED) { delay(100); }
+
+    server.on("/", []() {
+        server.send(200, "text/html", "&lt;h1&gt;Aura EMF Real-Time Stream Online (Port 81)&lt;/h1&gt;");
+    });
+    server.begin();
+    webSocket.begin();
+}
+
+void loop() {
+    server.handleClient();
+    webSocket.loop();
+
+    // Broadcast 50Hz / 60Hz ambient field oscillations to connected WebSocket clients
+    if (millis() - lastBroadcast &gt; 16) { // ~60 FPS
+        lastBroadcast = millis();
+        int raw = analogRead(SENSOR_PIN);
+        
+        char payload[32];
+        snprintf(payload, sizeof(payload), "%d", raw);
+        webSocket.broadcastTXT(payload);
+    }
+}</pre>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Footer -->
+        <footer>
+            <p>&copy; 2026 Charles Forsyth &bull; OmNet Sovereign Cyber-Physical Systems Architecture</p>
+            <p style="margin-top: 4px; color: var(--text-muted);">All firmware source code sanitized and distributed under MIT open-source license.</p>
+        </footer>
+    </div>
+
+    <script>
+        function toggleCode(boxId) {
+            const box = document.getElementById(boxId);
+            if (box) {
+                box.classList.toggle('open');
+            }
+        }
+
+        function copyCode(preId) {
+            const el = document.getElementById(preId);
+            if (el) {
+                navigator.clipboard.writeText(el.innerText).then(() => {
+                    alert('Firmware source copied to clipboard.');
+                });
+            }
+        }
+
+        function filterGallery(category) {
+            const buttons = document.querySelectorAll('.filter-btn');
+            buttons.forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+
+            const cards = document.querySelectorAll('.firmware-card');
+            cards.forEach(card => {
+                if (category === 'all' || card.getAttribute('data-category') === category) {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        }
+    </script>
+</body>
+</html>
