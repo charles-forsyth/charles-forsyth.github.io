@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Linux Basics | HPC Field Manual | Charles Forsyth</title>
+    <title>Linux Essentials | Field Manual</title>
     <meta
       name="description"
-      content="The command-line foundation under every supercomputer"
+      content="Files, permissions, processes, Vim, the shell, Screen, SSH and archives: the 2019 reference chapter, still true."
     />
     <link
       rel="canonical"
@@ -28,10 +28,10 @@
       <div class="container">
         <div class="hero-content">
           <p class="doc-kicker">
-            <i class="fab fa-linux"></i> HPC Field Manual
+            <i class="fab fa-linux"></i> AI + HPC Field Manual
           </p>
-          <h1>Linux Basics</h1>
-          <h2>The command-line foundation under every supercomputer</h2>
+          <h1>Linux Essentials</h1>
+          <h2>The command-line foundation under every cluster</h2>
           <div class="cta-buttons">
             <a href="index.html" class="btn btn-secondary"
               ><i class="fas fa-book-open"></i> Field Manual</a
@@ -43,16 +43,23 @@
         </div>
       </div>
     </header>
-    <nav class="doc-nav" aria-label="Field manual sections">
+    <nav class="doc-nav" aria-label="Field manual chapters">
       <div class="container">
-        <a href="linux.html" class="active" aria-current="page">Linux Basics</a
-        ><a href="hardware.html">HPC Hardware</a
-        ><a href="provisioning.html">Provisioning</a
-        ><a href="software.html">HPC Software</a><a href="code.html">Code</a
-        ><a href="cloud.html">HPC in the Cloud</a
-        ><a href="slurm.html">Slurm Submission Scripts</a
-        ><a href="presentations.html">Talks and Presentations</a
-        ><a href="../cv.html">Career</a>
+        <a href="convergence.html">Convergence</a
+        ><a href="accelerators.html">Accelerators</a
+        ><a href="memory-storage.html">Memory &amp; Storage</a
+        ><a href="interconnects.html">Interconnects</a
+        ><a href="facilities.html">Facilities</a
+        ><a href="systems-software.html">Systems Software</a
+        ><a href="scheduling.html">Scheduling</a
+        ><a href="observability.html">Observability</a
+        ><a href="operations.html">Operations</a
+        ><a href="training.html">Training</a
+        ><a href="inference.html">Inference</a
+        ><a href="scientific-computing.html">Scientific Computing</a
+        ><a href="cloud.html">Cloud</a
+        ><a href="linux.html" class="active" aria-current="page">Linux</a
+        ><a href="glossary.html">Glossary</a>
       </div>
     </nav>
     <main class="section-light">
@@ -1322,6 +1329,13 @@ env                            # prints all environment variables
             You can edit your default DISPLAY setting for your account by adding
             it to file .bash_profile
           </p>
+          <nav class="doc-pager" aria-label="Chapter navigation">
+            <a class="pager-prev" href="cloud.html"
+              ><span>Previous</span>Cloud and Hybrid AI/HPC</a
+            ><a class="pager-next" href="glossary.html"
+              ><span>Next</span>Glossary</a
+            >
+          </nav>
         </article>
       </div>
     </main>
@@ -1329,8 +1343,7 @@ env                            # prints all environment variables
     <footer class="section-dark">
       <div class="container text-center">
         <p class="footer-note">
-          Originally published 2018-2019 on the legacy HPC documentation site,
-          preserved here in full. |
+          Reference chapter from the 2019 edition, still current |
           <a href="index.html" class="subtle-link">Field Manual</a> |
           <a href="../index.html" class="subtle-link"
             >charles-forsyth.github.io</a
@@ -1341,12 +1354,10 @@ env                            # prints all environment variables
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script>
       document.querySelectorAll('pre code').forEach(function (el) {
-        {
-          if (el.className === 'c++') el.className = 'language-cpp';
-          else if (el.className && el.className.indexOf('language-') !== 0)
-            el.className = 'language-' + el.className;
-          hljs.highlightElement(el);
-        }
+        if (el.className === 'c++') el.className = 'language-cpp';
+        else if (el.className && el.className.indexOf('language-') !== 0)
+          el.className = 'language-' + el.className;
+        hljs.highlightElement(el);
       });
     </script>
   </body>

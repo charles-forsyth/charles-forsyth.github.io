@@ -1,0 +1,2057 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Scheduling and Orchestration | Field Manual</title>
+    <meta
+      name="description"
+      content="How to schedule GPUs well: Slurm GRES, binding, topology, fairshare, QOS and preemption, working sbatch recipes for PyTorch and MPI, Kubernetes with Kueue and the GPU Operator, GPU sharing, Open OnDemand and workflow managers."
+    />
+    <link
+      rel="canonical"
+      href="https://charles-forsyth.github.io/handbook/scheduling.html"
+    />
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="handbook.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
+    />
+  </head>
+  <body>
+    <header class="hero doc-hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="doc-kicker">
+            <i class="fas fa-tasks"></i> AI + HPC Field Manual
+          </p>
+          <h1>Scheduling and Orchestration</h1>
+          <h2>
+            Slurm, Kubernetes and GPU sharing for mixed AI and simulation
+            clusters
+          </h2>
+          <div class="cta-buttons">
+            <a href="index.html" class="btn btn-secondary"
+              ><i class="fas fa-book-open"></i> Field Manual</a
+            >
+            <a href="../index.html" class="btn btn-secondary"
+              ><i class="fas fa-arrow-left"></i> Main Site</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+    <nav class="doc-nav" aria-label="Field manual chapters">
+      <div class="container">
+        <a href="convergence.html">Convergence</a
+        ><a href="accelerators.html">Accelerators</a
+        ><a href="memory-storage.html">Memory &amp; Storage</a
+        ><a href="interconnects.html">Interconnects</a
+        ><a href="facilities.html">Facilities</a
+        ><a href="systems-software.html">Systems Software</a
+        ><a href="scheduling.html" class="active" aria-current="page"
+          >Scheduling</a
+        ><a href="observability.html">Observability</a
+        ><a href="operations.html">Operations</a
+        ><a href="training.html">Training</a
+        ><a href="inference.html">Inference</a
+        ><a href="scientific-computing.html">Scientific Computing</a
+        ><a href="cloud.html">Cloud</a><a href="linux.html">Linux</a
+        ><a href="glossary.html">Glossary</a>
+      </div>
+    </nav>
+    <main class="section-light">
+      <div class="container doc-layout">
+        <aside class="doc-toc">
+          <h4><i class="fas fa-list"></i> On this page</h4>
+          <ul>
+            <li>
+              <a href="#the-scheduling-landscape-in-2026"
+                >The Scheduling Landscape in 2026</a
+              >
+            </li>
+            <li>
+              <a href="#slurm-for-gpu-clusters">Slurm for GPU Clusters</a>
+            </li>
+            <li>
+              <a href="#topology-aware-scheduling">Topology-Aware Scheduling</a>
+            </li>
+            <li>
+              <a href="#priority-fairshare-qos-and-preemption"
+                >Priority, Fairshare, QOS and Preemption</a
+              >
+            </li>
+            <li>
+              <a href="#job-arrays-and-heterogeneous-jobs"
+                >Job Arrays and Heterogeneous Jobs</a
+              >
+            </li>
+            <li><a href="#sbatch-recipes">sbatch Recipes for AI and HPC</a></li>
+            <li>
+              <a href="#kubernetes-for-ai">Kubernetes for AI Workloads</a>
+            </li>
+            <li>
+              <a href="#gpu-sharing"
+                >GPU Sharing: MIG, MPS, Time-Slicing and Shards</a
+              >
+            </li>
+            <li>
+              <a href="#portals-and-workflows">Portals and Workflow Managers</a>
+            </li>
+            <li>
+              <a href="#queue-policy-design"
+                >Queue Policy Design for Mixed AI and Simulation Workloads</a
+              >
+            </li>
+            <li><a href="#key-takeaways">Key Takeaways</a></li>
+          </ul>
+        </aside>
+        <article class="doc-content">
+          <p>
+            The scheduler is where policy meets hardware. A GPU cluster with a
+            bad queue design strands expensive accelerators behind CPU-only
+            jobs, lets one lab camp on every H100 for a week, or scatters a
+            32-node training run across switches that were never meant to carry
+            its all-reduce traffic. This chapter covers the scheduling layer for
+            a converged AI and HPC system as it stands in 2026: Slurm in depth
+            (because it still runs most research clusters), Kubernetes and its
+            batch add-ons, how the two now overlap, GPU sharing, web portals,
+            workflow tools, and how to design queues for a population that mixes
+            week-long simulations with notebooks and hyperparameter sweeps.
+            Hardware and fabric details live in
+            <a href="accelerators.html">Accelerators</a> and
+            <a href="interconnects.html">Interconnects</a>; framework-level
+            parallelism lives in <a href="training.html">Training at Scale</a>.
+          </p>
+
+          <h2 id="the-scheduling-landscape-in-2026">
+            The Scheduling Landscape in 2026
+          </h2>
+          <p>
+            Two families of scheduler matter for research computing. Slurm is
+            the batch workload manager of classic HPC: jobs with a known size
+            and time limit, strict policy, a fixed pool of nodes, and
+            first-class support for multi-node MPI and topology. Kubernetes is
+            the container orchestrator of cloud-native computing: long-running
+            services, loose resource requests, elastic pools, and a huge
+            ecosystem of operators. SchedMD's own Slinky documentation puts the
+            distinction plainly: Kubernetes excels at indefinite workloads with
+            vague requirements on a single node with loose policy, while Slurm
+            excels at finite workloads with well defined requirements and
+            topology across multiple nodes with strict policy.<a href="#src-1"
+              >[1]</a
+            >
+          </p>
+          <p>Three facts shape the current picture:</p>
+          <ul>
+            <li>
+              <strong>Slurm 26.05 is the current release.</strong> SchedMD
+              announced it in May 2026.<a href="#src-2">[2]</a> Headline changes
+              include new <code>topology/ring</code> and
+              <code>topology/torus3d</code> plugins, an
+              <code>srun --async</code> step mode for queuing large numbers of
+              steps, dynamic memory resizing of running jobs, REST API support
+              for managing partitions, and GPU allocation statistics in the
+              OpenMetrics (Prometheus) endpoints.<a href="#src-3">[3]</a>
+            </li>
+            <li>
+              <strong>NVIDIA now owns SchedMD.</strong> NVIDIA announced the
+              acquisition in December 2025 and stated it will continue to
+              develop and distribute Slurm as open-source, vendor-neutral
+              software. The same announcement notes Slurm is used on more than
+              half of the top 10 and top 100 systems on the TOP500 list.<a
+                href="#src-4"
+                >[4]</a
+              >
+              AMD (RSMI) and Intel (oneAPI) GPU detection remain in the 26.05
+              GRES documentation.<a href="#src-5">[5]</a>
+            </li>
+            <li>
+              <strong>The two worlds are converging.</strong> SchedMD's Slinky
+              project runs Slurm clusters on Kubernetes and can also use Slurm
+              as a Kubernetes scheduler,<a href="#src-6">[6]</a> while
+              Kubernetes batch projects (Kueue, Volcano) have added quotas, gang
+              scheduling and topology-aware placement that look a lot like HPC
+              schedulers.<a href="#src-7">[7]</a><a href="#src-8">[8]</a>
+            </li>
+          </ul>
+
+          <h2 id="slurm-for-gpu-clusters">Slurm for GPU Clusters</h2>
+          <p>
+            Slurm treats GPUs as generic resources (GRES). Everything
+            GPU-specific (requests, binding, accounting, sharing) builds on that
+            abstraction, and all of the <code>--gpu*</code> options require the
+            <code>select/cons_tres</code> plugin.<a href="#src-9">[9]</a>
+          </p>
+
+          <h3 id="gres-configuration">GRES Configuration</h3>
+          <p>
+            Each GPU node gets a <code>gres.conf</code> describing its devices,
+            and <code>slurm.conf</code> declares the GRES counts per node. Let
+            Slurm discover GPUs rather than hand-writing device files:
+            <code>AutoDetect</code> supports <code>nvml</code> (NVIDIA, via the
+            NVIDIA Management Library), <code>rsmi</code> (AMD),
+            <code>oneapi</code> (Intel), <code>nrt</code>, and
+            <code>nvidia</code>, and can be set globally or per node.<a
+              href="#src-5"
+              >[5]</a
+            >
+          </p>
+          <p>
+            The excerpt below is a starting point for a cluster with an 8-GPU
+            training pool and a smaller shared pool. Node names, core counts,
+            memory and GPU type labels are examples; take real values from
+            <code>slurmd -C</code> on each node.
+          </p>
+          <pre><code class="language-plaintext"># slurm.conf (excerpt, example values)
+SelectType=select/cons_tres
+GresTypes=gpu,shard
+AccountingStorageTRES=gres/gpu,gres/gpu:h100,gres/gpu:l40s,gres/shard
+ProctrackType=proctrack/cgroup
+TaskPlugin=task/cgroup,task/affinity
+PrologFlags=Contain
+JobAcctGatherType=jobacct_gather/cgroup
+
+NodeName=gpu[001-032] Sockets=2 CoresPerSocket=56 ThreadsPerCore=1 RealMemory=1900000 Gres=gpu:h100:8
+NodeName=gsh[01-04]   Sockets=2 CoresPerSocket=32 ThreadsPerCore=1 RealMemory=500000  Gres=gpu:l40s:4,shard:64
+
+# gres.conf (on every GPU node)
+AutoDetect=nvml</code></pre>
+          <p>
+            Two accounting details trip people up. First, when you track a typed
+            GRES such as <code>gres/gpu:h100</code>, also track the generic
+            <code>gres/gpu</code>, or requests like
+            <code>--gres=gpu:1</code> will not be accounted. Second, tracking
+            <code>gres/gpu</code> also enables <code>gres/gpumem</code> and
+            <code>gres/gpuutil</code>.<a href="#src-10">[10]</a>
+          </p>
+
+          <h3 id="requesting-gpus">
+            Requesting GPUs: --gres, --gpus and Friends
+          </h3>
+          <p>
+            Slurm offers several ways to ask for GPUs, and they are not
+            interchangeable:<a href="#src-11">[11]</a>
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Option</th>
+                <th>Scope</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>--gres=gpu[:type]:N</code></td>
+                <td>Per node</td>
+                <td>
+                  The original syntax; works for any GRES (e.g.
+                  <code>--gres=gpu:h100:4</code>).
+                </td>
+              </tr>
+              <tr>
+                <td><code>--gpus-per-node=[type:]N</code></td>
+                <td>Per node</td>
+                <td>
+                  Equivalent to <code>--gres</code> for GPUs; mutually exclusive
+                  with <code>--gres=gpu</code>.
+                </td>
+              </tr>
+              <tr>
+                <td><code>--gpus=[type:]N</code> (<code>-G</code>)</td>
+                <td>Whole job</td>
+                <td>
+                  Total GPUs; Slurm decides the spread, but every node gets at
+                  least one.
+                </td>
+              </tr>
+              <tr>
+                <td><code>--gpus-per-task=[type:]N</code></td>
+                <td>Per task</td>
+                <td>
+                  Needs an explicit task count; implies
+                  <code>--tres-bind=gres/gpu:per_task:N</code>.
+                </td>
+              </tr>
+              <tr>
+                <td><code>--gpus-per-socket=[type:]N</code></td>
+                <td>Per socket</td>
+                <td>Requires a task socket specification.</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Companion options size the rest of the job around the GPUs:
+            <code>--cpus-per-gpu</code> (not compatible with
+            <code>--cpus-per-task</code>), <code>--mem-per-gpu</code> (mutually
+            exclusive with <code>--mem</code> and <code>--mem-per-cpu</code>),
+            and <code>--gpu-freq</code> for clock settings.<a href="#src-11"
+              >[11]</a
+            >
+            Administrators can set partition defaults with
+            <code>DefCpuPerGPU</code> and <code>DefMemPerGPU</code> so that a
+            bare <code>--gpus=1</code> still gets a sensible slice of the
+            node.<a href="#src-12">[12]</a> One rule applies across all of them:
+            typed and untyped requests must be consistent within a job. If the
+            batch job asked for <code>--gres=gpu:2</code>, a step cannot then
+            ask for <code>--gres=gpu:tesla:2</code>.<a href="#src-9">[9]</a>
+          </p>
+
+          <h3 id="gpu-binding">GPU Binding with --gpu-bind</h3>
+          <p>
+            Allocation decides which GPUs a job owns; binding decides which task
+            sees which GPU. <code>--gpu-bind</code> is shorthand for
+            <code>--tres-bind=gres/gpu:...</code>, and the supported types
+            are:<a href="#src-13">[13]</a>
+          </p>
+          <ul>
+            <li>
+              <code>closest</code>: bind each task to the GPU(s) closest to its
+              CPUs (in a NUMA domain a task may get several).
+            </li>
+            <li>
+              <code>single:N</code>: like closest, but each task gets exactly
+              one GPU, with N tasks per GPU in block order.
+            </li>
+            <li>
+              <code>per_task:N</code>: each task gets N GPUs, preferring ones
+              with affinity to its cores. This is what
+              <code>--gpus-per-task</code> sets implicitly.
+            </li>
+            <li>
+              <code>map:list</code> and <code>mask:list</code>: explicit
+              per-task GPU IDs or hex masks, with <code>*count</code> repetition
+              (e.g. <code>map:0*4,1*4</code>).
+            </li>
+            <li><code>none</code>: turn off implicit binding.</li>
+          </ul>
+          <p>
+            Add <code>verbose,</code> in front of any type to log the binding.
+            When <code>task/cgroup</code> is active with
+            <code>ConstrainDevices=yes</code>, map and mask IDs are relative to
+            the GPUs allocated to the job (the first allocated GPU is 0 even if
+            its global index is 3).<a href="#src-13">[13]</a> For PyTorch
+            launched by <code>torchrun</code>, you usually do not bind at the
+            Slurm level at all: one Slurm task per node launches one worker per
+            GPU, and each worker selects its device from
+            <code>LOCAL_RANK</code>. For MPI codes with one rank per GPU,
+            <code>--gpus-per-task=1</code> gives correct binding without extra
+            flags.
+          </p>
+
+          <h3 id="cgroups-and-isolation">cgroups and Isolation</h3>
+          <p>
+            Without device constraints, a job allocated one GPU can open all
+            eight. Enforce isolation with cgroups:<a href="#src-14">[14]</a>
+          </p>
+          <pre><code class="language-plaintext"># cgroup.conf
+CgroupPlugin=cgroup/v2
+ConstrainCores=yes
+ConstrainDevices=yes
+ConstrainRAMSpace=yes
+ConstrainSwapSpace=yes</code></pre>
+          <p>
+            <code>ConstrainDevices=yes</code> restricts the job's allowed
+            devices to its GRES allocation (the default is no). The cgroup v1
+            plugin is deprecated and gets no new features, so new builds should
+            use v2. SchedMD's example pairs this with
+            <code>ProctrackType=proctrack/cgroup</code>,
+            <code>TaskPlugin=task/cgroup,task/affinity</code> and
+            <code>PrologFlags=Contain</code> in <code>slurm.conf</code>, and
+            recommends <code>pam_slurm_adopt</code> so users cannot escape their
+            cgroup by SSHing to a node.<a href="#src-14">[14]</a> Slurm 26.05
+            keys cgroup v2 directories off the new SLUID job identifier rather
+            than the job ID, which matters if you have prolog, epilog or
+            monitoring scripts that walk the cgroup tree.<a href="#src-3"
+              >[3]</a
+            >
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> The first week after turning on
+              <code>ConstrainDevices</code>, you will find the users whose
+              scripts hard-code <code>CUDA_VISIBLE_DEVICES=0,1,2,3</code> or
+              call <code>cuda:3</code> directly. Tell people in advance to trust
+              the environment Slurm sets, and to print
+              <code>nvidia-smi -L</code> at the top of every job so the log
+              shows what the job actually received.
+            </p>
+          </blockquote>
+
+          <h2 id="topology-aware-scheduling">Topology-Aware Scheduling</h2>
+          <p>
+            Without a topology plugin, Slurm treats nodes as a one-dimensional
+            list and places jobs by best fit.<a href="#src-15">[15]</a> That is
+            fine for single-node jobs and hopeless for multi-node training,
+            where the all-reduce pattern punishes a job that straddles
+            oversubscribed uplinks. Slurm 26.05 documents four topology models.
+          </p>
+
+          <h3 id="tree-topology">Tree Topology</h3>
+          <p>
+            <code>TopologyPlugin=topology/tree</code> describes a switch
+            hierarchy in <code>topology.conf</code>. Slurm finds the lowest
+            switch that can satisfy the request and best-fits nodes beneath it.
+            Users can add <code>--switches=count@max-time</code> to say "I want
+            at most this many leaf switches, and I will wait up to this long for
+            them." The admin caps that wait with
+            <code>SchedulerParameters=max_switch_wait</code>. SchedMD's advice
+            is to list leaf switches with their nodes plus one top-level switch
+            rather than every link, because full detail slows scheduling for
+            little gain. For InfiniBand, the documentation points to the
+            community <code>slurmibtopology</code> tool to generate the file.<a
+              href="#src-15"
+              >[15]</a
+            >
+            Note that node <code>Weight</code> settings override topology-based
+            selection under the tree plugin.<a href="#src-15">[15]</a>
+          </p>
+
+          <h3 id="block-topology">Block Topology</h3>
+          <p>
+            <code>topology/block</code> fits systems built from fixed, strongly
+            connected units, such as groups of nodes behind one leaf switch or
+            rack-scale NVLink domains (see
+            <a href="interconnects.html">Interconnects</a>). You define base
+            blocks of nodes, and <code>BlockSizes</code> lists the enforced
+            block sizes at each level. Each block must hold at least the base
+            size, and each successive size must be a power of two larger than
+            the one before. Unlike tree, which grabs the first resources that
+            fit, block placement is designed to reduce fragmentation.<a
+              href="#src-16"
+              >[16]</a
+            ><a href="#src-15">[15]</a>
+          </p>
+          <pre><code class="language-plaintext"># topology.conf for topology/block (example: four 8-node base blocks)
+BlockName=b1 Nodes=gpu[001-008]
+BlockName=b2 Nodes=gpu[009-016]
+BlockName=b3 Nodes=gpu[017-024]
+BlockName=b4 Nodes=gpu[025-032]
+BlockSizes=8,16,32</code></pre>
+          <p>
+            Users shape placement with <code>--segment=N</code>, which splits
+            the allocation into N-node segments (the node count must be evenly
+            divisible by it), plus two block-only flags:
+            <code>--spread-segments</code> and
+            <code>--consolidate-segments</code>.<a href="#src-15">[15]</a> There
+            are documented limitations. Node-count ranges force the scheduler to
+            evaluate every value. Using <code>--nodelist</code> can make a job
+            unplaceable because topology takes precedence (use
+            <code>--exclude</code> instead). You cannot ask for non-adjacent
+            blocks.<a href="#src-15">[15]</a>
+            <code>--exclusive=topo</code> stops other jobs from sharing the
+            job's topology segment,<a href="#src-11">[11]</a> and 26.05 adds a
+            matching partition setting, <code>Exclusive=TOPO</code>.<a
+              href="#src-3"
+              >[3]</a
+            >
+          </p>
+
+          <h3 id="ring-torus-and-multiple-topologies">
+            Ring, Torus and Multiple Topologies
+          </h3>
+          <p>
+            Slurm 26.05 added <code>topology/ring</code> (ordered rings of at
+            most 16 nodes, with contiguous segments that may wrap) and
+            <code>topology/torus3d</code> (contiguous sub-cube placements,
+            configured only in <code>topology.yaml</code>).<a href="#src-15"
+              >[15]</a
+            >
+            Slurm 25.05 introduced <code>topology.yaml</code>, which lets you
+            define several topologies and assign one per partition. This helps a
+            converged cluster whose GPU pool uses block topology while its CPU
+            pool uses a tree.<a href="#src-15">[15]</a> Hostlist functions such
+            as <code>block{b1}</code> and <code>switchwith{node0}</code> work in
+            commands and configs, for example
+            <code>scontrol update node=block{b1} state=resume</code>.<a
+              href="#src-15"
+              >[15]</a
+            >
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Topology plugins only help if the
+              file matches the cabling. Regenerate
+              <code>topology.conf</code> after every fabric change and diff it
+              in version control. A stale topology file is worse than none,
+              because the scheduler will confidently pack jobs onto what it
+              thinks is one switch.
+            </p>
+          </blockquote>
+
+          <h2 id="priority-fairshare-qos-and-preemption">
+            Priority, Fairshare, QOS and Preemption
+          </h2>
+
+          <h3 id="multifactor-priority-and-fair-tree">
+            Multifactor Priority and Fair Tree
+          </h3>
+          <p>
+            With <code>PriorityType=priority/multifactor</code>, a job's
+            priority is a weighted sum of age, association, fairshare, job size,
+            partition, QOS and per-TRES factors, minus nice.<a href="#src-17"
+              >[17]</a
+            >
+            Since Slurm 19.05 the fairshare factor uses the Fair Tree algorithm
+            by default. Under Fair Tree, if account A has a higher fairshare
+            than its sibling B, every user under A ranks above every user under
+            B, and an account coordinator cannot accidentally hurt their users
+            relative to other accounts.<a href="#src-18">[18]</a> Past usage
+            decays with <code>PriorityDecayHalfLife</code>, which defaults to 7
+            days.<a href="#src-12">[12]</a>
+          </p>
+          <p>
+            On a GPU cluster, the key setting is what counts as usage. By
+            default jobs are billed only by allocated CPUs
+            (<code>TRESBillingWeights="CPU=1"</code>). A job that takes eight
+            GPUs and four cores would then barely dent its owner's fairshare.
+            Set partition billing weights so GPUs dominate. SchedMD's example is
+            <code>TRESBillingWeights="CPU=1.0,Mem=0.25G,GRES/gpu=2.0"</code>.<a
+              href="#src-10"
+              >[10]</a
+            >
+            Choose your own GPU weight so that one GPU costs roughly what the
+            CPUs and memory it strands would have cost.
+          </p>
+
+          <h3 id="quality-of-service">Quality of Service</h3>
+          <p>
+            A QOS bundles priority, limits and preemption rights. QOS priority
+            only counts if <code>PriorityWeightQOS</code> is non-zero, and QOS
+            preemption only applies under
+            <code>PreemptType=preempt/qos</code>.<a href="#src-19">[19]</a>
+            Useful options include GrpTRES, MaxTRESPerUser, MaxTRESPerJob and
+            MaxWall limits; <code>UsageFactor</code> (e.g. 0 for free scavenger
+            time); and flags such as <code>DenyOnLimit</code>,
+            <code>NoReserve</code> (for preemptible QOSes, so they do not block
+            backfill), <code>Relative</code> (limits as percentages, since
+            23.11), <code>RequiresReservation</code> and <code>NoDecay</code>.<a
+              href="#src-19"
+              >[19]</a
+            ><a href="#src-20">[20]</a> A QOS attached to a partition in
+            <code>slurm.conf</code> can implement a "floating" partition that
+            spans all nodes but is capped by GrpTRES.<a href="#src-19">[19]</a>
+          </p>
+          <pre><code class="language-bash"># Example QOS tiers for a GPU partition (values are examples)
+sacctmgr add qos gpu-normal
+sacctmgr modify qos gpu-normal set Priority=100 MaxTRESPerUser=gres/gpu=16 MaxWall=2-00:00:00
+
+sacctmgr add qos gpu-scavenger
+sacctmgr modify qos gpu-scavenger set Priority=0 UsageFactor=0 Flags=NoReserve GraceTime=120
+
+# gpu-normal jobs may preempt gpu-scavenger jobs
+sacctmgr modify qos gpu-normal set Preempt=gpu-scavenger
+
+# Large runs only inside an admin-created reservation
+sacctmgr add qos gpu-hero
+sacctmgr modify qos gpu-hero set Flags=RequiresReservation MaxTRESPerJob=gres/gpu=256</code></pre>
+          <p>
+            Slurm 26.05 also accepts <code>+=</code> and <code>-=</code> in TRES
+            assignments (e.g. <code>GrpTRES=gres/gpu+=2</code>), which makes
+            incremental quota changes less error-prone.<a href="#src-20"
+              >[20]</a
+            >
+            Note that QOS <code>Priority</code> has nothing to do with
+            preemption: only the <code>Preempt</code> list decides who can
+            preempt whom.<a href="#src-20">[20]</a>
+          </p>
+
+          <h3 id="preemption">Preemption</h3>
+          <p>
+            <code>PreemptType</code> is either
+            <code>preempt/partition_prio</code> (partitions with a higher
+            <code>PriorityTier</code> preempt lower ones) or
+            <code>preempt/qos</code>. <code>PreemptMode</code> may be OFF,
+            CANCEL, REQUEUE or SUSPEND, optionally with GANG, and WITHIN lets
+            jobs in the same QOS preempt each other.<a href="#src-21">[21]</a>
+            When a job is selected, Slurm sets its end time to now plus
+            <code>GraceTime</code> and immediately sends SIGCONT and SIGTERM. At
+            the new end time it sends SIGCONT, SIGTERM and SIGKILL.<a
+              href="#src-21"
+              >[21]</a
+            >
+            <code>PreemptExemptTime</code> guarantees a minimum run time before
+            a job can be chosen.<a href="#src-12">[12]</a>
+          </p>
+          <p>
+            On GPU partitions, REQUEUE (or CANCEL) is the practical mode.
+            SUSPEND stops processes but leaves them resident on the node, so the
+            GPU's memory stays occupied, and Slurm notes that licenses are not
+            freed by suspension either.<a href="#src-21">[21]</a> Preemptible
+            work only pays off if jobs checkpoint when they get SIGTERM. A
+            minimal pattern:
+          </p>
+          <pre><code class="language-bash">#!/bin/bash
+#SBATCH --qos=gpu-scavenger
+#SBATCH --requeue
+#SBATCH --signal=USR1@300
+#SBATCH --gpus=1
+#SBATCH --time=12:00:00
+
+# train.py must: resume from the newest checkpoint on start, and
+# save a checkpoint and exit on SIGTERM (preemption) or SIGUSR1 (near walltime).
+srun python train.py --ckpt-dir "/scratch/$USER/ckpt/$SLURM_JOB_NAME" --resume latest</code></pre>
+          <pre><code class="language-python">import signal
+
+stop_requested = False
+
+def _request_stop(signum, frame):
+    global stop_requested
+    stop_requested = True
+
+signal.signal(signal.SIGTERM, _request_stop)   # sent on preemption
+signal.signal(signal.SIGUSR1, _request_stop)   # sent by --signal=USR1@300
+
+for step in range(start_step, total_steps):
+    train_step()
+    if stop_requested:
+        save_checkpoint(step)
+        break</code></pre>
+          <p>
+            <code>--signal</code> may fire up to 60 seconds earlier than
+            requested, and <code>--requeue</code> makes the batch job eligible
+            for requeue after preemption or node failure.<a href="#src-11"
+              >[11]</a
+            >
+            Checkpoint formats and cadence are covered in
+            <a href="training.html">Training at Scale</a>.
+          </p>
+
+          <h3 id="reservations">Reservations</h3>
+          <p>
+            Advanced reservations set aside nodes for maintenance, courses, hero
+            runs or acceptance testing. The canonical maintenance example is:<a
+              href="#src-22"
+              >[22]</a
+            >
+          </p>
+          <pre><code class="language-bash">scontrol create reservation starttime=2026-10-06T08:00:00 duration=480 \
+    user=root flags=maint,ignore_jobs nodes=ALL</code></pre>
+          <p>
+            Other flags include DAILY and WEEKLY for recurring class slots, FLEX
+            to let jobs spill outside the reserved nodes, MAGNETIC to pull in
+            eligible jobs without an explicit <code>--reservation</code>, and
+            PART_NODES and ANY_NODES.<a href="#src-23">[23]</a> As a maintenance
+            reservation approaches, Slurm starts only jobs whose time limits end
+            before it. Accurate <code>--time</code> values therefore keep the
+            cluster busy right up to the outage.<a href="#src-22">[22]</a>
+          </p>
+
+          <h2 id="job-arrays-and-heterogeneous-jobs">
+            Job Arrays and Heterogeneous Jobs
+          </h2>
+          <p>
+            Job arrays submit many near-identical batch jobs with one command.
+            <code>--array=0-15%4</code> runs at most four tasks at once, each
+            task sees <code>SLURM_ARRAY_TASK_ID</code>, and output patterns use
+            <code>%A</code> (array job ID) and <code>%a</code> (task ID). The
+            largest index is bounded by <code>MaxArraySize</code> minus one.<a
+              href="#src-24"
+              >[24]</a
+            >
+            Arrays are the right tool for hyperparameter sweeps, ensemble
+            simulations and per-sample inference, and the
+            <code>%</code> throttle is how a good citizen avoids flooding a
+            shared GPU partition.
+          </p>
+          <p>
+            Heterogeneous jobs allocate differently shaped components that start
+            together, for example a CPU simulation feeding a GPU training or
+            inference process. In a batch script, components are separated by
+            <code>#SBATCH hetjob</code>, the script itself runs on the first
+            node of the first component, and steps target components with
+            <code>srun --het-group=N</code>.<a href="#src-25">[25]</a
+            ><a href="#src-13">[13]</a> Environment variables are exposed per
+            component with a <code>_HET_GROUP_N</code> suffix (e.g.
+            <code>SLURM_JOB_NODELIST_HET_GROUP_1</code>).<a href="#src-25"
+              >[25]</a
+            >
+            For preemption, all components must be eligible, and a single
+            PreemptMode is applied to the whole heterogeneous job.<a
+              href="#src-21"
+              >[21]</a
+            >
+          </p>
+          <pre><code class="language-bash">#!/bin/bash
+#SBATCH --job-name=sim-plus-surrogate
+#SBATCH --partition=cpu --nodes=4 --ntasks-per-node=64 --time=06:00:00
+#SBATCH hetjob
+#SBATCH --partition=gpu --nodes=1 --ntasks=1 --gpus=4 --cpus-per-gpu=16 --time=06:00:00
+
+# Component 0: MPI simulation writing snapshots; component 1: GPU model training on them
+srun --het-group=0 ./simulate --out "/scratch/$USER/frames" &amp;
+srun --het-group=1 python train_surrogate.py --watch "/scratch/$USER/frames" &amp;
+wait</code></pre>
+
+          <h2 id="sbatch-recipes">sbatch Recipes for AI and HPC</h2>
+          <p>
+            These scripts are complete and use only options confirmed in the
+            Slurm 26.05 and PyTorch documentation. Partition names, accounts,
+            module names and sizes are examples. Replace them with your site's
+            values.
+          </p>
+
+          <h3 id="recipe-single-gpu">Single GPU</h3>
+          <pre><code class="language-bash">#!/bin/bash
+#SBATCH --job-name=finetune-1gpu
+#SBATCH --account=mylab            # example
+#SBATCH --partition=gpu            # example
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --gpus=1
+#SBATCH --cpus-per-gpu=8
+#SBATCH --mem-per-gpu=64G
+#SBATCH --time=04:00:00
+#SBATCH --output=%x-%j.out
+
+module load cuda                   # site-specific
+source "$HOME/venvs/torch/bin/activate"
+
+nvidia-smi -L                      # record which GPU the job received
+srun python finetune.py --epochs 3 --data "/scratch/$USER/dataset"</code></pre>
+
+          <h3 id="recipe-single-node-torchrun">
+            Single Node, Multiple GPUs with torchrun
+          </h3>
+          <p>
+            Run one Slurm task per node and let <code>torchrun</code> start one
+            worker per GPU. <code>--standalone</code> sets up a local
+            rendezvous, and <code>SLURM_GPUS_ON_NODE</code> holds the number of
+            GPUs allocated to the batch step.<a href="#src-26">[26]</a
+            ><a href="#src-11">[11]</a>
+          </p>
+          <pre><code class="language-bash">#!/bin/bash
+#SBATCH --job-name=ddp-1node
+#SBATCH --partition=gpu
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --gpus-per-node=4
+#SBATCH --cpus-per-task=32
+#SBATCH --mem=256G
+#SBATCH --time=12:00:00
+#SBATCH --output=%x-%j.out
+
+source "$HOME/venvs/torch/bin/activate"
+export OMP_NUM_THREADS=8
+
+srun torchrun --standalone --nnodes=1 --nproc-per-node="$SLURM_GPUS_ON_NODE" \
+    train.py --config configs/base.yaml</code></pre>
+
+          <h3 id="recipe-multi-node-torchrun">
+            Multiple Nodes with torchrun, srun and c10d Rendezvous
+          </h3>
+          <p>
+            For multi-node jobs, <code>torchrun</code> needs a shared rendezvous
+            ID, a backend (<code>c10d</code> is the recommended one), and an
+            endpoint in <code>host:port</code> form. Start it with the same
+            arguments on every node.<a href="#src-26">[26]</a> Slurm supplies
+            the pieces: the first hostname from
+            <code>scontrol show hostnames</code>, the job ID as the rendezvous
+            ID, and one task per node from <code>srun</code>.
+          </p>
+          <pre><code class="language-bash">#!/bin/bash
+#SBATCH --job-name=ddp-4node
+#SBATCH --partition=gpu
+#SBATCH --nodes=4
+#SBATCH --ntasks-per-node=1
+#SBATCH --gpus-per-node=8
+#SBATCH --cpus-per-task=96
+#SBATCH --mem=0                    # all memory on each node
+#SBATCH --exclusive
+#SBATCH --time=24:00:00
+#SBATCH --output=%x-%j.out
+
+source "$HOME/venvs/torch/bin/activate"
+
+GPUS_PER_NODE=8
+head_node=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
+export OMP_NUM_THREADS=8
+export NCCL_DEBUG=WARN             # use INFO when debugging transport selection
+
+srun --kill-on-bad-exit=1 torchrun \
+    --nnodes="$SLURM_JOB_NUM_NODES" \
+    --nproc-per-node="$GPUS_PER_NODE" \
+    --rdzv-id="$SLURM_JOB_ID" \
+    --rdzv-backend=c10d \
+    --rdzv-endpoint="${head_node}:29500" \
+    train.py --config configs/large.yaml</code></pre>
+          <p>
+            <code>--mem=0</code> grants all of each node's memory, and
+            <code>--kill-on-bad-exit=1</code> ends the step when any task fails,
+            so a dead node does not leave the other workers hanging until
+            walltime.<a href="#src-11">[11]</a><a href="#src-13">[13]</a>
+            <code>NCCL_DEBUG</code> accepts levels including VERSION, WARN and
+            INFO.<a href="#src-27">[27]</a> Add <code>--segment</code> or
+            <code>--switches</code> if your site runs a topology plugin. Fabric
+            tuning (NCCL environment, GPUDirect RDMA) is in
+            <a href="interconnects.html">Interconnects</a>.
+          </p>
+
+          <h3 id="recipe-mpi-gpu">MPI with One Rank per GPU</h3>
+          <p>
+            For CUDA-aware MPI codes, give each rank one GPU with
+            <code>--gpus-per-task=1</code>. That requires an explicit task count
+            and implies per-task binding.<a href="#src-11">[11]</a> Launch with
+            <code>srun --mpi=pmix</code> if Slurm was built with PMIx (<code
+              >srun --mpi=list</code
+            >
+            shows what is available).<a href="#src-13">[13]</a>
+          </p>
+          <pre><code class="language-bash">#!/bin/bash
+#SBATCH --job-name=cfd-gpu
+#SBATCH --partition=gpu
+#SBATCH --nodes=2
+#SBATCH --ntasks=8
+#SBATCH --ntasks-per-node=4
+#SBATCH --gpus-per-task=1
+#SBATCH --cpus-per-task=16
+#SBATCH --mem-per-gpu=120G
+#SBATCH --time=08:00:00
+#SBATCH --output=%x-%j.out
+
+module load openmpi cuda           # site-specific, CUDA-aware MPI build
+export OMP_NUM_THREADS="$SLURM_CPUS_PER_TASK"
+
+srun --mpi=pmix --gpu-bind=verbose,per_task:1 ./solver input.nml</code></pre>
+
+          <h3 id="recipe-job-array-sweep">Job Array Hyperparameter Sweep</h3>
+          <pre><code class="language-bash">#!/bin/bash
+#SBATCH --job-name=lr-sweep
+#SBATCH --partition=gpu
+#SBATCH --array=0-23%6             # 24 runs, at most 6 at a time
+#SBATCH --ntasks=1
+#SBATCH --gpus=1
+#SBATCH --cpus-per-gpu=8
+#SBATCH --mem-per-gpu=48G
+#SBATCH --time=02:00:00
+#SBATCH --output=logs/%x_%A_%a.out # create logs/ before submitting
+
+source "$HOME/venvs/torch/bin/activate"
+
+LRS=(1e-4 3e-4 1e-3)
+SEEDS=(0 1 2 3 4 5 6 7)
+lr=${LRS[$(( SLURM_ARRAY_TASK_ID % 3 ))]}
+seed=${SEEDS[$(( SLURM_ARRAY_TASK_ID / 3 ))]}
+
+srun python train.py --lr "$lr" --seed "$seed" --out "runs/lr${lr}_seed${seed}"</code></pre>
+
+          <h3 id="recipe-interactive-salloc">Interactive GPU Session</h3>
+          <p>
+            With <code>LaunchParameters=use_interactive_step</code>,
+            <code>salloc</code> gives you a shell on the allocated compute node,
+            using the default
+            <code>--interactive --preserve-env --pty $SHELL</code> step.<a
+              href="#src-12"
+              >[12]</a
+            >
+            Without it, the shell opens wherever you ran <code>salloc</code>,
+            and you need <code>srun --pty</code> to reach the node.<a
+              href="#src-13"
+              >[13]</a
+            >
+          </p>
+          <pre><code class="language-bash"># Allocate one GPU for an hour on an interactive partition (names are examples)
+salloc --partition=gpu-interactive --gpus=1 --cpus-per-gpu=8 --mem-per-gpu=32G --time=01:00:00
+
+# If your site does not enable use_interactive_step, step onto the node explicitly:
+srun --pty bash -l
+
+# One-liner alternative without salloc:
+srun --partition=gpu-interactive --gpus=1 --cpus-per-gpu=8 --time=01:00:00 --pty bash -l</code></pre>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Interactive GPU sessions are the
+              biggest source of idle accelerators on most campus clusters. Put
+              them on a dedicated partition or QOS with a short MaxWall and a
+              per-user GPU cap, and steer notebook users to Open OnDemand, where
+              sessions end when the time runs out instead of when someone
+              remembers to type exit.
+            </p>
+          </blockquote>
+
+          <h2 id="kubernetes-for-ai">Kubernetes for AI Workloads</h2>
+
+          <h3 id="device-plugins-and-dra">
+            Device Plugins and Dynamic Resource Allocation
+          </h3>
+          <p>
+            Kubernetes exposes GPUs through the device plugin framework, which
+            has been stable since v1.26. A vendor plugin advertises an extended
+            resource such as <code>nvidia.com/gpu</code>, and pods request it
+            under <code>resources.limits</code>. Extended resources are
+            integers, cannot be overcommitted, and a device cannot be shared
+            between containers.<a href="#src-28">[28]</a> Dynamic Resource
+            Allocation (DRA) is the newer model: drivers publish ResourceSlices,
+            administrators define DeviceClasses, and workloads claim devices
+            through ResourceClaims with CEL filtering on device attributes. DRA
+            has been stable since Kubernetes v1.35 (first available in v1.30).
+            One documented limitation matters for shared clusters: the scheduler
+            does not support preemption for DRA resources.<a href="#src-29"
+              >[29]</a
+            >
+            As of September 2026 the supported Kubernetes minors are 1.37, 1.36
+            and 1.35, and 1.37.0 was released on 2026-08-26.<a href="#src-30"
+              >[30]</a
+            >
+          </p>
+          <pre><code class="language-yaml">apiVersion: v1
+kind: Pod
+metadata:
+  name: cuda-smoke-test
+spec:
+  restartPolicy: Never
+  containers:
+  - name: cuda
+    image: nvidia/cuda:12.4.1-base-ubuntu22.04   # example image tag (Docker Hub)
+    command: ["nvidia-smi", "-L"]
+    resources:
+      limits:
+        nvidia.com/gpu: 1</code></pre>
+
+          <h3 id="nvidia-gpu-operator">NVIDIA GPU Operator</h3>
+          <p>
+            Hand-installing drivers, container runtime hooks and the device
+            plugin on every node does not scale. The GPU Operator automates the
+            NVIDIA stack on Kubernetes: drivers, the device plugin, the NVIDIA
+            Container Toolkit, GPU Feature Discovery node labels, DCGM-based
+            monitoring and more.<a href="#src-31">[31]</a> It also deploys a MIG
+            Manager, with a <code>single</code> strategy (MIG on all GPUs of a
+            node) or a <code>mixed</code> strategy.<a href="#src-32">[32]</a>
+            The latest release at the time of writing is v26.7.1, published
+            2026-09-23.<a href="#src-33">[33]</a> Driver and container details
+            are in <a href="systems-software.html">Systems Software</a>.
+          </p>
+
+          <h3 id="kueue">Kueue</h3>
+          <p>
+            Plain Kubernetes has no queue: a job that does not fit just leaves
+            pods pending, and there is no fairshare between teams. Kueue fills
+            that gap. It is a Kubernetes-native system that decides when a job
+            waits, when it is admitted (its pods may be created), and when it is
+            preempted. It deliberately leaves pod placement to kube-scheduler
+            and scaling to the cluster autoscaler.<a href="#src-7">[7]</a> Its
+            core objects map neatly onto HPC concepts:
+          </p>
+          <ul>
+            <li>
+              <strong>ResourceFlavor</strong>: a class of nodes (for example a
+              GPU model), selected by node labels and taints.
+            </li>
+            <li>
+              <strong>ClusterQueue</strong>: a quota per flavor
+              (<code>nominalQuota</code>), with <code>borrowingLimit</code> and
+              <code>lendingLimit</code> inside a <strong>cohort</strong> of
+              queues that share idle capacity.<a href="#src-34">[34]</a>
+            </li>
+            <li>
+              <strong>LocalQueue</strong>: a namespaced entry point that points
+              at a ClusterQueue. Users submit jobs here.<a href="#src-35"
+                >[35]</a
+              >
+            </li>
+          </ul>
+          <p>
+            Kueue also offers fair sharing, preemption policies, all-or-nothing
+            (gang) admission, MultiKueue for multi-cluster dispatch, and
+            Topology-Aware Scheduling (beta since v0.14), where annotations such
+            as <code>kueue.x-k8s.io/podset-required-topology</code> keep a job's
+            pods inside a rack or block.<a href="#src-7">[7]</a
+            ><a href="#src-36">[36]</a> The current release line is v0.19.<a
+              href="#src-37"
+              >[37]</a
+            >
+          </p>
+          <pre><code class="language-yaml">apiVersion: kueue.x-k8s.io/v1beta2
+kind: ResourceFlavor
+metadata:
+  name: h100
+spec:
+  nodeLabels:
+    gpu-type: h100            # a label you apply to the H100 nodes (example)
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ClusterQueue
+metadata:
+  name: lab-a-cq
+spec:
+  namespaceSelector: {}
+  cohortName: "research"
+  resourceGroups:
+  - coveredResources: ["cpu", "memory", "nvidia.com/gpu"]
+    flavors:
+    - name: "h100"
+      resources:
+      - name: "cpu"
+        nominalQuota: 256
+      - name: "memory"
+        nominalQuota: 2048Gi
+      - name: "nvidia.com/gpu"
+        nominalQuota: 16
+        borrowingLimit: 16
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: LocalQueue
+metadata:
+  namespace: lab-a
+  name: lab-a-queue
+spec:
+  clusterQueue: lab-a-cq
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: finetune-
+  namespace: lab-a
+  labels:
+    kueue.x-k8s.io/queue-name: lab-a-queue
+spec:
+  parallelism: 1
+  completions: 1
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: train
+        image: registry.example.edu/lab-a/train:2026.09   # example image
+        command: ["python", "finetune.py"]
+        resources:
+          requests:
+            cpu: "32"
+            memory: 256Gi
+          limits:
+            nvidia.com/gpu: 4</code></pre>
+          <p>
+            The job only needs the <code>kueue.x-k8s.io/queue-name</code> label.
+            Kueue suspends it through a webhook and releases it when quota
+            allows.<a href="#src-38">[38]</a>
+          </p>
+
+          <h3 id="volcano-and-kuberay">Volcano and KubeRay</h3>
+          <p>
+            Volcano is a CNCF incubating batch scheduler that replaces or
+            supplements the default scheduler. It provides gang scheduling,
+            heterogeneous device scheduling and topology-aware scheduling, and
+            it integrates with frameworks including PyTorch, Spark, Ray and
+            MindSpore.<a href="#src-8">[8]</a> Choose Kueue if you want to keep
+            kube-scheduler and add queuing on top. Choose Volcano if you want a
+            batch-oriented scheduler in its place.
+          </p>
+          <p>
+            KubeRay is the operator for Ray on Kubernetes. It provides
+            RayCluster (long-lived clusters with autoscaling), RayJob (creates a
+            cluster, runs a job, optionally tears the cluster down), RayService
+            (Ray Serve with zero-downtime upgrades) and RayCronJob.<a
+              href="#src-39"
+              >[39]</a
+            >
+            RayJob works well for batch inference and data processing.
+            RayService belongs with the serving patterns in
+            <a href="inference.html">Inference at Scale</a>.
+          </p>
+
+          <h3 id="slinky-slurm-on-kubernetes">
+            Slinky: Slurm and Kubernetes Together
+          </h3>
+          <p>
+            SchedMD's Slinky projects connect the two schedulers in two
+            different ways:<a href="#src-6">[6]</a>
+          </p>
+          <ul>
+            <li>
+              <strong>slurm-operator</strong> runs Slurm clusters on Kubernetes.
+              Compute nodes are pods grouped into NodeSets, login nodes into
+              LoginSets, and the controller supports HA and zero-downtime
+              reconfiguration. The operator drains Slurm nodes before scale-in
+              or upgrade. Current 1.x releases support Kubernetes 1.35 through
+              1.37 and require Slurm 25.11 or later.<a href="#src-1">[1]</a>
+            </li>
+            <li>
+              <strong>slurm-bridge</strong> uses Slurm as a Kubernetes
+              scheduler. Kubernetes Pods, Jobs, JobSets and LeaderWorkerSets
+              become placeholder Slurm jobs, so one controller arbitrates both
+              kinds of work. On hybrid nodes, the hardware is shared over time:
+              a node does not run native Slurm jobs and bridge-managed
+              Kubernetes jobs simultaneously.<a href="#src-40">[40]</a>
+            </li>
+          </ul>
+
+          <h3 id="slurm-vs-kubernetes-vs-both">Slurm vs Kubernetes vs Both</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Situation</th>
+                <th>Better fit</th>
+                <th>Why</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  Multi-node MPI simulation, large training runs, strict
+                  fairshare
+                </td>
+                <td>Slurm</td>
+                <td>
+                  Gang allocation, topology plugins, mature accounting and QOS.
+                </td>
+              </tr>
+              <tr>
+                <td>Model serving, APIs, web apps, long-lived services</td>
+                <td>Kubernetes</td>
+                <td>
+                  Health checks, rolling upgrades, autoscaling, service
+                  networking.
+                </td>
+              </tr>
+              <tr>
+                <td>Containerized pipelines built by cloud-native teams</td>
+                <td>Kubernetes with Kueue or Volcano</td>
+                <td>
+                  Native to their tooling. Kueue adds quotas and gang admission.
+                </td>
+              </tr>
+              <tr>
+                <td>Campus cluster with many small labs and notebooks</td>
+                <td>Slurm plus Open OnDemand</td>
+                <td>
+                  Familiar to researchers, low operational overhead, per-account
+                  fairness.
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  One GPU pool that must serve both batch science and inference
+                </td>
+                <td>Both (Slinky, or split pools)</td>
+                <td>
+                  slurm-bridge or slurm-operator avoid running two separate
+                  islands.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            For most university centers the practical answer in 2026 is Slurm
+            for batch, a modest Kubernetes cluster for services and inference
+            endpoints, and a clear rule about which GPUs belong to which. Sites
+            with strong platform teams are starting to evaluate Slinky to merge
+            the two. It is a real option now, but it adds Kubernetes expertise
+            to your staffing needs (see
+            <a href="operations.html">Research Computing Operations</a>). Cloud
+            bursting options are in <a href="cloud.html">Cloud and Hybrid</a>.
+          </p>
+
+          <h2 id="gpu-sharing">
+            GPU Sharing: MIG, MPS, Time-Slicing and Shards
+          </h2>
+          <p>
+            Many research jobs (notebooks, small inference, teaching labs, CI)
+            cannot saturate a modern data center GPU. There are four ways to
+            share one, with very different isolation:
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Method</th>
+                <th>Isolation</th>
+                <th>Slurm</th>
+                <th>Kubernetes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>MIG</td>
+                <td>
+                  Hardware partitions with dedicated memory paths; fault
+                  isolation
+                </td>
+                <td>MIG instances appear as typed GPUs (AutoDetect=nvml)</td>
+                <td>
+                  GPU Operator MIG Manager; resources such as
+                  <code>nvidia.com/mig-1g.10gb</code>
+                </td>
+              </tr>
+              <tr>
+                <td>MPS</td>
+                <td>
+                  Space partitioning of SMs and memory limits; one user's MPS
+                  server at a time
+                </td>
+                <td><code>gres/mps</code>, one GPU per node in MPS mode</td>
+                <td>Device plugin MPS sharing</td>
+              </tr>
+              <tr>
+                <td>Time-slicing</td>
+                <td>None: shared memory and fault domain</td>
+                <td>Not a Slurm feature (see shards)</td>
+                <td>Device plugin replicas</td>
+              </tr>
+              <tr>
+                <td>Slurm shards</td>
+                <td>None: no fencing between processes</td>
+                <td><code>gres/shard</code></td>
+                <td>n/a</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            <strong>MIG</strong> splits supported NVIDIA GPUs (Ampere and later)
+            into up to seven GPU instances, each with its own path through the
+            memory system: crossbar ports, L2 banks, memory controllers and DRAM
+            address buses. Throughput and latency stay predictable regardless of
+            the neighbors.<a href="#src-41">[41]</a> Slurm has supported MIG
+            since 21.08. MIG types are named by a substring of the profile
+            string that slurmd reports, e.g.
+            <code>Gres=gpu:a100:1,gpu:a100_3g.20gb:2</code>.<a href="#src-9"
+              >[9]</a
+            >
+            In Kubernetes, the GPU Operator exposes MIG profiles as resources
+            like <code>nvidia.com/mig-1g.10gb</code>.<a href="#src-32">[32]</a>
+          </p>
+          <p>
+            <strong>MPS</strong> lets cooperating CUDA processes share a GPU
+            with reduced context switching, SM and memory partitioning, and
+            priorities. NVIDIA's 2026 documentation adds MPS v3, an opt-in
+            control interface with scriptable commands and named servers.<a
+              href="#src-42"
+              >[42]</a
+            >
+            In Slurm, <code>gres/mps</code> counts are split across a node's
+            GPUs (<code>Gres=gpu:2,mps:200</code> gives 100 per GPU), a request
+            must be satisfied from a single GPU per node, and a prolog starts
+            and stops the MPS server. Slurm also warns that only one user can
+            have an active MPS server on a system at a time, so different users
+            are time-sliced rather than truly concurrent.<a href="#src-9"
+              >[9]</a
+            >
+          </p>
+          <p>
+            <strong>Time-slicing</strong> in Kubernetes advertises each GPU as
+            several replicas. A setting of 10 replicas on an 8-GPU node
+            advertises 80 <code>nvidia.com/gpu</code>. Nothing isolates the
+            replicas: they share memory and a fault domain, so if one crashes
+            they all do. Time-slicing and MPS are mutually exclusive, and the
+            same method applies to all GPUs on a node.<a href="#src-43">[43]</a>
+            DCGM-Exporter cannot attribute metrics to containers when
+            time-slicing is on.<a href="#src-44">[44]</a>
+          </p>
+          <pre><code class="language-yaml"># NVIDIA device plugin sharing config (example): 4 replicas per GPU
+version: v1
+sharing:
+  timeSlicing:
+    renameByDefault: true      # advertise as nvidia.com/gpu.shared
+    resources:
+    - name: nvidia.com/gpu
+      replicas: 4</code></pre>
+          <p>
+            <strong>Slurm shards</strong> (<code>gres/shard</code>) are the
+            Slurm counterpart to time-slicing: several jobs, even from different
+            users, share a GPU up to a configured count, but processes are not
+            fenced. SchedMD therefore recommends shards for homogeneous
+            workloads. A GPU allocated as a whole <code>gpu</code> is not
+            available as shards, and vice versa.<a href="#src-9">[9]</a> A node
+            line like <code>Gres=gpu:l40s:4,shard:64</code> with no shard lines
+            in <code>gres.conf</code> spreads 16 shards per GPU. Users then
+            request <code>--gres=shard:4</code>.<a href="#src-9">[9]</a>
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Match the sharing method to the trust
+              boundary. MIG is the only option here that isolates memory and
+              faults in hardware, so use it wherever strangers share a card
+              (courses, public notebook services). Shards and time-slicing are
+              fine for one lab's own inference fleet, where a crash only hurts
+              the people who caused it.
+            </p>
+          </blockquote>
+
+          <h2 id="portals-and-workflows">Portals and Workflow Managers</h2>
+          <h3 id="open-ondemand">
+            Open OnDemand for Jupyter, VS Code and RStudio
+          </h3>
+          <p>
+            Open OnDemand (OOD) is the web portal most research centers now put
+            in front of Slurm. Its interactive apps are batch jobs with a
+            browser front end. Each app has five parts: a manifest, a user form
+            (<code>form.yml.erb</code>), a render template, a job submission
+            file (<code>submit.yml.erb</code>) and a connection view.<a
+              href="#src-45"
+              >[45]</a
+            >
+            The community maintains apps for Jupyter, RStudio Server and Visual
+            Studio Code (code-server) from OSC, Utah, Stanford and others that
+            you can adapt instead of writing from scratch.<a href="#src-46"
+              >[46]</a
+            >
+          </p>
+          <p>
+            The job submission file is where GPU policy goes. OOD's portable
+            fields cover common parameters, and the <code>native</code> array
+            passes raw <code>sbatch</code> arguments when you need
+            Slurm-specific options.<a href="#src-47">[47]</a>
+          </p>
+          <pre><code class="language-yaml"># submit.yml.erb for a GPU Jupyter app (example; num_gpus and hours come from form.yml.erb)
+---
+batch_connect:
+  template: "basic"
+script:
+  queue_name: "gpu-interactive"
+  wall_time: &lt;%= (hours.blank? ? 1 : hours.to_i) * 3600 %&gt;
+  native:
+    - "--gpus=&lt;%= num_gpus %&gt;"
+    - "--cpus-per-gpu=8"
+    - "--mem-per-gpu=32G"</code></pre>
+          <p>
+            Offer a small menu rather than free-form fields: "1 MIG slice", "1
+            full GPU", "4 GPUs" and similar choices, each mapped to a partition
+            and QOS with sane limits.
+          </p>
+
+          <h3 id="workflow-managers">
+            Workflow Managers: Nextflow, Snakemake, Parsl and Ray
+          </h3>
+          <p>
+            Workflow managers turn a DAG of tasks into many scheduler jobs. On a
+            shared cluster they need throttling, or they will swamp the
+            controller.
+          </p>
+          <ul>
+            <li>
+              <strong>Nextflow</strong> submits each task with
+              <code>sbatch</code> when <code>process.executor = 'slurm'</code>.
+              The Slurm executor documents the <code>clusterOptions</code>,
+              <code>cpus</code>, <code>memory</code>, <code>queue</code> and
+              <code>time</code> directives.<a href="#src-48">[48]</a> Pass GPU
+              requests through <code>clusterOptions</code>. The separate
+              <code>accelerator</code> directive is platform-specific, and
+              Nextflow also offers an <code>array</code> directive that batches
+              tasks into Slurm job arrays.<a href="#src-49">[49]</a>
+            </li>
+            <li>
+              <strong>Snakemake</strong> uses the
+              <code>snakemake-executor-plugin-slurm</code> plugin (<code
+                >snakemake --executor slurm --jobs N</code
+              >). Rules request GPUs with <code>gpu=2</code> and
+              <code>gpu_model="a100"</code> resources, and
+              <code>--slurm-array-jobs</code> submits eligible rules as
+              arrays.<a href="#src-50">[50]</a>
+            </li>
+            <li>
+              <strong>Parsl</strong> parallelizes Python functions as futures.<a
+                href="#src-51"
+                >[51]</a
+              >
+              Its <code>SlurmProvider</code> requests blocks of nodes (with
+              <code>gpus_per_node</code>, and <code>exclusive=True</code> by
+              default). The <code>HighThroughputExecutor</code> option
+              <code>available_accelerators</code> pins each worker to one
+              accelerator.<a href="#src-52">[52]</a>
+            </li>
+            <li>
+              <strong>Ray</strong> expects a head node and workers. Ray 2.49
+              added <code>ray symmetric-run</code>, which starts Ray on every
+              node of a Slurm allocation and runs the entrypoint only on the
+              head. The Ray docs note it does not currently work in multi-tenant
+              setups, where you must assign distinct ports per job.<a
+                href="#src-53"
+                >[53]</a
+              >
+            </li>
+          </ul>
+          <pre><code class="language-plaintext">// nextflow.config (example): CPU tasks to 'cpu', labelled GPU tasks to 'gpu'
+process {
+    executor = 'slurm'
+    queue    = 'cpu'
+    withLabel: 'gpu' {
+        queue          = 'gpu'
+        clusterOptions = '--gpus=1 --cpus-per-gpu=8'
+    }
+}</code></pre>
+          <pre><code class="language-python"># Parsl config (example): up to 4 single-node GPU blocks, one worker per GPU
+from parsl.config import Config
+from parsl.executors import HighThroughputExecutor
+from parsl.providers import SlurmProvider
+
+config = Config(executors=[
+    HighThroughputExecutor(
+        label="gpu_htex",
+        available_accelerators=4,
+        provider=SlurmProvider(
+            partition="gpu",
+            account="mylab",
+            nodes_per_block=1,
+            gpus_per_node=4,
+            init_blocks=0,
+            max_blocks=4,
+            walltime="04:00:00",
+            worker_init="source ~/venvs/parsl/bin/activate",
+        ),
+    )
+])</code></pre>
+          <pre><code class="language-bash"># Ray on Slurm with symmetric-run (from the Ray docs pattern; Ray 2.49+)
+#SBATCH --nodes=4
+#SBATCH --exclusive
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=32
+#SBATCH --gpus-per-task=4
+
+GPUS_PER_NODE=4                    # match --gpus-per-task above
+head_node=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
+ip_head="${head_node}:6379"
+
+srun --nodes="$SLURM_JOB_NUM_NODES" --ntasks="$SLURM_JOB_NUM_NODES" \
+    ray symmetric-run --address "$ip_head" --min-nodes "$SLURM_JOB_NUM_NODES" \
+    --num-cpus="$SLURM_CPUS_PER_TASK" --num-gpus="$GPUS_PER_NODE" \
+    -- python -u batch_infer.py</code></pre>
+
+          <h2 id="queue-policy-design">
+            Queue Policy Design for Mixed AI and Simulation Workloads
+          </h2>
+          <p>
+            Most converged clusters serve three populations at once: simulation
+            groups with long, wide, predictable MPI jobs; AI groups with
+            everything from notebooks to multi-node training; and a long tail of
+            students running one-GPU jobs. A policy that works for all three
+            usually has these parts.
+          </p>
+
+          <h3 id="partitions-by-hardware-qos-by-behavior">
+            Partitions by Hardware, QOS by Behavior
+          </h3>
+          <p>
+            Make partitions describe hardware pools (CPU, training GPUs, shared
+            or MIG GPUs, large memory) and use QOS to describe behavior (debug,
+            normal, long, hero, scavenger). Policy then lives in the accounting
+            database and changes without daemon restarts. A typical GPU-side
+            ladder:
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>QOS</th>
+                <th>Purpose</th>
+                <th>Shape</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>gpu-debug</td>
+                <td>Fast turnaround for testing and notebooks</td>
+                <td>
+                  High priority, very short walltime, small per-user GPU cap
+                </td>
+              </tr>
+              <tr>
+                <td>gpu-normal</td>
+                <td>Everyday training and inference</td>
+                <td>
+                  Fairshare-driven, per-user and per-account GPU caps, walltime
+                  of a day or two
+                </td>
+              </tr>
+              <tr>
+                <td>gpu-long</td>
+                <td>Checkpoint-unfriendly legacy codes</td>
+                <td>Few concurrent jobs, longer walltime, approval required</td>
+              </tr>
+              <tr>
+                <td>gpu-hero</td>
+                <td>Large multi-node runs</td>
+                <td>
+                  RequiresReservation, scheduled windows, topology-aware
+                  placement
+                </td>
+              </tr>
+              <tr>
+                <td>gpu-scavenger</td>
+                <td>Soaking up idle GPUs</td>
+                <td>UsageFactor 0, NoReserve, preemptible with REQUEUE</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3 id="principles-that-hold-up">Principles That Hold Up</h3>
+          <ul>
+            <li>
+              <strong>Charge for what is stranded.</strong> Weight GPUs in
+              <code>TRESBillingWeights</code> so fairshare reflects scarcity,
+              and set per-GPU defaults (<code>DefCpuPerGPU</code>,
+              <code>DefMemPerGPU</code>) plus QOS limits such as
+              <code>MaxTRESPerNode</code> so one-GPU jobs cannot eat all the
+              cores on an 8-GPU node.<a href="#src-10">[10]</a
+              ><a href="#src-12">[12]</a><a href="#src-20">[20]</a>
+            </li>
+            <li>
+              <strong>Keep simulation off the GPUs unless it uses them.</strong>
+              Do not add GPU nodes to the general CPU partition. Instead, let
+              CPU-only work reach idle GPU nodes only through a preemptible QOS.
+            </li>
+            <li>
+              <strong>Reward accurate time limits.</strong> Backfill depends on
+              them. <code>--time-min</code> lets Slurm shorten a job's limit to
+              start it earlier,<a href="#src-11">[11]</a> and a short debug QOS
+              lets people test before asking for a day.
+            </li>
+            <li>
+              <strong>Use topology for big jobs, not small ones.</strong> Route
+              large training to a partition with <code>topology/block</code> and
+              <code>--segment</code>, and keep single-node jobs on a pool where
+              fragmentation does not matter.
+            </li>
+            <li>
+              <strong>Separate sharing pools.</strong> Put MIG and shard-enabled
+              nodes in their own partition so whole-GPU jobs never land behind
+              fractional ones.
+            </li>
+            <li>
+              <strong>Publish the policy and the data.</strong> Share wait-time
+              and utilization reports by partition. Slurm 26.05's OpenMetrics
+              GPU allocation statistics make this easier to automate.<a
+                href="#src-3"
+                >[3]</a
+              >
+              Monitoring is covered in
+              <a href="observability.html">Observability</a>.
+            </li>
+          </ul>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Review queue policy every semester
+              with a faculty advisory group, and change one thing at a time.
+              Fairshare half-life, GPU billing weight and per-user caps
+              interact, and if you move all three at once you will not know
+              which change fixed (or caused) the complaint.
+            </p>
+          </blockquote>
+
+          <h2 id="key-takeaways">Key Takeaways</h2>
+          <ul>
+            <li>
+              Slurm 26.05 is current. It adds ring and torus topologies, async
+              steps, memory resizing and GPU metrics, and NVIDIA's ownership of
+              SchedMD comes with a stated commitment to keep Slurm open source
+              and vendor-neutral.
+            </li>
+            <li>
+              Use AutoDetect in <code>gres.conf</code>, cgroup v2 with
+              <code>ConstrainDevices=yes</code>, and track both generic and
+              typed GPU TRES. Without device constraints there is no GPU
+              isolation.
+            </li>
+            <li>
+              Know the request options: <code>--gpus-per-node</code> for
+              torchrun-style jobs, <code>--gpus-per-task</code> for MPI
+              rank-per-GPU, <code>--cpus-per-gpu</code> and
+              <code>--mem-per-gpu</code> to size the rest of the job.
+            </li>
+            <li>
+              Topology plugins (tree with <code>--switches</code>, block with
+              <code>--segment</code>) matter for multi-node training, but only
+              if the topology file matches the real fabric.
+            </li>
+            <li>
+              Weight GPUs heavily in billing, build QOS tiers including a
+              preemptible scavenger tier, and require checkpoint-on-SIGTERM for
+              anything preemptible.
+            </li>
+            <li>
+              Kubernetes GPU scheduling means the GPU Operator plus Kueue (or
+              Volcano) for queuing. DRA is stable since v1.35, and Slinky lets
+              Slurm and Kubernetes share one GPU pool.
+            </li>
+            <li>
+              Choose GPU sharing by trust boundary: MIG for hardware isolation,
+              MPS or shards and time-slicing only among cooperating users.
+            </li>
+            <li>
+              Open OnDemand and workflow managers are part of the scheduling
+              design. Give them curated resource menus and array or throttle
+              settings so they help the queue instead of flooding it.
+            </li>
+          </ul>
+
+          <h2 id="sources">Sources</h2>
+          <ol class="sources">
+            <li id="src-1">
+              <a
+                href="https://github.com/SlinkyProject/slurm-operator"
+                target="_blank"
+                rel="noopener"
+                >slurm-operator README (SlinkyProject, GitHub)</a
+              >
+            </li>
+            <li id="src-2">
+              <a
+                href="https://lists.schedmd.com/mailman3/hyperkitty/list/slurm-users@lists.schedmd.com/message/FXT7GV44NQGCU5572ZLWK6OVP5BD4ZVG/"
+                target="_blank"
+                rel="noopener"
+                >Slurm version 26.05 is now available, slurm-users mailing list
+                (SchedMD, May 2026)</a
+              >
+            </li>
+            <li id="src-3">
+              <a
+                href="https://slurm.schedmd.com/release_notes.html"
+                target="_blank"
+                rel="noopener"
+                >Release Notes for Slurm 26.05 (SchedMD, 2026)</a
+              >
+            </li>
+            <li id="src-4">
+              <a
+                href="https://blogs.nvidia.com/blog/nvidia-acquires-schedmd/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA Acquires Open-Source Workload Management Provider
+                SchedMD (NVIDIA, December 2025)</a
+              >
+            </li>
+            <li id="src-5">
+              <a
+                href="https://slurm.schedmd.com/gres.conf.html"
+                target="_blank"
+                rel="noopener"
+                >gres.conf man page (SchedMD, Slurm 26.05 documentation)</a
+              >
+            </li>
+            <li id="src-6">
+              <a
+                href="https://slurm.schedmd.com/slinky.html"
+                target="_blank"
+                rel="noopener"
+                >Slinky (SchedMD, Slurm documentation)</a
+              >
+            </li>
+            <li id="src-7">
+              <a
+                href="https://kueue.sigs.k8s.io/docs/overview/"
+                target="_blank"
+                rel="noopener"
+                >Kueue Overview (Kubernetes SIGs)</a
+              >
+            </li>
+            <li id="src-8">
+              <a
+                href="https://volcano.sh/en/docs/"
+                target="_blank"
+                rel="noopener"
+                >Volcano Introduction (Volcano project, CNCF)</a
+              >
+            </li>
+            <li id="src-9">
+              <a
+                href="https://slurm.schedmd.com/gres.html"
+                target="_blank"
+                rel="noopener"
+                >Generic Resource (GRES) Scheduling (SchedMD, Slurm 26.05
+                documentation)</a
+              >
+            </li>
+            <li id="src-10">
+              <a
+                href="https://slurm.schedmd.com/tres.html"
+                target="_blank"
+                rel="noopener"
+                >Trackable RESources (TRES) (SchedMD, Slurm 26.05
+                documentation)</a
+              >
+            </li>
+            <li id="src-11">
+              <a
+                href="https://slurm.schedmd.com/sbatch.html"
+                target="_blank"
+                rel="noopener"
+                >sbatch man page (SchedMD, Slurm 26.05 documentation)</a
+              >
+            </li>
+            <li id="src-12">
+              <a
+                href="https://slurm.schedmd.com/slurm.conf.html"
+                target="_blank"
+                rel="noopener"
+                >slurm.conf man page (SchedMD, Slurm 26.05 documentation)</a
+              >
+            </li>
+            <li id="src-13">
+              <a
+                href="https://slurm.schedmd.com/srun.html"
+                target="_blank"
+                rel="noopener"
+                >srun man page (SchedMD, Slurm 26.05 documentation)</a
+              >
+            </li>
+            <li id="src-14">
+              <a
+                href="https://slurm.schedmd.com/cgroup.conf.html"
+                target="_blank"
+                rel="noopener"
+                >cgroup.conf man page (SchedMD, Slurm 26.05 documentation)</a
+              >
+            </li>
+            <li id="src-15">
+              <a
+                href="https://slurm.schedmd.com/topology.html"
+                target="_blank"
+                rel="noopener"
+                >Topology Guide (SchedMD, Slurm 26.05 documentation)</a
+              >
+            </li>
+            <li id="src-16">
+              <a
+                href="https://slurm.schedmd.com/topology.conf.html"
+                target="_blank"
+                rel="noopener"
+                >topology.conf man page (SchedMD, Slurm 26.05 documentation)</a
+              >
+            </li>
+            <li id="src-17">
+              <a
+                href="https://slurm.schedmd.com/priority_multifactor.html"
+                target="_blank"
+                rel="noopener"
+                >Multifactor Priority Plugin (SchedMD, Slurm 26.05
+                documentation)</a
+              >
+            </li>
+            <li id="src-18">
+              <a
+                href="https://slurm.schedmd.com/fair_tree.html"
+                target="_blank"
+                rel="noopener"
+                >Fair Tree Fairshare Algorithm (SchedMD, Slurm 26.05
+                documentation)</a
+              >
+            </li>
+            <li id="src-19">
+              <a
+                href="https://slurm.schedmd.com/qos.html"
+                target="_blank"
+                rel="noopener"
+                >Quality of Service (QOS) (SchedMD, Slurm 26.05
+                documentation)</a
+              >
+            </li>
+            <li id="src-20">
+              <a
+                href="https://slurm.schedmd.com/sacctmgr.html"
+                target="_blank"
+                rel="noopener"
+                >sacctmgr man page (SchedMD, Slurm 26.05 documentation)</a
+              >
+            </li>
+            <li id="src-21">
+              <a
+                href="https://slurm.schedmd.com/preempt.html"
+                target="_blank"
+                rel="noopener"
+                >Preemption (SchedMD, Slurm 26.05 documentation)</a
+              >
+            </li>
+            <li id="src-22">
+              <a
+                href="https://slurm.schedmd.com/reservations.html"
+                target="_blank"
+                rel="noopener"
+                >Advanced Resource Reservation Guide (SchedMD, Slurm 26.05
+                documentation)</a
+              >
+            </li>
+            <li id="src-23">
+              <a
+                href="https://slurm.schedmd.com/scontrol.html"
+                target="_blank"
+                rel="noopener"
+                >scontrol man page (SchedMD, Slurm 26.05 documentation)</a
+              >
+            </li>
+            <li id="src-24">
+              <a
+                href="https://slurm.schedmd.com/job_array.html"
+                target="_blank"
+                rel="noopener"
+                >Job Array Support (SchedMD, Slurm 26.05 documentation)</a
+              >
+            </li>
+            <li id="src-25">
+              <a
+                href="https://slurm.schedmd.com/heterogeneous_jobs.html"
+                target="_blank"
+                rel="noopener"
+                >Heterogeneous Job Support (SchedMD, Slurm 26.05
+                documentation)</a
+              >
+            </li>
+            <li id="src-26">
+              <a
+                href="https://docs.pytorch.org/docs/stable/elastic/run.html"
+                target="_blank"
+                rel="noopener"
+                >torchrun (Elastic Launch) (PyTorch documentation)</a
+              >
+            </li>
+            <li id="src-27">
+              <a
+                href="https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/env.html"
+                target="_blank"
+                rel="noopener"
+                >NCCL Environment Variables (NVIDIA NCCL User Guide)</a
+              >
+            </li>
+            <li id="src-28">
+              <a
+                href="https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/"
+                target="_blank"
+                rel="noopener"
+                >Device Plugins (Kubernetes documentation)</a
+              >
+            </li>
+            <li id="src-29">
+              <a
+                href="https://kubernetes.io/docs/concepts/scheduling-eviction/dynamic-resource-allocation/"
+                target="_blank"
+                rel="noopener"
+                >Dynamic Resource Allocation (Kubernetes documentation)</a
+              >
+            </li>
+            <li id="src-30">
+              <a
+                href="https://kubernetes.io/releases/"
+                target="_blank"
+                rel="noopener"
+                >Kubernetes Releases (Kubernetes project, 2026)</a
+              >
+            </li>
+            <li id="src-31">
+              <a
+                href="https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/overview.html"
+                target="_blank"
+                rel="noopener"
+                >About the NVIDIA GPU Operator (NVIDIA documentation)</a
+              >
+            </li>
+            <li id="src-32">
+              <a
+                href="https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/gpu-operator-mig.html"
+                target="_blank"
+                rel="noopener"
+                >GPU Operator with MIG (NVIDIA documentation)</a
+              >
+            </li>
+            <li id="src-33">
+              <a
+                href="https://github.com/NVIDIA/gpu-operator/releases"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA GPU Operator releases (NVIDIA, GitHub)</a
+              >
+            </li>
+            <li id="src-34">
+              <a
+                href="https://kueue.sigs.k8s.io/docs/concepts/cluster_queue/"
+                target="_blank"
+                rel="noopener"
+                >Kueue Concepts: Cluster Queue (Kubernetes SIGs)</a
+              >
+            </li>
+            <li id="src-35">
+              <a
+                href="https://kueue.sigs.k8s.io/docs/concepts/local_queue/"
+                target="_blank"
+                rel="noopener"
+                >Kueue Concepts: Local Queue (Kubernetes SIGs)</a
+              >
+            </li>
+            <li id="src-36">
+              <a
+                href="https://kueue.sigs.k8s.io/docs/concepts/topology_aware_scheduling/"
+                target="_blank"
+                rel="noopener"
+                >Kueue: Topology-Aware Scheduling (Kubernetes SIGs)</a
+              >
+            </li>
+            <li id="src-37">
+              <a
+                href="https://github.com/kubernetes-sigs/kueue/releases"
+                target="_blank"
+                rel="noopener"
+                >Kueue releases (Kubernetes SIGs, GitHub)</a
+              >
+            </li>
+            <li id="src-38">
+              <a
+                href="https://kueue.sigs.k8s.io/docs/tasks/run/jobs/"
+                target="_blank"
+                rel="noopener"
+                >Kueue: Run a Kubernetes Job (Kubernetes SIGs)</a
+              >
+            </li>
+            <li id="src-39">
+              <a
+                href="https://docs.ray.io/en/latest/cluster/kubernetes/getting-started.html"
+                target="_blank"
+                rel="noopener"
+                >Getting Started with KubeRay (Ray documentation)</a
+              >
+            </li>
+            <li id="src-40">
+              <a
+                href="https://github.com/SlinkyProject/slurm-bridge"
+                target="_blank"
+                rel="noopener"
+                >slurm-bridge README (SlinkyProject, GitHub)</a
+              >
+            </li>
+            <li id="src-41">
+              <a
+                href="https://docs.nvidia.com/datacenter/tesla/mig-user-guide/introduction.html"
+                target="_blank"
+                rel="noopener"
+                >Multi-Instance GPU User Guide: Introduction (NVIDIA)</a
+              >
+            </li>
+            <li id="src-42">
+              <a
+                href="https://docs.nvidia.com/deploy/mps/index.html"
+                target="_blank"
+                rel="noopener"
+                >Multi-Process Service (NVIDIA documentation, 2026)</a
+              >
+            </li>
+            <li id="src-43">
+              <a
+                href="https://github.com/NVIDIA/k8s-device-plugin"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA device plugin for Kubernetes, README (NVIDIA, GitHub)</a
+              >
+            </li>
+            <li id="src-44">
+              <a
+                href="https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/gpu-sharing.html"
+                target="_blank"
+                rel="noopener"
+                >Time-Slicing GPUs in Kubernetes (NVIDIA GPU Operator
+                documentation)</a
+              >
+            </li>
+            <li id="src-45">
+              <a
+                href="https://osc.github.io/ood-documentation/latest/how-tos/app-development/interactive.html"
+                target="_blank"
+                rel="noopener"
+                >Interactive Apps (Open OnDemand documentation)</a
+              >
+            </li>
+            <li id="src-46">
+              <a
+                href="https://osc.github.io/ood-documentation/latest/install-ihpc-apps.html"
+                target="_blank"
+                rel="noopener"
+                >Install Other Interactive Apps (Open OnDemand documentation)</a
+              >
+            </li>
+            <li id="src-47">
+              <a
+                href="https://osc.github.io/ood-documentation/latest/how-tos/app-development/interactive/submit.html"
+                target="_blank"
+                rel="noopener"
+                >Interactive Apps: Job Submission, submit.yml.erb (Open OnDemand
+                documentation)</a
+              >
+            </li>
+            <li id="src-48">
+              <a
+                href="https://www.nextflow.io/docs/latest/executor/slurm.html"
+                target="_blank"
+                rel="noopener"
+                >Nextflow SLURM executor (Seqera, Nextflow documentation)</a
+              >
+            </li>
+            <li id="src-49">
+              <a
+                href="https://www.nextflow.io/docs/latest/reference/process.html"
+                target="_blank"
+                rel="noopener"
+                >Nextflow process reference: accelerator and array directives
+                (Seqera)</a
+              >
+            </li>
+            <li id="src-50">
+              <a
+                href="https://snakemake.github.io/snakemake-plugin-catalog/plugins/executor/slurm.html"
+                target="_blank"
+                rel="noopener"
+                >Snakemake executor plugin: slurm (Snakemake plugin catalog)</a
+              >
+            </li>
+            <li id="src-51">
+              <a
+                href="https://github.com/Parsl/parsl"
+                target="_blank"
+                rel="noopener"
+                >Parsl: Parallel Scripting Library, README (Parsl project,
+                GitHub)</a
+              >
+            </li>
+            <li id="src-52">
+              <a
+                href="https://github.com/Parsl/parsl/blob/master/parsl/providers/slurm/slurm.py"
+                target="_blank"
+                rel="noopener"
+                >Parsl SlurmProvider and HighThroughputExecutor source
+                documentation (Parsl project, GitHub)</a
+              >
+            </li>
+            <li id="src-53">
+              <a
+                href="https://docs.ray.io/en/latest/cluster/vms/user-guides/community/slurm.html"
+                target="_blank"
+                rel="noopener"
+                >Deploying on Slurm (Ray documentation)</a
+              >
+            </li>
+          </ol>
+          <nav class="doc-pager" aria-label="Chapter navigation">
+            <a class="pager-prev" href="systems-software.html"
+              ><span>Previous</span>Systems Software and Provisioning</a
+            ><a class="pager-next" href="observability.html"
+              ><span>Next</span>Observability, Performance and Efficiency</a
+            >
+          </nav>
+        </article>
+      </div>
+    </main>
+
+    <footer class="section-dark">
+      <div class="container text-center">
+        <p class="footer-note">
+          2026 edition |
+          <a href="index.html" class="subtle-link">Field Manual</a> |
+          <a href="../index.html" class="subtle-link"
+            >charles-forsyth.github.io</a
+          >
+        </p>
+      </div>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+      document.querySelectorAll('pre code').forEach(function (el) {
+        if (el.className === 'c++') el.className = 'language-cpp';
+        else if (el.className && el.className.indexOf('language-') !== 0)
+          el.className = 'language-' + el.className;
+        hljs.highlightElement(el);
+      });
+    </script>
+  </body>
+</html>

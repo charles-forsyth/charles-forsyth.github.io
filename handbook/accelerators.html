@@ -1,0 +1,2280 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Accelerators: GPUs, TPUs and Beyond | Field Manual</title>
+    <meta
+      name="description"
+      content="GPU architecture for practitioners, NVIDIA, AMD, Intel and Google TPU generations with datasheet specs, the FP64 question, partitioning, form factors and a buying guide for research centers."
+    />
+    <link
+      rel="canonical"
+      href="https://charles-forsyth.github.io/handbook/accelerators.html"
+    />
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="handbook.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
+    />
+  </head>
+  <body>
+    <header class="hero doc-hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="doc-kicker">
+            <i class="fas fa-microchip"></i> AI + HPC Field Manual
+          </p>
+          <h1>Accelerators: GPUs, TPUs and Beyond</h1>
+          <h2>
+            What is inside the silicon, what ships in 2026, and how to choose
+          </h2>
+          <div class="cta-buttons">
+            <a href="index.html" class="btn btn-secondary"
+              ><i class="fas fa-book-open"></i> Field Manual</a
+            >
+            <a href="../index.html" class="btn btn-secondary"
+              ><i class="fas fa-arrow-left"></i> Main Site</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+    <nav class="doc-nav" aria-label="Field manual chapters">
+      <div class="container">
+        <a href="convergence.html">Convergence</a
+        ><a href="accelerators.html" class="active" aria-current="page"
+          >Accelerators</a
+        ><a href="memory-storage.html">Memory &amp; Storage</a
+        ><a href="interconnects.html">Interconnects</a
+        ><a href="facilities.html">Facilities</a
+        ><a href="systems-software.html">Systems Software</a
+        ><a href="scheduling.html">Scheduling</a
+        ><a href="observability.html">Observability</a
+        ><a href="operations.html">Operations</a
+        ><a href="training.html">Training</a
+        ><a href="inference.html">Inference</a
+        ><a href="scientific-computing.html">Scientific Computing</a
+        ><a href="cloud.html">Cloud</a><a href="linux.html">Linux</a
+        ><a href="glossary.html">Glossary</a>
+      </div>
+    </nav>
+    <main class="section-light">
+      <div class="container doc-layout">
+        <aside class="doc-toc">
+          <h4><i class="fas fa-list"></i> On this page</h4>
+          <ul>
+            <li>
+              <a href="#gpu-architecture-fundamentals"
+                >GPU Architecture Fundamentals for Practitioners</a
+              >
+            </li>
+            <li>
+              <a href="#nvidia-data-center-gpus"
+                >NVIDIA Data Center GPUs: Volta to Rubin</a
+              >
+            </li>
+            <li><a href="#amd-instinct-and-rocm">AMD Instinct and ROCm</a></li>
+            <li>
+              <a href="#intel-accelerators"
+                >Intel: Max Series, Gaudi 3 and What Comes Next</a
+              >
+            </li>
+            <li><a href="#google-tpus">Google TPUs and Cloud Access</a></li>
+            <li>
+              <a href="#other-accelerators"
+                >Other Accelerators: Wafers, Dataflow and Hyperscaler Silicon</a
+              >
+            </li>
+            <li>
+              <a href="#the-fp64-question"
+                >The FP64 Question for Scientific Computing</a
+              >
+            </li>
+            <li>
+              <a href="#gpu-partitioning"
+                >GPU Partitioning: MIG, MPS, Time Slicing and AMD Modes</a
+              >
+            </li>
+            <li>
+              <a href="#form-factors"
+                >Form Factors: PCIe, SXM, OAM and Rack-Scale</a
+              >
+            </li>
+            <li>
+              <a href="#choosing-accelerators"
+                >Choosing Accelerators for a Research Center</a
+              >
+            </li>
+            <li>
+              <a href="#workstation-gpus">Workstation GPUs for Research</a>
+            </li>
+            <li><a href="#key-takeaways">Key Takeaways</a></li>
+          </ul>
+        </aside>
+        <article class="doc-content">
+          <p>
+            The 2019 edition of this manual was written for CPU clusters. In
+            2026 the accelerator decides almost everything else: rack power,
+            cooling, network topology, storage bandwidth, the scheduler setup,
+            and what your users can actually do. This chapter covers how these
+            chips work, which ones are shipping and which are only announced,
+            and how a research computing center should choose among them. Every
+            hard number here comes from a vendor datasheet, vendor documentation
+            or a peer-reviewed source listed at the end. Where a vendor has not
+            published a figure, this chapter says so and does not guess. Treat
+            the tables as a starting point and re-check the datasheet before you
+            sign a purchase order. Specs for announced products change.
+          </p>
+
+          <h2 id="gpu-architecture-fundamentals">
+            GPU Architecture Fundamentals for Practitioners
+          </h2>
+
+          <p>
+            You do not need to write CUDA kernels to run a GPU cluster well, but
+            you do need the mental model. Without it you cannot explain to a
+            user why their job reaches 8% utilization, or why one card with
+            twice the FLOPS runs their code no faster.
+          </p>
+
+          <h3 id="sms-cus-and-the-execution-model">
+            SMs, CUs and the Execution Model
+          </h3>
+
+          <p>
+            An NVIDIA GPU is built around an array of Streaming Multiprocessors
+            (SMs).<a href="#src-26">[26]</a> AMD calls the same building block a
+            Compute Unit (CU). Each SM or CU holds scalar and vector ALUs, a
+            register file, a block of fast on-chip memory, and (on data center
+            parts) matrix units. A Blackwell Ultra GPU has 160 SMs across two
+            dies, and each SM has four fifth-generation Tensor Cores, 640 in
+            total.<a href="#src-8">[8]</a> An AMD MI300X is built from chiplets.
+            Each Accelerator Complex Die (XCD) carries 38 CUs,<a href="#src-28"
+              >[28]</a
+            >
+            for 304 CUs on the full device.<a href="#src-18">[18]</a>
+          </p>
+
+          <p>
+            Threads are scheduled in fixed-size groups that execute the same
+            instruction together. In CUDA this group is a
+            <strong>warp</strong> of 32 threads, and when threads in a warp take
+            different branches, the inactive lanes are masked off while the
+            others execute.<a href="#src-26">[26]</a> AMD's documentation calls
+            the group a warp (HIP terminology) or
+            <strong>wavefront</strong> (ISA terminology). It is 64 threads on
+            CDNA data center architectures and 32 threads on RDNA consumer and
+            workstation architectures.<a href="#src-25">[25]</a> This matters
+            when porting code: kernels that hard-code a warp size of 32 can
+            break or slow down on Instinct hardware.
+          </p>
+
+          <p>
+            The key idea is latency hiding. When a warp stalls on a memory load
+            from HBM, the scheduler switches to another resident warp that is
+            ready to run. Because every resident thread's registers stay on the
+            chip, this switch costs almost nothing.<a href="#src-25">[25]</a> A
+            GPU therefore needs many more threads in flight than it has ALUs.
+            That is why small problems, tiny batch sizes and serial code run
+            poorly on it.
+          </p>
+
+          <h3 id="tensor-and-matrix-cores">Tensor Cores and Matrix Cores</h3>
+
+          <p>
+            NVIDIA introduced Tensor Cores with Volta. Instead of working one
+            element at a time, they perform a small matrix multiply-accumulate
+            in a single instruction.<a href="#src-8">[8]</a> AMD's equivalent is
+            the Matrix Core (1,216 on MI300X<a href="#src-18">[18]</a>). Intel's
+            Gaudi uses Matrix Multiplication Engines (MMEs),<a href="#src-35"
+              >[35]</a
+            >
+            and Google's TPUs use Matrix Multiply Units (MXUs).<a href="#src-39"
+              >[39]</a
+            >
+            Almost all of the headline FLOPS on a modern accelerator come from
+            these units, and mostly at low precision (BF16, FP8, FP4). A code
+            that does not reduce to dense matrix multiplication gets the much
+            smaller vector throughput instead. The gap is large. On MI355X, peak
+            FP16 matrix throughput is 2.5 PFLOPS dense, while plain FP16 vector
+            throughput is 157.3 TFLOPS.<a href="#src-22">[22]</a>
+          </p>
+
+          <h3 id="the-on-die-memory-hierarchy">The On-Die Memory Hierarchy</h3>
+
+          <p>
+            From fastest to slowest, the levels are registers, then per-SM
+            shared memory and L1 (software-managed scratchpad plus cache), then
+            a large shared L2 or last-level cache, then HBM, then host memory
+            over PCIe or a coherent CPU link. Some reference points:
+          </p>
+          <ul>
+            <li>
+              On Hopper (compute capability 9.0), the unified L1/shared memory
+              is 256 KB per SM, and one thread block can address up to 227 KB of
+              shared memory.<a href="#src-56">[56]</a>
+            </li>
+            <li>
+              Blackwell-generation Tensor Cores are paired with 256 KB of Tensor
+              Memory (TMEM) per SM, placed next to the Tensor Cores.<a
+                href="#src-8"
+                >[8]</a
+              >
+            </li>
+            <li>
+              MI300X and MI355X each have a 256 MB last-level Infinity Cache.<a
+                href="#src-18"
+                >[18]</a
+              ><a href="#src-22">[22]</a>
+            </li>
+            <li>
+              Gaudi 3 has 96 MB of on-die SRAM.<a href="#src-35">[35]</a>
+              Ironwood TPUs expose a software-managed on-chip vector memory
+              (VMEM) as a scratchpad for custom kernels.<a href="#src-38"
+                >[38]</a
+              >
+            </li>
+          </ul>
+          <p>
+            The <a href="memory-storage.html">Memory and Storage</a> chapter
+            covers HBM in depth.
+          </p>
+
+          <h3 id="why-gpus-win-on-throughput">Why GPUs Win on Throughput</h3>
+
+          <p>
+            A CPU spends its transistors on making one thread fast: big caches,
+            branch prediction, out-of-order execution. A GPU spends them on ALUs
+            and memory bandwidth, and relies on massive parallelism to hide
+            latency. For work that is data-parallel and arithmetic-dense (dense
+            linear algebra, stencils, FFTs, particle methods, and above all
+            neural network training and inference), that trade wins by a wide
+            margin in both throughput and energy per operation. It loses on
+            branchy, serial, latency-bound code. Your job as a facilitator is
+            often to work out which kind of code a user actually has.
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Before you blame the hardware for a
+              slow GPU job, check three things: whether the work is actually on
+              the GPU (not silently falling back to the CPU), whether the batch
+              or problem size is large enough to fill the device, and whether
+              the job spends its time in data loading.
+              <code>nvidia-smi</code> or <code>amd-smi metric</code> utilization
+              near zero with a busy CPU usually means the input pipeline is the
+              bottleneck, not the accelerator. The
+              <a href="observability.html">Observability</a> chapter covers this
+              properly.
+            </p>
+          </blockquote>
+
+          <pre><code class="language-python"># Quick device inventory from inside a job (works on CUDA and ROCm builds of PyTorch)
+import torch
+
+if not torch.cuda.is_available():
+    raise SystemExit("No GPU visible - check your Slurm --gres/--gpus request")
+
+for i in range(torch.cuda.device_count()):
+    p = torch.cuda.get_device_properties(i)
+    print(f"GPU {i}: {p.name}, {p.total_memory / 2**30:.0f} GiB, "
+          f"{p.multi_processor_count} SMs/CUs")
+</code></pre>
+
+          <h2 id="nvidia-data-center-gpus">
+            NVIDIA Data Center GPUs: Volta to Rubin
+          </h2>
+
+          <p>
+            NVIDIA now releases a new data center architecture about once a
+            year, with mid-cycle "Ultra" refreshes. What follows is the lineage
+            most research centers will have on the floor or in a procurement
+            right now.
+          </p>
+
+          <h3 id="volta-ampere-hopper">Volta, Ampere and Hopper</h3>
+
+          <p>
+            <strong>Volta V100</strong> introduced Tensor Cores: 640 of them,
+            delivering 125 TFLOPS of tensor performance on the SXM2 part, with
+            32 or 16 GB of HBM2 at 900 GB/s and 300 GB/s of NVLink.<a
+              href="#src-1"
+              >[1]</a
+            >
+            Many campuses still run V100 nodes. They remain useful for teaching
+            and for FP64 codes that fit in 32 GB. Before you plan around them,
+            check that the CUDA and framework versions your users need still
+            support Volta, and plan their retirement.
+          </p>
+
+          <p>
+            <strong>Ampere A100</strong> brought TF32 and BF16, structured
+            sparsity, FP64 Tensor Cores (19.5 TFLOPS) and Multi-Instance GPU
+            (MIG). The 80 GB SXM part runs at 2,039 GB/s and 400 W.<a
+              href="#src-2"
+              >[2]</a
+            >
+          </p>
+
+          <p>
+            <strong>Hopper H100</strong> added FP8 and the Transformer Engine,
+            fourth-generation NVLink at 900 GB/s, and PCIe Gen5. The SXM part
+            delivers 34 TFLOPS FP64 vector and 67 TFLOPS FP64 Tensor Core, with
+            80 GB at 3.35 TB/s and up to 700 W.<a href="#src-3">[3]</a>
+            <strong>H200</strong> keeps the same compute and raises memory to
+            141 GB of HBM3E at 4.8 TB/s.<a href="#src-4">[4]</a> For
+            memory-bound inference and for HPC codes limited by bandwidth, that
+            change alone is a real upgrade.
+          </p>
+
+          <h3 id="blackwell-b200-and-gb200-nvl72">
+            Blackwell: B200 and GB200 NVL72
+          </h3>
+
+          <p>
+            Blackwell GPUs are two reticle-limited dies joined by a 10 TB/s
+            chip-to-chip link and presented to software as one GPU. The package
+            has 208 billion transistors on TSMC 4NP.<a href="#src-10">[10]</a>
+            Blackwell adds FP4 (NVIDIA's NVFP4 format) and fifth-generation
+            NVLink at 1.8 TB/s per GPU.<a href="#src-8">[8]</a> In the HGX B200
+            baseboard each GPU has 180 GB of HBM3E at up to 8 TB/s.<a
+              href="#src-9"
+              >[9]</a
+            >
+            A DGX B200 (8 GPUs, 10U) draws about 14.3 kW maximum.<a
+              href="#src-11"
+              >[11]</a
+            >
+          </p>
+
+          <p>
+            The <strong>GB200 NVL72</strong> is the rack-scale version. It holds
+            36 Grace CPUs and 72 Blackwell GPUs in one NVLink domain with 130
+            TB/s of aggregate NVLink bandwidth, 13.4 TB of HBM3E and 17 TB of
+            LPDDR5X CPU memory.<a href="#src-6">[6]</a> The basic building block
+            is the GB200 superchip: one Grace CPU and two Blackwell GPUs.<a
+              href="#src-6"
+              >[6]</a
+            >
+          </p>
+
+          <h3 id="blackwell-ultra-b300-and-gb300-nvl72">
+            Blackwell Ultra: B300 and GB300 NVL72
+          </h3>
+
+          <p>
+            Blackwell Ultra keeps the two-die, 208-billion-transistor design.
+            NVIDIA rebalanced it toward inference: 1.5x the dense NVFP4
+            throughput of Blackwell (15 vs 10 PFLOPS), 288 GB of HBM3E at 8
+            TB/s, doubled special-function throughput for attention softmax, and
+            a power ceiling of up to 1,400 W.<a href="#src-8">[8]</a> The GB300
+            NVL72 rack has 20 TB of HBM and 37 TB of total fast memory.<a
+              href="#src-7"
+              >[7]</a
+            >
+          </p>
+
+          <p>
+            The part that matters for HPC is where those transistors came from.
+            <strong
+              >Blackwell Ultra gives up most of its FP64 and INT8
+              throughput.</strong
+            >
+            NVIDIA's own HGX spec table lists FP64/FP64 Tensor Core at 296
+            TFLOPS for an 8-GPU HGX B200 and 10 TFLOPS for an 8-GPU HGX B300. At
+            rack scale it is 2,880 TFLOPS for GB200 NVL72 and 100 TFLOPS for
+            GB300 NVL72.<a href="#src-5">[5]</a><a href="#src-6">[6]</a
+            ><a href="#src-7">[7]</a> INT8 drops in the same way (see the table
+            below). A B300 is a very good inference and low-precision training
+            part. It is the wrong choice for a double-precision simulation code.
+          </p>
+
+          <h3 id="vera-rubin-and-the-roadmap">
+            Vera Rubin and the Announced Roadmap
+          </h3>
+
+          <p>
+            NVIDIA's Rubin GPU and Vera CPU (88 custom Arm-compatible Olympus
+            cores) make up the Vera Rubin platform.<a href="#src-5">[5]</a>
+            NVIDIA's Vera Rubin NVL72 page says the platform is "now in full
+            production" and that Taiwanese server makers are shipping Vera Rubin
+            systems.<a href="#src-13">[13]</a> NVIDIA's GTC 2026 coverage says
+            Microsoft Azure was the first hyperscaler to power up Vera Rubin
+            NVL72, with a global rollout over the following months.<a
+              href="#src-15"
+              >[15]</a
+            >
+            So Rubin is shipping in 2026, but in the early ramp and mostly to
+            hyperscalers. Most campus buyers will see it later.
+          </p>
+
+          <p>
+            NVIDIA's preliminary per-GPU Rubin figures:<a href="#src-5">[5]</a>
+          </p>
+          <ul>
+            <li>
+              288 GB of HBM4 at 22 TB/s, and 3.6 TB/s of sixth-generation
+              NVLink.
+            </li>
+            <li>
+              35 PFLOPS dense NVFP4 for training, and 50 PFLOPS NVFP4 for
+              inference (NVIDIA labels this figure sparse).
+            </li>
+            <li>
+              FP64: 33 TFLOPS native, plus a separate 200 TFLOPS "FP64 DGEMM"
+              figure that NVIDIA footnotes as peak performance using Tensor
+              Core-based emulation.
+            </li>
+          </ul>
+          <p>
+            The rack uses the third-generation MGX NVL72 design, which NVIDIA
+            presents as a continuation of the GB200/GB300 rack.<a href="#src-13"
+              >[13]</a
+            >
+          </p>
+
+          <p>Further out, and still roadmap only:</p>
+          <ul>
+            <li>
+              NVIDIA has said its next major architecture after Rubin is
+              Feynman.<a href="#src-15">[15]</a>
+            </li>
+            <li>
+              Trade press coverage of GTC 2026 reports that Rubin Ultra (four
+              compute chiplets, 1 TB of HBM4E) and the 144-GPU Kyber rack are
+              planned for the second half of 2027.<a href="#src-14">[14]</a>
+            </li>
+          </ul>
+          <p>
+            Plan facilities against these dates with caution. The racks keep
+            getting denser, and the
+            <a href="facilities.html">Facilities</a> chapter explains why that
+            matters more than the FLOPS.
+          </p>
+
+          <h3 id="nvidia-comparison-tables">NVIDIA Comparison Tables</h3>
+
+          <p>
+            The tables are split so each one fits on a laptop screen. Table 1
+            covers per-GPU memory, bandwidth and power.
+          </p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>GPU</th>
+                <th>Memory</th>
+                <th>Mem BW</th>
+                <th>GPU-GPU link</th>
+                <th>Max power</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>V100 SXM2<a href="#src-1">[1]</a></td>
+                <td>16/32 GB HBM2</td>
+                <td>900 GB/s</td>
+                <td>300 GB/s</td>
+                <td>300 W</td>
+                <td>Legacy</td>
+              </tr>
+              <tr>
+                <td>A100 80GB SXM<a href="#src-2">[2]</a></td>
+                <td>80 GB HBM2e</td>
+                <td>2,039 GB/s</td>
+                <td>600 GB/s</td>
+                <td>400 W</td>
+                <td>Legacy</td>
+              </tr>
+              <tr>
+                <td>H100 SXM<a href="#src-3">[3]</a></td>
+                <td>80 GB</td>
+                <td>3.35 TB/s</td>
+                <td>900 GB/s</td>
+                <td>700 W</td>
+                <td>Shipping</td>
+              </tr>
+              <tr>
+                <td>H200 SXM<a href="#src-4">[4]</a></td>
+                <td>141 GB HBM3E</td>
+                <td>4.8 TB/s</td>
+                <td>900 GB/s</td>
+                <td>700 W</td>
+                <td>Shipping</td>
+              </tr>
+              <tr>
+                <td>
+                  B200 (HGX)<a href="#src-9">[9]</a><a href="#src-8">[8]</a>
+                </td>
+                <td>180 GB HBM3E</td>
+                <td>8 TB/s</td>
+                <td>1.8 TB/s</td>
+                <td>1,200 W</td>
+                <td>Shipping</td>
+              </tr>
+              <tr>
+                <td>B300 (Blackwell Ultra)<a href="#src-8">[8]</a></td>
+                <td>288 GB HBM3E</td>
+                <td>8 TB/s</td>
+                <td>1.8 TB/s</td>
+                <td>1,400 W</td>
+                <td>Shipping</td>
+              </tr>
+              <tr>
+                <td>Rubin (preliminary)<a href="#src-5">[5]</a></td>
+                <td>288 GB HBM4</td>
+                <td>22 TB/s</td>
+                <td>3.6 TB/s</td>
+                <td>not listed</td>
+                <td>Early ramp</td>
+              </tr>
+            </tbody>
+          </table>
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> NVIDIA has published two Rubin
+              figures: 22 TB/s HBM4 bandwidth and 3.6 TB/s NVLink per GPU at
+              launch (HGX Rubin NVL8 spec and Rubin platform announcement), and
+              19.2 TB/s HBM4 and 3 TB/s NVLink per GPU on the current Vera Rubin
+              NVL72 product page. Treat Rubin numbers as preliminary and check
+              the vendor page for your configuration.<a href="#src-5">[5]</a
+              ><a href="#src-13">[13]</a>
+            </p>
+          </blockquote>
+          <p>
+            Note: B200/B300 max power is the "Max power (TGP)" row in NVIDIA's
+            Blackwell Ultra comparison table.<a href="#src-8">[8]</a> NVIDIA
+            quotes NVLink bandwidth as bidirectional. "Not listed" means the
+            figure is not in the cited NVIDIA spec table.
+          </p>
+
+          <p>
+            Table 2 covers per-GPU AI throughput. Figures are dense unless
+            marked.
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>GPU</th>
+                <th>FP8 dense / sparse</th>
+                <th>NVFP4 dense / sparse</th>
+                <th>Transistors</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Hopper (H100/H200)<a href="#src-8">[8]</a></td>
+                <td>2 / 4 PFLOPS</td>
+                <td>none</td>
+                <td>80B</td>
+              </tr>
+              <tr>
+                <td>Blackwell (B200)<a href="#src-8">[8]</a></td>
+                <td>5 / 10 PFLOPS</td>
+                <td>10 / 20 PFLOPS</td>
+                <td>208B</td>
+              </tr>
+              <tr>
+                <td>Blackwell Ultra (B300)<a href="#src-8">[8]</a></td>
+                <td>5 / 10 PFLOPS</td>
+                <td>15 / 20 PFLOPS</td>
+                <td>208B</td>
+              </tr>
+              <tr>
+                <td>Rubin (preliminary)<a href="#src-5">[5]</a></td>
+                <td>17.5 PFLOPS dense</td>
+                <td>35 dense (training) / 50 (inference, sparse)</td>
+                <td>not listed</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <p>
+            Table 3 is the table HPC buyers need: 8-GPU HGX baseboards, with the
+            precisions that matter for science.
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>HGX board (8 GPUs)</th>
+                <th>FP64</th>
+                <th>TF32 dense</th>
+                <th>BF16 dense</th>
+                <th>INT8 dense</th>
+                <th>GPU memory</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>HGX B200<a href="#src-5">[5]</a></td>
+                <td>296 TFLOPS</td>
+                <td>9 PFLOPS</td>
+                <td>18 PFLOPS</td>
+                <td>36 POPS</td>
+                <td>1.4 TB</td>
+              </tr>
+              <tr>
+                <td>HGX B300<a href="#src-5">[5]</a></td>
+                <td>10 TFLOPS</td>
+                <td>9 PFLOPS</td>
+                <td>18 PFLOPS</td>
+                <td>1.5 POPS</td>
+                <td>2.1 TB</td>
+              </tr>
+              <tr>
+                <td>HGX Rubin NVL8 (prelim.)<a href="#src-5">[5]</a></td>
+                <td>265 TFLOPS native; 1,600 emulated DGEMM</td>
+                <td>16 PFLOPS</td>
+                <td>32 PFLOPS</td>
+                <td>2 POPS</td>
+                <td>2.3 TB HBM4</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Note: NVIDIA publishes the Blackwell tensor figures as sparse and
+            states that dense is one-half of the sparse figure. The dense values
+            above apply that stated rule. NVIDIA publishes Rubin figures as
+            dense.<a href="#src-5">[5]</a>
+          </p>
+
+          <p>Table 4 compares NVL72 racks.</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Rack</th>
+                <th>HBM / BW</th>
+                <th>NVLink aggregate</th>
+                <th>FP64</th>
+                <th>FP4 dense</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>GB200 NVL72<a href="#src-6">[6]</a></td>
+                <td>13.4 TB / 576 TB/s</td>
+                <td>130 TB/s</td>
+                <td>2,880 TFLOPS</td>
+                <td>720 PFLOPS</td>
+              </tr>
+              <tr>
+                <td>GB300 NVL72<a href="#src-7">[7]</a></td>
+                <td>20 TB / up to 576 TB/s</td>
+                <td>130 TB/s</td>
+                <td>100 TFLOPS</td>
+                <td>1,080 PFLOPS</td>
+              </tr>
+              <tr>
+                <td>
+                  DGX Vera Rubin NVL72 (prelim.)<a href="#src-47">[47]</a>
+                </td>
+                <td>not in quick specs</td>
+                <td>3.6 TB/s per GPU<a href="#src-5">[5]</a></td>
+                <td>not in quick specs</td>
+                <td>2,520 PFLOPS (training)</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h2 id="amd-instinct-and-rocm">AMD Instinct and ROCm</h2>
+
+          <p>
+            AMD Instinct GPUs power two of the TOP500's exascale-class machines.
+            In the June 2026 list, El Capitan (MI300A) is No. 2 at 1.809 EFLOP/s
+            with 60.94 GFLOPS/W energy efficiency, and Frontier (MI250X<a
+              href="#src-60"
+              >[60]</a
+            >) is No. 3.<a href="#src-54">[54]</a> AMD has kept strong FP64 in
+            every generation, and that is the main technical reason HPC centers
+            look at it.
+          </p>
+
+          <h3 id="mi250x-through-mi355x">MI250X Through MI355X</h3>
+          <ul>
+            <li>
+              <strong>MI250X</strong> (CDNA2, launched November 2021) was the
+              Frontier GPU: 128 GB HBM2e at 3.2 TB/s, 47.9 TFLOPS FP64 vector
+              and 95.7 TFLOPS FP64 matrix, OAM form factor.<a href="#src-17"
+                >[17]</a
+              >
+              Each MI250X has two Graphics Compute Dies, and software sees each
+              die as a separate GPU with 64 GB of HBM2E, so a 4-card Frontier
+              node appears as 8 GPUs.<a href="#src-60">[60]</a>
+            </li>
+            <li>
+              <strong>MI300X</strong> (CDNA3, December 2023): 192 GB HBM3 at 5.3
+              TB/s, 81.7 TFLOPS FP64 vector and 163.4 TFLOPS FP64 matrix, 750
+              W.<a href="#src-18">[18]</a> For its generation it offered a lot
+              of memory per GPU, which made it popular for LLM inference.
+            </li>
+            <li>
+              <strong>MI300A</strong> is an APU: 24 Zen 4 CPU cores and 228
+              CDNA3 CUs sharing 128 GB of unified HBM3 at 5.3 TB/s, in a socket
+              (SH5) rather than on a card.<a href="#src-19">[19]</a> CPU and GPU
+              share one memory pool, so there are no host-device copies. Porting
+              and memory management get much simpler, which is why El Capitan
+              uses it.
+            </li>
+            <li>
+              <strong>MI325X</strong> is a memory upgrade of MI300X: 256 GB
+              HBM3E at 6 TB/s, at 1,000 W.<a href="#src-20">[20]</a>
+            </li>
+            <li>
+              <strong>MI350X / MI355X</strong> (CDNA4, June 2025): 288 GB HBM3E
+              at 8 TB/s, with MXFP4 and MXFP6 support. MI355X is the
+              higher-clocked, 1,400 W variant.<a href="#src-21">[21]</a
+              ><a href="#src-22">[22]</a>
+            </li>
+          </ul>
+
+          <table>
+            <thead>
+              <tr>
+                <th>GPU</th>
+                <th>Memory / BW</th>
+                <th>FP64 vector / matrix</th>
+                <th>Board power</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>MI250X<a href="#src-17">[17]</a></td>
+                <td>128 GB / 3.2 TB/s</td>
+                <td>47.9 / 95.7 TFLOPS</td>
+                <td>500 W (560 W peak)</td>
+              </tr>
+              <tr>
+                <td>MI300X<a href="#src-18">[18]</a></td>
+                <td>192 GB / 5.3 TB/s</td>
+                <td>81.7 / 163.4 TFLOPS</td>
+                <td>750 W</td>
+              </tr>
+              <tr>
+                <td>MI300A<a href="#src-19">[19]</a></td>
+                <td>128 GB unified / 5.3 TB/s</td>
+                <td>61.3 / 122.6 TFLOPS</td>
+                <td>550 W (760 W peak)</td>
+              </tr>
+              <tr>
+                <td>MI325X<a href="#src-20">[20]</a></td>
+                <td>256 GB / 6 TB/s</td>
+                <td>81.7 / 163.4 TFLOPS</td>
+                <td>1,000 W</td>
+              </tr>
+              <tr>
+                <td>MI350X<a href="#src-21">[21]</a></td>
+                <td>288 GB / 8 TB/s</td>
+                <td>72.1 / 72.1 TFLOPS</td>
+                <td>1,000 W</td>
+              </tr>
+              <tr>
+                <td>MI355X<a href="#src-22">[22]</a></td>
+                <td>288 GB / 8 TB/s</td>
+                <td>78.6 / 78.6 TFLOPS</td>
+                <td>1,400 W</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <table>
+            <thead>
+              <tr>
+                <th>GPU</th>
+                <th>FP16/BF16 matrix (dense)</th>
+                <th>FP8 (dense)</th>
+                <th>FP4 / MXFP4</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>MI300X<a href="#src-18">[18]</a></td>
+                <td>1.3 PFLOPS</td>
+                <td>2.61 PFLOPS</td>
+                <td>none</td>
+              </tr>
+              <tr>
+                <td>MI325X<a href="#src-20">[20]</a></td>
+                <td>1.31 PFLOPS</td>
+                <td>2.61 PFLOPS</td>
+                <td>none</td>
+              </tr>
+              <tr>
+                <td>MI350X<a href="#src-21">[21]</a></td>
+                <td>2.3 PFLOPS</td>
+                <td>4.6 PFLOPS</td>
+                <td>9.2 PFLOPS</td>
+              </tr>
+              <tr>
+                <td>MI355X<a href="#src-22">[22]</a></td>
+                <td>2.5 PFLOPS</td>
+                <td>5 PFLOPS</td>
+                <td>10.1 PFLOPS</td>
+              </tr>
+              <tr>
+                <td>MI455X (announced)<a href="#src-23">[23]</a></td>
+                <td>5 PFLOPS</td>
+                <td>20 PFLOPS</td>
+                <td>40 PFLOPS</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Note: AMD publishes both dense and "with structured sparsity"
+            figures. Dense is shown. The MI455X figures are AMD's "peak" values,
+            and AMD does not label them dense or sparse on the product page.<a
+              href="#src-23"
+              >[23]</a
+            >
+            The MI325X FP16 value is the 1,307.4 TFLOPS figure from AMD's
+            footnote.<a href="#src-20">[20]</a>
+          </p>
+
+          <p>
+            One detail matters for HPC buyers. On CDNA3 (MI300X, MI325X), FP64
+            matrix throughput is double the vector rate. On CDNA4 (MI350X,
+            MI355X), FP64 matrix equals FP64 vector and is lower than on
+            MI300X.<a href="#src-18">[18]</a><a href="#src-22">[22]</a> AMD also
+            moved silicon toward low precision in this generation, just less
+            dramatically than NVIDIA did with B300.
+          </p>
+
+          <h3 id="mi400-series">The Announced MI400 Series</h3>
+
+          <p>
+            AMD's MI400 series splits into two products:<a href="#src-23"
+              >[23]</a
+            >
+          </p>
+          <ul>
+            <li>
+              <strong>MI455X</strong> is for frontier AI: 432 GB of HBM4 at 23.3
+              TB/s per GPU, built into AMD's <strong>Helios</strong> rack.
+              Helios holds 72 MI455X GPUs, 31 TB of HBM4 and up to 2.9 exaFLOPS
+              of MXFP4, in Meta's double-wide Open Rack Wide (ORW) form factor,
+              using open standards including UALink and UEC. AMD says Helios is
+              a reference design for OEM and ODM partners, not a product AMD
+              sells, with volume deployments expected in the second half of
+              2026.
+            </li>
+            <li>
+              <strong>MI430X</strong> is aimed squarely at science: 288 TFLOPS
+              of hardware FP64 and 432 GB of HBM4. AMD expects it in 2027 and
+              names ORNL's Discovery system and the European Alice Recoque and
+              Herder systems as planned deployments.
+            </li>
+          </ul>
+          <p>
+            AMD positions MI430X as the FP64 alternative to NVIDIA's
+            emulation-heavy approach. Take that seriously, and remember it is
+            not shipping yet.
+          </p>
+
+          <h3 id="rocm-in-2026">ROCm in 2026</h3>
+
+          <p>
+            ROCm is AMD's open-source software stack. It includes the HIP
+            programming model (close enough to CUDA that most kernels port
+            mechanically), math libraries, RCCL for collectives, and profilers.
+            The current release as of this writing is ROCm Core SDK 10.0.0,
+            dated 2026-08-26. Since 7.14, ROCm uses the TheRock build and
+            release system.<a href="#src-24">[24]</a> AMD says it provides Day-0
+            support for PyTorch, JAX, vLLM and Triton on the MI400 series.<a
+              href="#src-23"
+              >[23]</a
+            >
+          </p>
+
+          <p>
+            In practice, mainstream PyTorch training and vLLM serving are well
+            supported on MI300-class hardware. The gaps show up in the long
+            tail: custom CUDA extensions, niche research codes, and tools that
+            assume <code>nvcc</code>. The
+            <a href="systems-software.html">Systems Software</a> chapter covers
+            driver and container management for both stacks.
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Before you commit to AMD, take your
+              top 20 user applications by core-hours and check each one for HIP
+              or ROCm support, a container that runs, and a named person who has
+              run it on Instinct. For most centers the major MD, climate, CFD
+              and PyTorch codes pass. The one lab with a hand-written CUDA code
+              and a graduated student is the one that will email the provost.
+              Budget facilitation time for porting, or keep a smaller NVIDIA
+              partition.
+            </p>
+          </blockquote>
+
+          <h2 id="intel-accelerators">
+            Intel: Max Series, Gaudi 3 and What Comes Next
+          </h2>
+
+          <p>
+            <strong>Data Center GPU Max (Ponte Vecchio)</strong> is the GPU in
+            Argonne's Aurora:<a href="#src-34">[34]</a>
+          </p>
+          <ul>
+            <li>
+              10,624 nodes, 63,744 GPUs, six Max 1550 GPUs and two Xeon CPU Max
+              processors per node.
+            </li>
+            <li>
+              Each GPU has two stacks and 128 Xe cores. Each Xe core has 8
+              vector engines and 8 matrix engines.
+            </li>
+            <li>
+              Each GPU has a 384 MiB last-level cache, and each node has 768 GiB
+              of GPU HBM2e.
+            </li>
+          </ul>
+          <p>
+            Aurora holds No. 4 on the June 2026 TOP500 at 1.012 EFLOP/s.<a
+              href="#src-54"
+              >[54]</a
+            >
+            Its software path is oneAPI and SYCL. Intel has not positioned Max
+            as a broad product line for new buyers. Treat it as a
+            leadership-facility platform rather than something to procure for a
+            campus.
+          </p>
+
+          <p>
+            <strong>Gaudi 3</strong> is Intel's AI accelerator, a different
+            architecture from the Max GPUs:<a href="#src-35">[35]</a>
+          </p>
+          <ul>
+            <li>
+              Two compute dies with 8 MMEs and 64 Tensor Processor Cores in
+              total.
+            </li>
+            <li>1,678 TFLOPS of BF16 and FP8 matrix compute.</li>
+            <li>128 GB of HBM2e at 3.7 TB/s, and 96 MB of on-die SRAM.</li>
+            <li>
+              24 integrated 200 GbE RDMA ports, which make scale-out standard
+              Ethernet.
+            </li>
+            <li>Up to 900 W in the OCP OAM 2.0 module.</li>
+          </ul>
+          <p>
+            Intel positions it for AI training and inference, and its white
+            paper lists no FP64 throughput. Trade press reports that Gaudi fell
+            short of Intel's sales expectations. An Intel executive said
+            publicly in January 2026 that the company "did not meet the needs of
+            the frontier AI training market."<a href="#src-37">[37]</a>
+          </p>
+
+          <p>
+            Intel's current direction is a yearly GPU cadence, and it is focused
+            on inference. Crescent Island, announced October 2025, is an Xe3P
+            data center GPU with 160 GB of LPDDR5X, designed for air-cooled
+            enterprise servers, with customer sampling expected in the second
+            half of 2026.<a href="#src-36">[36]</a> Intel cancelled Falcon
+            Shores in 2025. Trade press reports that the follow-on rack-scale
+            product, earlier called Jaguar Shores, is now described as the
+            "Shores product line."<a href="#src-37">[37]</a> For a 2026
+            procurement, Intel accelerators are a niche choice, mainly Gaudi 3
+            where the price is right and the models are supported.
+          </p>
+
+          <h2 id="google-tpus">Google TPUs and Cloud Access</h2>
+
+          <p>
+            Google's Tensor Processing Units are systolic-array ASICs that you
+            access only through Google Cloud, via Compute Engine or GKE.<a
+              href="#src-38"
+              >[38]</a
+            >
+            They are built as pods: chips linked by a dedicated inter-chip
+            interconnect (ICI) in a 2D or 3D torus, with the data center network
+            between slices.
+          </p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>TPU</th>
+                <th>BF16 peak / chip</th>
+                <th>HBM / chip</th>
+                <th>HBM BW / chip</th>
+                <th>Chips per pod</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>v5e<a href="#src-39">[39]</a></td>
+                <td>197 TFLOPS</td>
+                <td>16 GB</td>
+                <td>800 GiBps</td>
+                <td>256 (2D torus)</td>
+              </tr>
+              <tr>
+                <td>v5p<a href="#src-41">[41]</a></td>
+                <td>459 TFLOPS</td>
+                <td>95 GiB</td>
+                <td>2,765 GBps</td>
+                <td>8,960 (3D torus)</td>
+              </tr>
+              <tr>
+                <td>v6e Trillium<a href="#src-40">[40]</a></td>
+                <td>918 TFLOPS</td>
+                <td>32 GB</td>
+                <td>1,638 GBps</td>
+                <td>256 (2D torus)</td>
+              </tr>
+              <tr>
+                <td>TPU7x Ironwood<a href="#src-38">[38]</a></td>
+                <td>2,307 TFLOPS (4,614 FP8)</td>
+                <td>192 GiB</td>
+                <td>7,380 GBps</td>
+                <td>9,216</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <p>A few notes on each generation:</p>
+          <ul>
+            <li>
+              <strong>v5e and v6e</strong> are the cost-efficient training and
+              serving parts, with slices of 1 to 256 chips. v6e supports a
+              single-host 8-chip VM (<code>ct6e-standard-8t</code>) optimized
+              for inference.<a href="#src-40">[40]</a>
+            </li>
+            <li>
+              <strong>v5p</strong> is the large-scale training part. The largest
+              single job is 6,144 chips.<a href="#src-41">[41]</a>
+            </li>
+            <li>
+              <strong>Ironwood (TPU7x)</strong> has two TensorCores and four
+              SparseCores per chip, and Google's documentation describes it as
+              the latest TPU available on Google Cloud.<a href="#src-38"
+                >[38]</a
+              >
+            </li>
+          </ul>
+
+          <p>
+            In April 2026 Google announced an eighth generation split into two
+            chips:<a href="#src-42">[42]</a>
+          </p>
+          <ul>
+            <li>
+              <strong>TPU 8t</strong> for pre-training: 216 GB HBM, 12.6 PFLOPS
+              FP4, 9,600 chips per superpod.
+            </li>
+            <li>
+              <strong>TPU 8i</strong> for serving and reasoning: 288 GB HBM, 384
+              MB of on-chip SRAM, 10.1 PFLOPS FP4.
+            </li>
+          </ul>
+          <p>
+            Both use Arm Axion host CPUs. Trade press reported at the
+            announcement that both chips would be generally available later in
+            2026.<a href="#src-43">[43]</a> Check current regional availability
+            before planning around them.
+          </p>
+
+          <p>
+            On software, TPUs are programmed through XLA: JAX first, with
+            PyTorch/XLA and Keras also supported. Google says native PyTorch
+            support for TPUs, including eager mode, is in preview.<a
+              href="#src-42"
+              >[42]</a
+            >
+            Google's TPU documentation lists BF16, FP8 and INT8 throughput and
+            no FP64 figures, so treat TPUs as AI accelerators, not
+            double-precision simulation engines. For research centers they make
+            sense when a group already works in JAX, when cloud credits or a
+            partnership cover the cost, or when you need a large pod for a short
+            time. The <a href="cloud.html">Cloud and Hybrid</a> chapter covers
+            the logistics.
+          </p>
+
+          <h2 id="other-accelerators">
+            Other Accelerators: Wafers, Dataflow and Hyperscaler Silicon
+          </h2>
+
+          <h3 id="cerebras">Cerebras</h3>
+          <p>
+            Cerebras builds one processor per silicon wafer. The WSE-3
+            (announced March 2024, TSMC 5nm) has 4 trillion transistors, 900,000
+            AI cores, 44 GB of on-chip SRAM and 125 PFLOPS of peak AI
+            performance, and powers the CS-3 system.<a href="#src-44">[44]</a>
+            Cerebras now markets a WSE-3 Turbo rated at 250 PFLOPS, and a CS-4
+            rack system that combines three WSE-3T processors for inference.<a
+              href="#src-45"
+              >[45]</a
+            >
+            Because the whole model's working set sits in on-wafer SRAM, token
+            generation is very fast. Argonne has worked with Cerebras for
+            years.<a href="#src-44">[44]</a> For most campuses, Cerebras is
+            something you use through a cloud API or a national facility
+            allocation, not hardware you rack yourself.
+          </p>
+
+          <h3 id="groq-and-nvidia-lpx">Groq and NVIDIA Groq 3 LPX</h3>
+          <p>
+            Groq built SRAM-centric Language Processing Units (LPUs) for
+            low-latency inference. The landscape changed in 2026. NVIDIA now
+            ships the <strong>NVIDIA Groq 3 LPX</strong> rack as an extension of
+            the Vera Rubin platform, with Groq and LPU marks "used under license
+            from Groq, Inc." NVIDIA announced it was in full production at Hot
+            Chips 2026, with Nebius as the first cloud adopter and Groq's own
+            inference cloud among early adopters.<a href="#src-16">[16]</a> The
+            design pairs Rubin GPUs, which hold large contexts in HBM, with
+            LPUs, which generate tokens from SRAM.<a href="#src-46">[46]</a> For
+            research computing this is a cloud-consumption story, not a
+            procurement one.
+          </p>
+
+          <h3 id="sambanova">SambaNova</h3>
+          <p>
+            SambaNova's SN40L Reconfigurable Dataflow Unit combines streaming
+            dataflow with a three-tier memory system so that one system can hold
+            and switch between many expert models (the paper's Samba-CoE
+            deployment has 150 experts and a trillion total parameters). The
+            design is described in a MICRO 2024 paper.<a href="#src-48">[48]</a>
+            In February 2026 Intel announced a multiyear strategic collaboration
+            with SambaNova.<a href="#src-37">[37]</a>
+          </p>
+
+          <h3 id="aws-trainium-and-inferentia">AWS Trainium and Inferentia</h3>
+          <p>
+            AWS builds its own chips and offers them only as EC2 instances,
+            programmed through the Neuron SDK:
+          </p>
+          <ul>
+            <li>
+              <strong>Trn2</strong> instances have 16 Trainium2 chips and 20.8
+              FP8 PFLOPS. Trn2 UltraServers link 64 chips over NeuronLink.<a
+                href="#src-49"
+                >[49]</a
+              >
+            </li>
+            <li>
+              <strong>Trn3</strong> UltraServers use Trainium3, AWS's first 3nm
+              AI chip. They scale to 144 chips with up to 362 MXFP8 PFLOPS, 20.7
+              TB of HBM3e and 706 TB/s of aggregate memory bandwidth, over a
+              NeuronSwitch all-to-all fabric.<a href="#src-50">[50]</a>
+            </li>
+            <li>
+              <strong>Inf2</strong> instances carry up to 12 Inferentia2 chips
+              with 32 GB of HBM each, for serving.<a href="#src-51">[51]</a>
+            </li>
+          </ul>
+          <p>
+            AWS claims 30-40% better price-performance for Trn2 than for its
+            GPU-based P5e and P5en instances.<a href="#src-49">[49]</a> That is
+            a vendor claim, so test it on your own model before relying on it.
+          </p>
+
+          <h3 id="grace-cpu-gpu-superchips">Grace and CPU-GPU Superchips</h3>
+          <p>
+            NVIDIA's Grace CPU has 72 Arm Neoverse V2 cores with LPDDR5X memory
+            at up to 500 GB/s. The Grace CPU Superchip pairs two of them.<a
+              href="#src-52"
+              >[52]</a
+            >
+            In GH200, a Grace CPU connects to a Hopper GPU over NVLink-C2C at
+            900 GB/s, with a single per-process page table, so CPU and GPU
+            threads can access all system-allocated memory.<a href="#src-53"
+              >[53]</a
+            >
+            GB200 and GB300 use the same idea with Blackwell GPUs.
+          </p>
+
+          <p>
+            This coherent-memory design is the practical answer to "my problem
+            does not fit in HBM". JUPITER, Europe's first exascale system, uses
+            Grace Hopper.<a href="#src-54">[54]</a> AMD's MI300A reaches the
+            same goal a different way, by putting CPU and GPU in one package
+            with shared HBM.<a href="#src-19">[19]</a> Superchips mean Arm (for
+            NVIDIA) and a new node design, so check that your user codes and
+            your provisioning stack handle aarch64 before you buy.
+          </p>
+
+          <h2 id="the-fp64-question">
+            The FP64 Question for Scientific Computing
+          </h2>
+
+          <p>
+            For twenty years, "GPU for HPC" meant strong FP64. That assumption
+            no longer holds. AI revenue pays for the silicon, and AI does not
+            need double precision. The
+            <a href="convergence.html">Convergence</a> chapter covers precision
+            more generally. Here is the hardware picture.
+          </p>
+
+          <h3 id="fp64-throughput-trends">FP64 Throughput Trends</h3>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Part or system</th>
+                <th>Peak FP64 (best path)</th>
+                <th>Unit</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>V100 SXM2<a href="#src-1">[1]</a></td>
+                <td>7.8 TFLOPS</td>
+                <td>per GPU</td>
+              </tr>
+              <tr>
+                <td>A100 SXM (Tensor Core)<a href="#src-2">[2]</a></td>
+                <td>19.5 TFLOPS</td>
+                <td>per GPU</td>
+              </tr>
+              <tr>
+                <td>H100/H200 SXM (Tensor Core)<a href="#src-3">[3]</a></td>
+                <td>67 TFLOPS</td>
+                <td>per GPU</td>
+              </tr>
+              <tr>
+                <td>MI300X (matrix)<a href="#src-18">[18]</a></td>
+                <td>163.4 TFLOPS</td>
+                <td>per GPU</td>
+              </tr>
+              <tr>
+                <td>MI355X (matrix)<a href="#src-22">[22]</a></td>
+                <td>78.6 TFLOPS</td>
+                <td>per GPU</td>
+              </tr>
+              <tr>
+                <td>HGX B200<a href="#src-5">[5]</a></td>
+                <td>296 TFLOPS</td>
+                <td>per 8 GPUs</td>
+              </tr>
+              <tr>
+                <td>HGX B300<a href="#src-5">[5]</a></td>
+                <td>10 TFLOPS</td>
+                <td>per 8 GPUs</td>
+              </tr>
+              <tr>
+                <td>Rubin (native, prelim.)<a href="#src-5">[5]</a></td>
+                <td>33 TFLOPS</td>
+                <td>per GPU</td>
+              </tr>
+              <tr>
+                <td>MI430X (announced)<a href="#src-23">[23]</a></td>
+                <td>288 TFLOPS</td>
+                <td>per GPU</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <p>Three different paths are visible in the table:</p>
+          <ul>
+            <li>
+              NVIDIA peaked at Hopper and Blackwell, cut FP64 almost entirely in
+              Blackwell Ultra, and in Rubin offers modest native FP64 plus
+              emulation.
+            </li>
+            <li>
+              AMD's CDNA4 parts trade some FP64 for low precision, and the
+              announced MI430X goes the other way with a dedicated FP64 part.
+            </li>
+            <li>
+              TPUs and the other AI ASICs covered in this chapter do not publish
+              FP64 figures at all.
+            </li>
+          </ul>
+
+          <h3 id="emulation-and-the-ozaki-scheme">
+            Emulation and the Ozaki Scheme
+          </h3>
+
+          <p>
+            The Ozaki scheme splits FP64 matrices into several low-precision
+            slices, multiplies the slices on fast integer or low-precision
+            tensor units, and recombines the results so the final product
+            matches FP64 accuracy. Ozaki Scheme II uses the Chinese Remainder
+            Theorem to control the number of multiplications. On INT8 Tensor
+            Cores it reported 56.6 to 80.2 TFLOPS of emulated FP64 on a GH200,
+            above that chip's native FP64 rate.<a href="#src-55">[55]</a>
+          </p>
+
+          <p>
+            NVIDIA shipped this in cuBLAS starting with CUDA 13.0 Update 2, as
+            FP64 matmul emulation on Blackwell INT8 Tensor Cores (plus a BF16x9
+            FP32 emulation). An automatic dynamic precision framework chooses
+            emulation parameters that match or beat native FP64 accuracy, and
+            falls back to native FP64 when emulation would not help.<a
+              href="#src-57"
+              >[57]</a
+            >
+            NVIDIA reports a 1.5x end-to-end speedup for Quantum ESPRESSO with
+            default settings on an RTX PRO 6000 Blackwell Server Edition, and
+            nearly 3x with manually reduced precision.<a href="#src-57">[57]</a>
+          </p>
+
+          <p>What this means in practice:</p>
+          <ul>
+            <li>
+              Emulation speeds up <strong>matrix multiplication</strong> (GEMM
+              and routines built on it). It does nothing for stencils, sparse
+              solvers, FFT-heavy codes (research work on this exists<a
+                href="#src-55"
+                >[55]</a
+              >) or anything else that does not reduce to dense GEMM. Many
+              important simulation codes are limited by memory bandwidth rather
+              than GEMM throughput. For them, HBM bandwidth matters far more
+              than FP64 peak.
+            </li>
+            <li>
+              Emulation needs fast low-precision integer units. Blackwell Ultra
+              cut INT8 along with FP64 (Table 3), so B300 is a poor emulation
+              target as well as a poor native FP64 target.
+            </li>
+            <li>
+              NVIDIA's Rubin DGEMM figure (200 TFLOPS per GPU) is an emulated
+              peak, not a native one.<a href="#src-5">[5]</a> Compare like with
+              like when a vendor puts native and emulated numbers side by side.
+            </li>
+            <li>
+              Validate numerics for each application. The accuracy guarantee
+              covers the GEMM, and your code's error behavior is your own
+              responsibility.
+            </li>
+          </ul>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Do not write "FP64 TFLOPS" as a
+              single line item in a procurement. Ask vendors for results on your
+              actual HPC codes (and HPL, HPCG and STREAM as sanity checks), say
+              whether emulation is allowed, and ask for the native figure
+              separately. A B300 system and a B200 system look similar on an AI
+              spec sheet and differ by about 30x on native FP64.
+            </p>
+          </blockquote>
+
+          <h2 id="gpu-partitioning">
+            GPU Partitioning: MIG, MPS, Time Slicing and AMD Modes
+          </h2>
+
+          <p>
+            A 180 GB, 1,000 W GPU is too much for a student's Jupyter notebook.
+            Partitioning lets you share it. The
+            <a href="scheduling.html">Scheduling</a> chapter covers how Slurm
+            and Kubernetes expose these partitions. This section covers the
+            hardware mechanisms.
+          </p>
+
+          <h3 id="nvidia-mig">NVIDIA Multi-Instance GPU (MIG)</h3>
+          <p>
+            MIG splits a supported GPU into isolated instances, each with
+            dedicated compute, memory and cache. It works on GPUs from Ampere
+            onward (compute capability 8.0 and higher), and on DGX, HGX and DGX
+            Station systems built on them.<a href="#src-31">[31]</a> H100
+            supports up to 7 instances of 10 GB each, and H200 up to 7 instances
+            of 18 GB each.<a href="#src-3">[3]</a
+            ><a href="#src-4">[4]</a> Instances are created with
+            <code>nvidia-smi</code>.<a href="#src-30">[30]</a>
+          </p>
+
+          <pre><code class="language-bash"># Enable MIG on GPU 0 (requires root; drain the node first)
+sudo nvidia-smi -i 0 -mig 1
+
+# List the GPU instance profiles this GPU supports
+nvidia-smi mig -lgip
+
+# Example: create two instances by profile name, with default compute instances (-C)
+# (profile names differ by GPU model - use the names that -lgip shows you)
+sudo nvidia-smi mig -cgi 3g.20gb,3g.20gb -C
+
+# Tear down: destroy compute instances, then GPU instances
+sudo nvidia-smi mig -dci &amp;&amp; sudo nvidia-smi mig -dgi
+</code></pre>
+
+          <h3 id="mps-and-time-slicing">MPS and Time Slicing</h3>
+          <p>
+            <strong>MPS</strong> (Multi-Process Service) lets several CUDA
+            processes share one GPU at the same time through a server process.
+            It is typically used for MPI ranks that each underuse the GPU.
+            Client processes get isolated address spaces, but error containment
+            is limited. A fatal fault in one client is reported to every client
+            sharing that GPU. Monitoring tools attribute all client activity to
+            the MPS server.<a href="#src-32">[32]</a> Use MPS for cooperating
+            processes from one user or job, not for mutually untrusted tenants.
+            You can also run MPS inside MIG instances.<a href="#src-30">[30]</a>
+          </p>
+
+          <p>
+            <strong>Time slicing</strong> oversubscribes a GPU by handing out
+            "replicas" that take turns. NVIDIA's GPU Operator documentation is
+            explicit that, unlike MIG, time slicing provides no memory or fault
+            isolation between replicas. It is also the only sharing option on
+            GPUs that do not support MIG.<a href="#src-33">[33]</a>
+          </p>
+
+          <pre><code class="language-yaml"># Kubernetes GPU Operator time-slicing config (from NVIDIA's documented format)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: time-slicing-config
+data:
+  any: |-
+    version: v1
+    flags:
+      migStrategy: none
+    sharing:
+      timeSlicing:
+        resources:
+        - name: nvidia.com/gpu
+          replicas: 4   # example value: 4 pods share each physical GPU
+</code></pre>
+
+          <h3 id="amd-partition-modes">AMD Compute and Memory Partitioning</h3>
+          <p>
+            MI300-series parts separate compute partitioning (SPX, DPX, CPX)
+            from memory partitioning (NPS1, NPS2, NPS4). AMD's partitioning
+            index lists SPX + NPS1, DPX + NPS2 and CPX + NPS4 for MI300X, and
+            only SPX + NPS1 for MI300A.<a href="#src-27">[27]</a> An MI300X has
+            eight XCDs.<a href="#src-59">[59]</a> In CPX mode each XCD becomes
+            its own logical GPU, so an 8x MI300X server reports 64 GPUs to
+            <code>amd-smi</code>.<a href="#src-59">[59]</a> Partitions are
+            configured with <code>amd-smi</code>:<a href="#src-29">[29]</a>
+          </p>
+
+          <pre><code class="language-bash"># Show current compute and memory partition modes
+sudo amd-smi partition --current
+sudo amd-smi partition --memory
+sudo amd-smi partition --accelerator   # lists valid accelerator partition values
+
+# Example: set memory partition mode on GPU 0 (use values reported above)
+sudo amd-smi set -g 0 --memory-partition NPS4
+
+# Example from AMD's documentation: all GPUs to CPX compute partitioning
+sudo amd-smi set --gpu all --compute-partition CPX
+</code></pre>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Reconfiguring partitions needs an
+              idle GPU and root access, so do not let users change modes
+              themselves. Choose a small number of fixed node "shapes" (for
+              example, a few nodes in 7-way MIG for classes and notebooks, the
+              rest whole-GPU), label them in the scheduler, and resize the pools
+              each semester based on queue data.
+            </p>
+          </blockquote>
+
+          <h2 id="form-factors">Form Factors: PCIe, SXM, OAM and Rack-Scale</h2>
+
+          <p>
+            The same GPU name can ship in very different packages, and the
+            package decides what you can do with it.
+          </p>
+          <ul>
+            <li>
+              <strong>PCIe cards</strong> fit standard servers and air cooling,
+              and usually cost less per GPU. They run at lower power and have
+              weaker GPU-to-GPU links. The H100 NVL (PCIe) runs at 350-400 W
+              with 600 GB/s NVLink over a bridge, against the SXM part's 700 W
+              and 900 GB/s.<a href="#src-3">[3]</a> Use PCIe for inference,
+              single-GPU jobs, visualization and mixed-use nodes.
+            </li>
+            <li>
+              <strong>SXM modules on an HGX baseboard</strong> are NVIDIA's 4-
+              or 8-GPU building block. All GPUs connect through NVLink Switch
+              (1.8 TB/s per GPU and 14.4 TB/s aggregate on HGX B200/B300).<a
+                href="#src-5"
+                >[5]</a
+              >
+              OEMs build their servers around HGX, and <strong>DGX</strong> is
+              NVIDIA's own branded system (DGX B300: 10U, about 14 kW).<a
+                href="#src-12"
+                >[12]</a
+              >
+              Use SXM for multi-GPU training and for tightly coupled HPC.
+            </li>
+            <li>
+              <strong>OAM</strong> (OCP Accelerator Module) is the open
+              equivalent of SXM, used by AMD Instinct and Intel Gaudi 3 on a
+              universal baseboard.<a href="#src-18">[18]</a
+              ><a href="#src-35">[35]</a> MI355X OAMs have seven Infinity Fabric
+              links for scale-up.<a href="#src-22">[22]</a>
+            </li>
+            <li>
+              <strong>Rack-scale systems</strong> (GB200/GB300 NVL72, Vera Rubin
+              NVL72, AMD Helios) make the whole rack one scale-up domain. They
+              are liquid cooled and sold, delivered and serviced as a rack.<a
+                href="#src-6"
+                >[6]</a
+              ><a href="#src-23">[23]</a> The benefit is a 72-GPU NVLink domain.
+              The cost is facility work most campus data centers have not done
+              yet.
+            </li>
+          </ul>
+          <p>
+            The <a href="interconnects.html">Interconnects</a> chapter covers
+            the scale-up and scale-out fabrics, and
+            <a href="facilities.html">Facilities</a> covers power and liquid
+            cooling.
+          </p>
+
+          <h2 id="choosing-accelerators">
+            Choosing Accelerators for a Research Center
+          </h2>
+
+          <h3 id="workload-fit">Start With Workload Fit</h3>
+          <p>Pull a year of scheduler accounting and group the GPU hours:</p>
+          <ul>
+            <li>
+              <strong>AI training at scale</strong> (multi-node, weeks-long):
+              SXM/OAM nodes with a full-bandwidth InfiniBand or RoCE fabric. See
+              <a href="training.html">Training at Scale</a>.
+            </li>
+            <li>
+              <strong>Inference and fine-tuning</strong>: memory capacity and
+              bandwidth per GPU matter most. Large-HBM parts (H200, B300,
+              MI325X/MI355X) or PCIe cards for smaller models. See
+              <a href="inference.html">Inference at Scale</a>.
+            </li>
+            <li>
+              <strong>Double-precision simulation</strong>: native FP64 and HBM
+              bandwidth. Today that means H100/H200, B200, MI300A/MI300X-class,
+              or MI430X when it ships. See
+              <a href="scientific-computing.html">Scientific Computing</a>.
+            </li>
+            <li>
+              <strong>Teaching, notebooks, small models</strong>: MIG slices of
+              a large GPU, or workstation-class cards.
+            </li>
+            <li>
+              <strong>Bursty frontier-scale jobs</strong>: rent them. Cloud TPU
+              pods, Trainium or GPU capacity cost less than an idle on-prem
+              rack.
+            </li>
+          </ul>
+
+          <h3 id="software-ecosystem">Weigh the Software Ecosystem Honestly</h3>
+          <p>
+            CUDA's advantage is breadth: every framework, nearly every research
+            code, the most examples, and the most people who know how to debug
+            it. ROCm is production-grade for the mainstream and needs more work
+            in the long tail. XLA (TPU) and Neuron (Trainium) are strong for
+            supported model families and narrow outside them. The cost of a less
+            common stack is staff and student time. Either budget for it or
+            accept a mixed fleet.
+          </p>
+
+          <h3 id="total-cost-and-power">Total Cost and Power</h3>
+          <p>
+            Purchase price is one part of the cost, and increasingly not the
+            largest. Per-GPU power went from 300 W (V100 SXM2) to up to 1,400 W
+            (B300 and MI355X).<a href="#src-1">[1]</a><a href="#src-8">[8]</a
+            ><a href="#src-22">[22]</a> A single 8-GPU DGX draws about 14 kW.<a
+              href="#src-11"
+              >[11]</a
+            ><a href="#src-12">[12]</a> Over a five-year life, a TCO model needs
+            to include:
+          </p>
+          <ul>
+            <li>Electricity and cooling.</li>
+            <li>Facility upgrades (liquid cooling, busway, floor loading).</li>
+            <li>
+              Network ports: one high-speed NIC per GPU is now standard. DGX
+              B300 has eight 800 Gb/s ConnectX-8 ports.<a href="#src-12"
+                >[12]</a
+              >
+            </li>
+            <li>Software subscriptions where required, and staff.</li>
+          </ul>
+          <p>
+            Measure cost per useful result (per training run, per simulated
+            nanosecond, per million tokens), not per peak TFLOP.
+          </p>
+
+          <h3 id="procurement-tips">Procurement Tips</h3>
+          <ul>
+            <li>
+              <strong>Benchmark your own codes.</strong> Require vendors to run
+              your application suite, and state precision, sparsity and
+              emulation rules up front. Vendor peak numbers mix sparse and dense
+              and native and emulated figures, as the notes under this chapter's
+              tables show.
+            </li>
+            <li>
+              <strong>Buy memory, not just FLOPS.</strong> For LLM work, HBM
+              capacity decides which models fit on one node.
+            </li>
+            <li>
+              <strong>Ask about delivery and lifecycle.</strong> Get lead times,
+              how long the vendor will support the part, driver and CUDA/ROCm
+              support windows, and RMA turnaround in writing.
+            </li>
+            <li>
+              <strong>Plan the facility first.</strong> A rack-scale system your
+              data center cannot power or cool is a very expensive pallet.
+            </li>
+            <li>
+              <strong>Stay a generation behind when it makes sense.</strong>
+              H200 and MI300X/MI325X-class systems are mature, well supported,
+              and often the best value for mixed academic workloads.
+            </li>
+            <li>
+              <strong>Keep a cloud option</strong> for peaks and for trying new
+              silicon (TPU, Trainium, the latest NVIDIA and AMD parts) before
+              you commit capital. See <a href="cloud.html">Cloud and Hybrid</a>.
+            </li>
+          </ul>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> The most common mistake I see is a
+              center buying the highest-spec AI GPU because it tops the
+              leaderboard, when half the queue is FP64 simulation and the other
+              half is notebooks that need 20 GB. Match the silicon to the queue
+              you actually have. A split fleet of a few FP64-capable SXM nodes,
+              some large-memory inference nodes and a MIG pool usually serves a
+              campus better than one uniform expensive partition.
+            </p>
+          </blockquote>
+
+          <h2 id="workstation-gpus">Workstation GPUs for Research</h2>
+
+          <p>
+            Workstation-class cards are useful on campus: for prototyping,
+            visualization, small-model fine-tuning, and as low-cost cluster
+            nodes. The NVIDIA RTX PRO 6000 Blackwell Workstation Edition has 96
+            GB of GDDR7 with ECC at 1,792 GB/s, 125 TFLOPS of single precision,
+            4,000 "AI TOPS" (a theoretical FP4 figure with sparsity) and a 600 W
+            maximum, in a dual-slot PCIe Gen 5 card.<a href="#src-58">[58]</a>
+            NVIDIA says the Max-Q variant supports MIG with up to four
+            instances.<a href="#src-58">[58]</a> There is also a Server Edition
+            for data center chassis.<a href="#src-57">[57]</a> 96 GB on one card
+            lets a lab fine-tune or serve mid-sized models locally.
+          </p>
+
+          <p>
+            Know the limits before users treat these as cheap data center GPUs:
+          </p>
+          <ul>
+            <li>
+              <strong>GDDR7, not HBM.</strong> 1.8 TB/s against 8 TB/s on
+              B200/B300.<a href="#src-58">[58]</a
+              ><a href="#src-8">[8]</a> Memory-bound training and HPC codes will
+              notice.
+            </li>
+            <li>
+              <strong>Weak FP64.</strong> NVIDIA does not headline FP64 for RTX
+              PRO. Its own FP64-emulation blog uses the RTX PRO 6000 Server
+              Edition as a showcase,<a href="#src-57">[57]</a> which tells you
+              native double precision is not the card's strength.
+            </li>
+            <li>
+              <strong>No NVLink Switch scale-up.</strong> The product page lists
+              PCIe Gen 5 as the interconnect.<a href="#src-58">[58]</a>
+              Multi-GPU training across these cards goes over PCIe and the
+              network, and scales poorly for large models.
+            </li>
+            <li>
+              <strong>Power and airflow.</strong> 600 W per card makes dense
+              multi-card deskside builds a cooling problem, and office circuits
+              a risk.
+            </li>
+          </ul>
+          <p>
+            Use them for what they do well, and send users to the cluster when
+            they hit these limits.
+          </p>
+
+          <h2 id="key-takeaways">Key Takeaways</h2>
+          <ul>
+            <li>
+              GPUs win by running thousands of threads in parallel and doing
+              matrix math on Tensor or Matrix Cores. Almost all headline FLOPS
+              are low precision on those units, and codes that do not map to
+              them see much less.
+            </li>
+            <li>
+              NVIDIA's shipping lineup in 2026 runs from H100/H200 through B200
+              and B300 (Blackwell Ultra), with Vera Rubin in early production.
+              Blackwell Ultra cut FP64 to 10 TFLOPS per 8-GPU HGX board (against
+              296 on HGX B200), so do not buy it for double-precision science.
+            </li>
+            <li>
+              AMD Instinct (MI300A/MI300X through MI355X) offers large HBM
+              capacity and strong FP64, and runs top exascale systems. The
+              announced MI430X is a dedicated FP64 part for 2027. ROCm is solid
+              for mainstream workloads, and the long tail needs porting time.
+            </li>
+            <li>
+              Google TPUs (v5e through Ironwood, with TPU 8t/8i announced) and
+              AWS Trainium are strong, cloud-only AI options. Neither targets
+              FP64 simulation.
+            </li>
+            <li>
+              FP64 emulation (Ozaki scheme in cuBLAS) can speed up GEMM-heavy
+              codes on AI-oriented GPUs, but it does not help bandwidth-bound or
+              non-GEMM codes. Always compare native with native when vendors
+              quote emulated figures.
+            </li>
+            <li>
+              Share big GPUs with MIG (isolated), MPS (cooperative) or time
+              slicing (no isolation), or AMD's SPX/CPX and NPS modes. Offer a
+              few fixed node shapes rather than letting users reconfigure.
+            </li>
+            <li>
+              The form factor (PCIe, SXM/OAM, rack-scale NVL72 or Helios)
+              decides power, cooling and scale-up capability. Plan the facility
+              before the purchase.
+            </li>
+            <li>
+              Choose from your own accounting data and your own benchmarks. A
+              mixed fleet matched to the actual queue usually beats one uniform
+              high-end partition.
+            </li>
+          </ul>
+
+          <h2 id="sources">Sources</h2>
+          <ol class="sources">
+            <li id="src-1">
+              <a
+                href="https://images.nvidia.com/content/technologies/volta/pdf/tesla-volta-v100-datasheet.pdf"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA V100 Tensor Core GPU Datasheet (NVIDIA, 2019)</a
+              >
+            </li>
+            <li id="src-2">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/a100/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA A100 Tensor Core GPU product specifications (NVIDIA)</a
+              >
+            </li>
+            <li id="src-3">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/h100/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA H100 Tensor Core GPU product specifications (NVIDIA)</a
+              >
+            </li>
+            <li id="src-4">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/h200/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA H200 GPU product specifications (NVIDIA)</a
+              >
+            </li>
+            <li id="src-5">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/hgx/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA HGX Platform specifications: HGX B200, HGX B300, HGX
+                Rubin NVL8 (NVIDIA, 2026)</a
+              >
+            </li>
+            <li id="src-6">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/gb200-nvl72/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA GB200 NVL72 specifications (NVIDIA)</a
+              >
+            </li>
+            <li id="src-7">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/gb300-nvl72/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA GB300 NVL72 specifications (NVIDIA)</a
+              >
+            </li>
+            <li id="src-8">
+              <a
+                href="https://developer.nvidia.com/blog/inside-nvidia-blackwell-ultra-the-chip-powering-the-ai-factory-era/"
+                target="_blank"
+                rel="noopener"
+                >Inside NVIDIA Blackwell Ultra: The Chip Powering the AI Factory
+                Era (NVIDIA Technical Blog, 2025)</a
+              >
+            </li>
+            <li id="src-9">
+              <a
+                href="https://docs.nvidia.com/enterprise-reference-architectures/hgx-ai-factory/latest/components.html"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA HGX AI Factory Enterprise Reference Architecture:
+                Components (NVIDIA)</a
+              >
+            </li>
+            <li id="src-10">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/technologies/blackwell-architecture/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA Blackwell Architecture (NVIDIA)</a
+              >
+            </li>
+            <li id="src-11">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/dgx-b200/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA DGX B200 specifications (NVIDIA)</a
+              >
+            </li>
+            <li id="src-12">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/dgx-b300/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA DGX B300 specifications (NVIDIA)</a
+              >
+            </li>
+            <li id="src-13">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/vera-rubin-nvl72/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA Vera Rubin NVL72 (NVIDIA, 2026)</a
+              >
+            </li>
+            <li id="src-14">
+              <a
+                href="https://www.datacenterdynamics.com/en/news/nvidia-updates-data-center-product-roadmap-following-lpu-launch-at-gtc-2026"
+                target="_blank"
+                rel="noopener"
+                >Nvidia updates data center product roadmap following LPU launch
+                at GTC 2026 (DatacenterDynamics, 2026)</a
+              >
+            </li>
+            <li id="src-15">
+              <a
+                href="https://blogs.nvidia.com/blog/gtc-2026-news/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA GTC 2026: Live Updates on What's Next in AI (NVIDIA
+                Blog, 2026)</a
+              >
+            </li>
+            <li id="src-16">
+              <a
+                href="https://nvidianews.nvidia.com/news/nvidia-groq-3-lpx-now-in-full-production-with-world-class-speed-for-agentic-ai"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA Groq 3 LPX Now in Full Production (NVIDIA Newsroom,
+                2026)</a
+              >
+            </li>
+            <li id="src-17">
+              <a
+                href="https://www.amd.com/en/products/accelerators/instinct/mi200/mi250x.html"
+                target="_blank"
+                rel="noopener"
+                >AMD Instinct MI250X Accelerators specifications (AMD)</a
+              >
+            </li>
+            <li id="src-18">
+              <a
+                href="https://www.amd.com/en/products/accelerators/instinct/mi300/mi300x.html"
+                target="_blank"
+                rel="noopener"
+                >AMD Instinct MI300X Accelerators specifications (AMD)</a
+              >
+            </li>
+            <li id="src-19">
+              <a
+                href="https://www.amd.com/en/products/accelerators/instinct/mi300/mi300a.html"
+                target="_blank"
+                rel="noopener"
+                >AMD Instinct MI300A Accelerators specifications (AMD)</a
+              >
+            </li>
+            <li id="src-20">
+              <a
+                href="https://www.amd.com/en/products/accelerators/instinct/mi300/mi325x.html"
+                target="_blank"
+                rel="noopener"
+                >AMD Instinct MI325X Accelerators and specification footnotes
+                (AMD)</a
+              >
+            </li>
+            <li id="src-21">
+              <a
+                href="https://www.amd.com/en/products/accelerators/instinct/mi350/mi350x.html"
+                target="_blank"
+                rel="noopener"
+                >AMD Instinct MI350X GPUs specifications (AMD)</a
+              >
+            </li>
+            <li id="src-22">
+              <a
+                href="https://www.amd.com/en/products/accelerators/instinct/mi350/mi355x.html"
+                target="_blank"
+                rel="noopener"
+                >AMD Instinct MI355X GPUs specifications (AMD)</a
+              >
+            </li>
+            <li id="src-23">
+              <a
+                href="https://www.amd.com/en/products/accelerators/instinct/mi400.html"
+                target="_blank"
+                rel="noopener"
+                >AMD Instinct MI400 Series GPUs: MI455X, MI430X and Helios (AMD,
+                2026)</a
+              >
+            </li>
+            <li id="src-24">
+              <a
+                href="https://rocm.docs.amd.com/en/latest/about/release-notes.html"
+                target="_blank"
+                rel="noopener"
+                >ROCm Core SDK 10.0.0 release notes (AMD, 2026)</a
+              >
+            </li>
+            <li id="src-25">
+              <a
+                href="https://rocm.docs.amd.com/projects/HIP/en/latest/understand/programming_model.html"
+                target="_blank"
+                rel="noopener"
+                >Introduction to the HIP programming model (AMD ROCm
+                documentation)</a
+              >
+            </li>
+            <li id="src-26">
+              <a
+                href="https://docs.nvidia.com/cuda/cuda-programming-guide/01-introduction/programming-model.html"
+                target="_blank"
+                rel="noopener"
+                >CUDA Programming Guide: Programming Model (NVIDIA)</a
+              >
+            </li>
+            <li id="src-27">
+              <a
+                href="https://instinct.docs.amd.com/projects/amdgpu-docs/en/latest/gpu-partitioning/index.html"
+                target="_blank"
+                rel="noopener"
+                >AMD GPU/APU Partitioning (AMD Instinct documentation)</a
+              >
+            </li>
+            <li id="src-28">
+              <a
+                href="https://instinct.docs.amd.com/projects/amdgpu-docs/en/latest/gpu-partitioning/mi300x/overview.html"
+                target="_blank"
+                rel="noopener"
+                >AMD Instinct MI300X GPU Partitioning Overview (AMD Instinct
+                documentation)</a
+              >
+            </li>
+            <li id="src-29">
+              <a
+                href="https://rocm.docs.amd.com/projects/amdsmi/en/latest/how-to/amdsmi-cli-tool.html"
+                target="_blank"
+                rel="noopener"
+                >AMD SMI CLI tool documentation (AMD ROCm documentation)</a
+              >
+            </li>
+            <li id="src-30">
+              <a
+                href="https://docs.nvidia.com/datacenter/tesla/mig-user-guide/latest/getting-started-with-mig.html"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA MIG User Guide: Getting Started with MIG (NVIDIA)</a
+              >
+            </li>
+            <li id="src-31">
+              <a
+                href="https://docs.nvidia.com/datacenter/tesla/mig-user-guide/latest/supported-gpus.html"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA MIG User Guide: Supported GPUs (NVIDIA)</a
+              >
+            </li>
+            <li id="src-32">
+              <a
+                href="https://docs.nvidia.com/deploy/mps/latest/when-to-use-mps.html"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA Multi-Process Service: When to Use MPS and limitations
+                (NVIDIA)</a
+              >
+            </li>
+            <li id="src-33">
+              <a
+                href="https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/gpu-sharing.html"
+                target="_blank"
+                rel="noopener"
+                >Time-Slicing GPUs in Kubernetes (NVIDIA GPU Operator
+                documentation)</a
+              >
+            </li>
+            <li id="src-34">
+              <a
+                href="https://docs.alcf.anl.gov/aurora/hardware-overview/machine-overview"
+                target="_blank"
+                rel="noopener"
+                >Aurora Machine Overview (Argonne Leadership Computing Facility
+                User Guides)</a
+              >
+            </li>
+            <li id="src-35">
+              <a
+                href="https://cdrdv2-public.intel.com/817486/gaudi-3-ai-accelerator-white-paper.pdf"
+                target="_blank"
+                rel="noopener"
+                >Intel Gaudi 3 AI Accelerator White Paper (Intel)</a
+              >
+            </li>
+            <li id="src-36">
+              <a
+                href="https://www.intel.com/content/www/us/en/newsroom/news/artificial-intelligence/intel-to-expand-ai-accelerator-portfolio-with-new-gpu.html"
+                target="_blank"
+                rel="noopener"
+                >Intel to Expand AI Accelerator Portfolio with New GPU (Intel
+                Newsroom, 2025)</a
+              >
+            </li>
+            <li id="src-37">
+              <a
+                href="https://www.crn.com/news/components-peripherals/2026/how-intel-s-ai-chip-strategy-is-coming-into-shape-after-years-of-struggles"
+                target="_blank"
+                rel="noopener"
+                >How Intel's AI Chip Strategy Is Coming Into Shape After Years
+                Of Struggles (CRN, 2026)</a
+              >
+            </li>
+            <li id="src-38">
+              <a
+                href="https://docs.cloud.google.com/tpu/docs/tpu7x"
+                target="_blank"
+                rel="noopener"
+                >TPU7x (Ironwood) documentation (Google Cloud)</a
+              >
+            </li>
+            <li id="src-39">
+              <a
+                href="https://docs.cloud.google.com/tpu/docs/v5e"
+                target="_blank"
+                rel="noopener"
+                >TPU v5e documentation (Google Cloud)</a
+              >
+            </li>
+            <li id="src-40">
+              <a
+                href="https://docs.cloud.google.com/tpu/docs/v6e"
+                target="_blank"
+                rel="noopener"
+                >TPU v6e (Trillium) documentation (Google Cloud, 2026)</a
+              >
+            </li>
+            <li id="src-41">
+              <a
+                href="https://docs.cloud.google.com/tpu/docs/v5p"
+                target="_blank"
+                rel="noopener"
+                >TPU v5p documentation (Google Cloud)</a
+              >
+            </li>
+            <li id="src-42">
+              <a
+                href="https://cloud.google.com/blog/products/compute/tpu-8t-and-tpu-8i-technical-deep-dive"
+                target="_blank"
+                rel="noopener"
+                >Inside the eighth-generation TPU: An architecture deep dive
+                (Google Cloud Blog, 2026)</a
+              >
+            </li>
+            <li id="src-43">
+              <a
+                href="https://www.datacenterdynamics.com/en/news/google-unveils-eighth-generation-tpus-two-dedicated-training-and-inference-chips/"
+                target="_blank"
+                rel="noopener"
+                >Google unveils eighth-generation TPUs, two dedicated training
+                and inference chips (DatacenterDynamics, 2026)</a
+              >
+            </li>
+            <li id="src-44">
+              <a
+                href="https://www.cerebras.ai/press-release/cerebras-announces-third-generation-wafer-scale-engine"
+                target="_blank"
+                rel="noopener"
+                >Cerebras Systems Unveils World's Fastest AI Chip with 4
+                Trillion Transistors (Cerebras, 2024)</a
+              >
+            </li>
+            <li id="src-45">
+              <a
+                href="https://www.cerebras.ai/chip"
+                target="_blank"
+                rel="noopener"
+                >Cerebras Wafer-Scale Engine 3 Turbo and CS-4 (Cerebras)</a
+              >
+            </li>
+            <li id="src-46">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/technologies/rubin/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA Vera Rubin Platform (NVIDIA, 2026)</a
+              >
+            </li>
+            <li id="src-47">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/dgx-vera-rubin-nvl72/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA DGX Vera Rubin NVL72 quick specs (NVIDIA, 2026)</a
+              >
+            </li>
+            <li id="src-48">
+              <a
+                href="https://arxiv.org/abs/2405.07518"
+                target="_blank"
+                rel="noopener"
+                >Prabhakar et al., SambaNova SN40L: Scaling the AI Memory Wall
+                with Dataflow and Composition of Experts (arXiv / MICRO 2024)</a
+              >
+            </li>
+            <li id="src-49">
+              <a
+                href="https://aws.amazon.com/ec2/instance-types/trn2/"
+                target="_blank"
+                rel="noopener"
+                >Amazon EC2 Trn2 instances and UltraServers (AWS)</a
+              >
+            </li>
+            <li id="src-50">
+              <a
+                href="https://aws.amazon.com/ec2/instance-types/trn3/"
+                target="_blank"
+                rel="noopener"
+                >Amazon EC2 Trn3 UltraServers (AWS)</a
+              >
+            </li>
+            <li id="src-51">
+              <a
+                href="https://aws.amazon.com/ec2/instance-types/inf2/"
+                target="_blank"
+                rel="noopener"
+                >Amazon EC2 Inf2 instances (AWS)</a
+              >
+            </li>
+            <li id="src-52">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/grace-cpu-superchip/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA Grace CPU Superchip (NVIDIA)</a
+              >
+            </li>
+            <li id="src-53">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/grace-hopper-superchip/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA GH200 Grace Hopper Superchip (NVIDIA)</a
+              >
+            </li>
+            <li id="src-54">
+              <a
+                href="https://top500.org/lists/top500/2026/06/"
+                target="_blank"
+                rel="noopener"
+                >TOP500 June 2026 list highlights (TOP500, 2026)</a
+              >
+            </li>
+            <li id="src-55">
+              <a
+                href="https://arxiv.org/abs/2504.08009"
+                target="_blank"
+                rel="noopener"
+                >Ozaki et al., Ozaki Scheme II: A GEMM-oriented emulation of
+                floating-point matrix multiplication using an integer modular
+                technique (arXiv / IJHPCA, 2026)</a
+              >
+            </li>
+            <li id="src-56">
+              <a
+                href="https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html"
+                target="_blank"
+                rel="noopener"
+                >CUDA C++ Programming Guide: compute capability 9.0 shared
+                memory (NVIDIA)</a
+              >
+            </li>
+            <li id="src-57">
+              <a
+                href="https://developer.nvidia.com/blog/unlocking-tensor-core-performance-with-floating-point-emulation-in-cublas"
+                target="_blank"
+                rel="noopener"
+                >Unlocking Tensor Core Performance with Floating Point Emulation
+                in cuBLAS (NVIDIA Technical Blog, 2025)</a
+              >
+            </li>
+            <li id="src-58">
+              <a
+                href="https://www.nvidia.com/en-us/products/workstations/professional-desktop-gpus/rtx-pro-6000/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA RTX PRO 6000 Blackwell Workstation Edition (NVIDIA)</a
+              >
+            </li>
+            <li id="src-59">
+              <a
+                href="https://rocm.blogs.amd.com/software-tools-optimization/compute-memory-modes/README.html"
+                target="_blank"
+                rel="noopener"
+                >Deep dive into the MI300 compute and memory partition modes
+                (AMD ROCm Blogs)</a
+              >
+            </li>
+            <li id="src-60">
+              <a
+                href="https://docs.olcf.ornl.gov/systems/frontier_user_guide.html"
+                target="_blank"
+                rel="noopener"
+                >Frontier User Guide (Oak Ridge Leadership Computing
+                Facility)</a
+              >
+            </li>
+          </ol>
+          <nav class="doc-pager" aria-label="Chapter navigation">
+            <a class="pager-prev" href="convergence.html"
+              ><span>Previous</span>The Convergence</a
+            ><a class="pager-next" href="memory-storage.html"
+              ><span>Next</span>Memory and Storage</a
+            >
+          </nav>
+        </article>
+      </div>
+    </main>
+
+    <footer class="section-dark">
+      <div class="container text-center">
+        <p class="footer-note">
+          2026 edition |
+          <a href="index.html" class="subtle-link">Field Manual</a> |
+          <a href="../index.html" class="subtle-link"
+            >charles-forsyth.github.io</a
+          >
+        </p>
+      </div>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+      document.querySelectorAll('pre code').forEach(function (el) {
+        if (el.className === 'c++') el.className = 'language-cpp';
+        else if (el.className && el.className.indexOf('language-') !== 0)
+          el.className = 'language-' + el.className;
+        hljs.highlightElement(el);
+      });
+    </script>
+  </body>
+</html>
