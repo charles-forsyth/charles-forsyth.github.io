@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HPC Field Manual | Charles Forsyth</title>
+    <meta
+      name="description"
+      content="The HPC Field Manual: Linux, hardware, provisioning, software, code, cloud clusters, Slurm and training presentations from two decades of running research supercomputers."
+    />
+    <link rel="canonical" href="https://charles-forsyth.github.io/handbook/" />
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="handbook.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+  </head>
+  <body>
+    <header class="hero doc-hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="doc-kicker">
+            <i class="fas fa-book-open"></i> Charles Forsyth
+          </p>
+          <h1>The HPC Field Manual</h1>
+          <h2>Hard-won notes from the machine room floor</h2>
+          <p>
+            Before the agents, there were the clusters. These are the working
+            notes I kept while building, provisioning and teaching on research
+            supercomputers at Corning and UC Riverside.
+          </p>
+          <div class="cta-buttons">
+            <a href="#sections" class="btn btn-primary">Open the Manual</a>
+            <a href="cv.html" class="btn btn-secondary">Career Record</a>
+            <a href="../index.html" class="btn btn-secondary"
+              ><i class="fas fa-arrow-left"></i> Main Site</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section id="sections" class="section-light">
+        <div class="container">
+          <p class="manual-intro">
+            The manual covers the full stack of high-performance computing, from
+            the cables and switches up through the scheduler, the software and
+            the researcher at the keyboard.
+          </p>
+          <div class="manual-grid">
+            <a class="manual-card" href="linux.html">
+              <i class="fab fa-linux"></i>
+              <h4>Linux Basics</h4>
+              <p>
+                Files, permissions, processes, Vim, the shell, Screen, SSH,
+                archives and one-liners: the command-line foundation under every
+                supercomputer.
+              </p>
+              <span>Read <i class="fas fa-arrow-right"></i></span>
+            </a>
+            <a class="manual-card" href="hardware.html">
+              <i class="fas fa-server"></i>
+              <h4>HPC Hardware</h4>
+              <p>
+                Ethernet, InfiniBand and Fibre Channel fabrics, cabling, storage
+                shelves and controllers, nodes, power and cooling.
+              </p>
+              <span>Read <i class="fas fa-arrow-right"></i></span>
+            </a>
+            <a class="manual-card" href="provisioning.html">
+              <i class="fas fa-network-wired"></i>
+              <h4>Provisioning</h4>
+              <p>
+                Bare metal (DNS, PXE, TFTP, IPMI), provisioning systems,
+                identity (LDAP, Kerberos, NIS) and virtual machines across
+                clouds and hypervisors.
+              </p>
+              <span>Read <i class="fas fa-arrow-right"></i></span>
+            </a>
+            <a class="manual-card" href="software.html">
+              <i class="fas fa-cubes"></i>
+              <h4>HPC Software</h4>
+              <p>
+                System packages, BLAST, Conda environments, Jupyter notebooks
+                and scaling Python across the cluster with Dask.
+              </p>
+              <span>Read <i class="fas fa-arrow-right"></i></span>
+            </a>
+            <a class="manual-card" href="code.html">
+              <i class="fas fa-code"></i>
+              <h4>Code</h4>
+              <p>
+                The languages of the cluster, with working OpenMP and MPI
+                examples in C and Fortran and a primer on the Bash shebang.
+              </p>
+              <span>Read <i class="fas fa-arrow-right"></i></span>
+            </a>
+            <a class="manual-card" href="cloud.html">
+              <i class="fas fa-cloud"></i>
+              <h4>HPC in the Cloud</h4>
+              <p>
+                On-demand private clusters on AWS: built in ten minutes, scaled
+                on demand, billed by the minute and deleted when done.
+              </p>
+              <span>Read <i class="fas fa-arrow-right"></i></span>
+            </a>
+            <a class="manual-card" href="slurm.html">
+              <i class="fas fa-tasks"></i>
+              <h4>Slurm Submission Scripts</h4>
+              <p>
+                How to ask the scheduler for resources, including a full Spark
+                cluster spun up inside a Slurm allocation.
+              </p>
+              <span>Read <i class="fas fa-arrow-right"></i></span>
+            </a>
+            <a class="manual-card" href="presentations.html">
+              <i class="fas fa-chalkboard-teacher"></i>
+              <h4>Talks and Presentations</h4>
+              <p>
+                Training decks on Python, Linux and the HPCC cluster, cloud HPC,
+                terminal recordings, and noteworthy talks by others.
+              </p>
+              <span>Read <i class="fas fa-arrow-right"></i></span>
+            </a>
+            <a class="manual-card" href="cv.html">
+              <i class="fas fa-id-badge"></i>
+              <h4>Career Record</h4>
+              <p>
+                The detailed record: UC Riverside, Corning Incorporated,
+                education and United States Navy electronics training.
+              </p>
+              <span>Read <i class="fas fa-arrow-right"></i></span>
+            </a>
+          </div>
+
+          <div class="manual-roadmap">
+            <h4>
+              <i class="fas fa-drafting-compass"></i> The original outline
+            </h4>
+            <p>
+              The manual was planned in nine parts. Architecture, schedulers,
+              monitoring and metrics were outlined but never written up; their
+              modern successors live in the Flagship Innovations on the main
+              site.
+            </p>
+            <ul>
+              <li>Hardware</li>
+              <li>Provisioning</li>
+              <li>Architecture</li>
+              <li>Schedulers</li>
+              <li>Software</li>
+              <li>Scripts</li>
+              <li>HPC in the Cloud</li>
+              <li>Monitoring</li>
+              <li>Metrics</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="section-dark">
+      <div class="container text-center">
+        <p class="footer-note">
+          Originally published 2018-2019 on the legacy HPC documentation site,
+          preserved here in full. |
+          <a href="../index.html" class="subtle-link"
+            >charles-forsyth.github.io</a
+          >
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

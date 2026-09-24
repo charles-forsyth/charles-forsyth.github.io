@@ -1,0 +1,1353 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Linux Basics | HPC Field Manual | Charles Forsyth</title>
+    <meta
+      name="description"
+      content="The command-line foundation under every supercomputer"
+    />
+    <link
+      rel="canonical"
+      href="https://charles-forsyth.github.io/handbook/linux.html"
+    />
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="handbook.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
+    />
+  </head>
+  <body>
+    <header class="hero doc-hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="doc-kicker">
+            <i class="fab fa-linux"></i> HPC Field Manual
+          </p>
+          <h1>Linux Basics</h1>
+          <h2>The command-line foundation under every supercomputer</h2>
+          <div class="cta-buttons">
+            <a href="index.html" class="btn btn-secondary"
+              ><i class="fas fa-book-open"></i> Field Manual</a
+            >
+            <a href="../index.html" class="btn btn-secondary"
+              ><i class="fas fa-arrow-left"></i> Main Site</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+    <nav class="doc-nav" aria-label="Field manual sections">
+      <div class="container">
+        <a href="linux.html" class="active" aria-current="page">Linux Basics</a
+        ><a href="hardware.html">HPC Hardware</a
+        ><a href="provisioning.html">Provisioning</a
+        ><a href="software.html">HPC Software</a><a href="code.html">Code</a
+        ><a href="cloud.html">HPC in the Cloud</a
+        ><a href="slurm.html">Slurm Submission Scripts</a
+        ><a href="presentations.html">Talks and Presentations</a
+        ><a href="cv.html">Career</a>
+      </div>
+    </nav>
+    <main class="section-light">
+      <div class="container doc-layout">
+        <aside class="doc-toc">
+          <h4><i class="fas fa-list"></i> On this page</h4>
+          <ul>
+            <li><a href="#basics">Basics</a></li>
+            <li>
+              <a href="#finding-files-directories-and-applications"
+                >Finding files, directories and applications</a
+              >
+            </li>
+            <li>
+              <a href="#finding-things-in-files">Finding things in files</a>
+            </li>
+            <li><a href="#ownership-overview">Ownership Overview</a></li>
+            <li><a href="#ownership-levels">Ownership Levels</a></li>
+            <li><a href="#permission-bits">Permission Bits</a></li>
+            <li><a href="#checking-permissions">Checking Permissions</a></li>
+            <li><a href="#change-ownership">Change ownership</a></li>
+            <li><a href="#process-management">Process Management</a></li>
+            <li><a href="#vim-manual">Vim Manual</a></li>
+            <li><a href="#text-viewing">Text Viewing</a></li>
+            <li><a href="#text-editors">Text Editors</a></li>
+            <li><a href="#the-unix-shell">The Unix Shell</a></li>
+            <li><a href="#screen">Screen</a></li>
+            <li>
+              <a href="#simple-one-liner-shell-scripts"
+                >Simple One-Liner Shell Scripts</a
+              >
+            </li>
+            <li>
+              <a href="#simple-one-liner-perl-scripts"
+                >Simple One-Liner Perl Scripts</a
+              >
+            </li>
+            <li><a href="#ssh">SSH</a></li>
+            <li>
+              <a href="#remote-copy-wget-scp-ncftp"
+                >Remote Copy: wget, scp, ncftp</a
+              >
+            </li>
+            <li>
+              <a href="#archiving-and-compressing">Archiving and Compressing</a>
+            </li>
+            <li><a href="#environment-variables">Environment Variables</a></li>
+          </ul>
+        </aside>
+        <article class="doc-content">
+          <p>
+            *Much of this page was copied directly from the
+            <a href="http://hpcc.ucr.edu/" target="_blank" rel="noopener"
+              >HPCC</a
+            >
+            Linux manual page.
+          </p>
+          <p>Linux used as the operating system for most super computers.</p>
+          <h4 id="gnulinux-distributions">GNU/Linux Distributions</h4>
+          <ul>
+            <li>
+              <a href="https://www.ubuntu.com/" target="_blank" rel="noopener"
+                >Ubuntu</a
+              >
+              - A beginner-friendly Linux OS based on Debian. A good choice for
+              most people.
+            </li>
+            <li>
+              <a href="https://www.opensuse.org/" target="_blank" rel="noopener"
+                >OpenSuSE</a
+              >
+              - An alternative to Ubuntu for new users.
+            </li>
+            <li>
+              <a href="https://www.debian.org/" target="_blank" rel="noopener"
+                >Debian</a
+              >
+              - A general-purpose Linux OS with a large software package
+              repository and support community.
+            </li>
+            <li>
+              <a href="https://www.redhat.com/" target="_blank" rel="noopener"
+                >Red Hat Enterprise Linux (RHEL)</a
+              >
+              - A general-purpose Linux OS supported by Red Hat, Inc. Requires
+              purchase.
+            </li>
+            <li>
+              <a href="https://www.centos.org/" target="_blank" rel="noopener"
+                >CentOS</a
+              >
+              - A community-supported version of RHEL that's free to download
+              and use. The UCR HPCC cluster runs on CentOS 7.
+            </li>
+            <li>
+              <a href="https://getfedora.org/" target="_blank" rel="noopener"
+                >Fedora</a
+              >
+              - A developer-oriented Linux OS sponsored by Red Hat.
+            </li>
+            <li>
+              <a
+                href="https://www.archlinux.org/"
+                target="_blank"
+                rel="noopener"
+                >Arch Linux</a
+              >
+              - A highly-customizable Linux OS for power users.
+            </li>
+          </ul>
+          <p>
+            <a
+              href="https://upload.wikimedia.org/wikipedia/commons/1/1b/Linux_Distribution_Timeline.svg"
+              target="_blank"
+              rel="noopener"
+              >Family tree of the GNU/Linux distributions</a
+            >
+          </p>
+          <h2 id="basics">Basics</h2>
+          <h4 id="command-line-syntax-for-this-manual">
+            Command-Line Syntax for this Manual
+          </h4>
+          <ul>
+            <li>Remember the UNIX/Linux command line is case sensitive!</li>
+            <li>All commands in this manual are printed in gray code boxes.</li>
+            <li>
+              The hash (pound) sign "#" indicates end of a command and the start
+              of a comment.
+            </li>
+            <li>
+              The notation &lt;...&gt; refers to variables and file names that
+              need to be specified by the user. The symbols &lt; and &gt; need
+              to be excluded.
+            </li>
+          </ul>
+          <h4 id="orientation">Orientation</h4>
+          <p>Viewing and changing the present working directory:</p>
+          <pre><code class="bash">pwd               # &quot;Print working directory&quot;; show your current path
+
+ls                # &quot;List&quot; contents of current directory
+ls -l             # Similar to ls, but provides additional info on files and directories
+ls -a             # List all files, including hidden files (.name) as well
+ls -R             # Lists subdirectories recursively
+ls -t             # Lists files in chronological order
+
+cd &lt;dir_name&gt;     # &quot;Change directory&quot; to specified path
+cd                # Brings you back to your home directory
+cd ..             # Moves one directory up
+cd ../../         # Moves two directories up (and so on)
+cd -              # Go back to you were previously (before the last directory change)
+</code></pre>
+
+          <p>
+            The tilde symbol (~) gets interpreted as the path to your home
+            directory when by itself or at the beginning of a word:
+          </p>
+          <pre><code class="bash">echo ~            # View the full (complete) path of your home
+find ~            # List all your files (including everything in sub-directories)
+ls ~              # List the top level files of your home directory
+du -sch ~/*       # Calculate the &quot;disk usage&quot; of files in your home
+</code></pre>
+
+          <p>Viewing file info, user, and host:</p>
+          <pre><code class="bash">stat &lt;file-name&gt;  # Show last modification time stamps, permissions, and size of a file
+
+whoami            # Shows your user name (same as &quot;echo $USER&quot;)
+hostname          # Shows on which machine you are (same as &quot;echo $HOSTNAME&quot;)
+</code></pre>
+
+          <h4 id="files-and-directories">Files and directories</h4>
+          <pre><code class="bash">mkdir &lt;dir_name&gt;   # Creates specified directory
+rmdir &lt;dir_name&gt;   # Removes empty directory
+rm &lt;file_name&gt;     # Removes file_name
+rm -r &lt;dir_name&gt;   # Removes directory including its contents, but asks for confirmation
+rm -rf &lt;dir_name&gt;  # Same as above, but turns confirmation off. Use with caution
+cp &lt;name&gt; &lt;path&gt;   # Copy file/directory as specified in path (-r to include content in directories)
+mv &lt;name1&gt; &lt;name2&gt; # Renames directories or files
+mv &lt;name&gt; &lt;path&gt;   # Moves file/directory as specified in path
+</code></pre>
+
+          <h4 id="copy-and-paste">Copy and paste</h4>
+          <p>The methods differ depending where you are.</p>
+          <ul>
+            <li>In a <strong>command line</strong> environment:</li>
+          </ul>
+          <p>
+            Cut last word with keyboard only<br />
+            <code>Ctrl+w</code><br />
+            Press multiple times to cut more than one word
+          </p>
+          <p>
+            Paste with keyboard only<br />
+            <code>Ctrl+y</code>
+          </p>
+          <ul>
+            <li>
+              In a non-command line <strong>desktop</strong> environment (e.g.
+              Firefox):
+            </li>
+          </ul>
+          <p>
+            Copy<br />
+            <code>Ctrl+c</code>
+          </p>
+          <p>
+            Paste<br />
+            <code>Ctrl+v</code>
+          </p>
+          <ul>
+            <li>
+              <strong>Command line</strong> &lt;-&gt;
+              <strong>desktop</strong> exchange:
+            </li>
+          </ul>
+          <p>
+            Copy text out of the command line and into the desktop:<br />
+            <code>Shift+Ctrl+c or Apple+c</code>
+          </p>
+          <p>
+            Paste text from the desktop into the command line:<br />
+            <code>Shift+Ctrl+v or Apple+v</code>
+          </p>
+          <ul>
+            <li>On any Linux desktop!</li>
+            <li>
+              Copy with mouse only
+              <ul>
+                <li>Simply select the text with the mouse</li>
+              </ul>
+            </li>
+            <li>
+              Paste with mouse only
+              <ul>
+                <li>
+                  Click the middle mouse button or both left/right buttons
+                  simultaneously
+                </li>
+              </ul>
+            </li>
+          </ul>
+          <h4 id="handy-shortcuts">Handy shortcuts</h4>
+          <ul>
+            <li>
+              At the command prompt:
+              <ul>
+                <li>up(down)_key - scrolls through command history</li>
+                <li>
+                  <code>history</code> shows all commands you have used recently
+                </li>
+              </ul>
+            </li>
+            <li>
+              Auto Completion:
+              <ul>
+                <li>
+                  &lt;something-incomplete&gt; TAB - completes
+                  program_path/file_name
+                </li>
+                <li>
+                  Taking control over the cursor (the pointer on the command
+                  line):
+                </li>
+              </ul>
+            </li>
+          </ul>
+          <pre><code class="bash">Ctrl+a    # Cursor to beginning of command line
+Ctrl+e    # Cursor to end of command line
+Ctrl+w    # Cut last word
+Ctrl+k    # Cut to the end of the line
+Ctrl+y    # Paste (&quot;yank&quot;) content that was cut earlier (by Ctrl-w or Ctrl-k)
+</code></pre>
+
+          <ul>
+            <li>When specifying file names:</li>
+            <li>
+              <code>.</code> (dot) - refers to the present working directory
+            </li>
+            <li>
+              <code>~</code> (tilde) or <code>~/</code> - refers to user's home
+              directory
+            </li>
+          </ul>
+          <h4 id="other-useful-unix-commands">Other Useful Unix Commands</h4>
+          <pre><code class="bash">df          # disk space
+free -g     # memory info in Megabytes
+uname -a    # shows tech info about machine
+bc          # command-line calculator (to exit type 'quit')
+wget ftp://ftp.ncbi.nih.... # file download from web
+/sbin/ifconfig # give IP and other network info
+ln -s &lt;original_filename&gt; &lt;new_filename&gt; # creates symbolic link to file or directory
+du -sh      # displays disk space usage of current directory
+du -sh *    # displays disk space usage of individual files/directories
+du -s * | sort -nr # shows disk space used by different directories/files sorted by size
+</code></pre>
+
+          <h4 id="unix-help">Unix Help</h4>
+          <pre><code class="bash">help &lt;command&gt;  # Show help for a Bash command
+man &lt;something&gt; # Show the manual page for a program (press the 'q' key to exit) 
+man wc          # Manual on program 'word count' wc
+wc --help       # Short help on wc
+soap -h         # For less standard programs 
+</code></pre>
+
+          <p>
+            Online help:
+            <a href="https://www.google.com/" target="_blank" rel="noopener"
+              >Google</a
+            >
+            is your friend.
+          </p>
+          <p>
+            Universally available Linux commands, with detailed examples and
+            explanations:
+            <a
+              href="https://www.linuxconfig.org/linux-commands"
+              target="_blank"
+              rel="noopener"
+              >https://www.linuxconfig.org/linux-commands</a
+            >
+          </p>
+          <h2 id="finding-files-directories-and-applications">
+            Finding files, directories and applications
+          </h2>
+          <pre><code class="bash">find -name &quot;*pattern*&quot;            # Searches for *pattern* in and below current directory
+find /usr/local -name &quot;*blast*&quot;   # Finds file names *blast* in specfied directory
+find /usr/local -iname &quot;*blast*&quot;  # Same as above, but case insensitive
+</code></pre>
+
+          <ul>
+            <li>
+              Additional useful arguments: -user &lt;user name&gt;, -group
+              &lt;group name&gt;, -ctime &lt;number of days ago changed&gt;
+            </li>
+          </ul>
+          <pre><code class="bash">find ~ -type f -mtime -2                # Finds all files you have modified in the last two days
+locate &lt;pattern&gt;                        # Finds files and dirs that are written into update file
+which &lt;application_name&gt;                # Location of application
+whereis &lt;application_name&gt;              # Searches for executables in set of directories
+yum list installed | grep &lt;mypattern&gt;   # Find CentOS packages and refine search with grep pattern
+</code></pre>
+
+          <h2 id="finding-things-in-files">Finding things in files</h2>
+          <pre><code class="bash">grep &lt;pattern&gt; &lt;file&gt;       # Provides lines in 'file' where pattern 'appears'
+                            # If pattern is shell function use single-quotes: '&gt;'
+
+
+grep -H &lt;pattern&gt;           # -H prints out file name in front of pattern
+grep 'pattern' &lt;file&gt; | wc  # pipes lines with pattern into word count wc (see chapter 8)
+                            # wc arguments: -c: show only bytes, -w: show only words,
+                            # -l: show only lines; help on regular expressions:
+                            # $ man 7 regex or man perlre
+
+
+find /home/my_dir -name '*.txt' | xargs grep -c ^.*  # Counts line numbers on many
+                            # files and records each count along with individual file
+                            # name; find and xargs are used to circumvent the Linux
+                            # wildcard limit to apply this function on thousands of files.
+</code></pre>
+
+          <h2 id="ownership-overview">Ownership Overview</h2>
+          <p>
+            In Linux (and Unix systems in general), access to files and
+            directories is controlled by a system of owners, groups, and
+            permission bits. Changing these settings is necessary to control
+            access by other users. The permission system also affects what files
+            can be executed.
+          </p>
+          <h2 id="ownership-levels">Ownership Levels</h2>
+          <ul>
+            <li>
+              <strong>user (u)</strong> - User ownership of a file/directory.
+              This user has the special right to change the permission bits and
+              group ownership.
+            </li>
+            <li>
+              <strong>group (g)</strong> - Group ownership of a file/directory.
+              Members of this group may be assigned greater access rights than
+              non-members.
+            </li>
+            <li>
+              <strong>other (o)</strong> - Everyone else that isn't the owning
+              user or from the owning group.
+            </li>
+          </ul>
+          <h2 id="permission-bits">Permission Bits</h2>
+          <p>
+            The elemental permissions in Linux/Unix are read, write, and
+            execute. Users and groups can have one many, or none of these
+            rights. Their meanings are as follows:
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>Letter</th>
+                <th>Number</th>
+                <th>File</th>
+                <th>Directory</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Read</td>
+                <td>r</td>
+                <td>4</td>
+                <td>View the contents</td>
+                <td>View the listings</td>
+              </tr>
+              <tr>
+                <td>Write</td>
+                <td>w</td>
+                <td>2</td>
+                <td>Modify the contents</td>
+                <td>Create a new file, or rename or delete existing files</td>
+              </tr>
+              <tr>
+                <td>Execute</td>
+                <td>x</td>
+                <td>1</td>
+                <td>Execute a program/script</td>
+                <td>Traversal rights</td>
+              </tr>
+            </tbody>
+          </table>
+          <h2 id="checking-permissions">Checking Permissions</h2>
+          <p>Annotated output for <code>ls -la</code>:</p>
+          <pre><code>---------- File type (d = directory, - = regular file, l = symlink)
+|--------- User permission triplet
+||  ------ Group permission triplet
+||  |  --- Other permission triplet
+||  |  |
+||  |  |       [user] [group]
+drwx-----x  61 aleong operations   4096 Feb 24 16:39 ./
+drwxr-xr-x 688 root   root       262144 Feb 24 11:05 ../
+drwx------   2 aleong operations   4096 Feb  2 22:45 .ssh/
+drwxr-xr-x   5 aleong operations   4096 Dec 12 15:57 Downloads/
+drwxr-xr-x   2 aleong operations   4096 Jan  9 16:29 bin/
+-rw-------   1 aleong operations   7960 Feb 23 18:37 .bash_history
+-rw-r--r--   1 aleong operations    306 Nov  3 15:08 .bashrc
+-rw-r--r--   1 aleong operations    677 Apr  8  2013 .profile
+-rw-r--r--   1 aleong operations    128 Nov 30 12:38 .tmux.conf
+-rw-r--r--   1 aleong operations  12126 Nov  2 13:14 .vimrc
+lrwxrwxrwx   1 aleong operations     23 Sep 12 10:49 bigdata -&gt; /bigdata/operations/aleong/
+-rw-r--r--   1 aleong operations   5657 Sep 19 11:31 bookmarks.html
+lrwxrwxrwx   1 aleong operations     23 Sep 12 10:49 shared -&gt; /bigdata/operations/shared/
+</code></pre>
+
+          <p>Assign write and execute permissions to user and group</p>
+          <p><code>chmod ug+rx my_file</code></p>
+          <p>To remove all permissions from all three user groups</p>
+          <pre><code class="bash">chmod ugo-rwx my_file
+            # '+' causes the permissions selected to be added
+            # '-' causes them to be removed
+            # '=' causes them to be the only permissions that the file has.
+
+chmod +rx public_html/ or $ chmod 755 public_html/ # Example for number system:
+</code></pre>
+
+          <h2 id="change-ownership">Change ownership</h2>
+          <pre><code class="bash">chown &lt;user&gt; &lt;file or dir&gt;         # changes user ownership
+chgrp &lt;group&gt; &lt;file or dir&gt;        # changes group ownership
+chown &lt;user&gt;:&lt;group&gt; &lt;file or dir&gt; # changes user &amp; group ownership
+</code></pre>
+
+          <h2 id="process-management">Process Management</h2>
+          <pre><code class="bash">top               # view top consumers of memory and CPU (press 1 to see per-CPU statistics)
+who               # Shows who is logged into system
+w                 # Shows which users are logged into system and what they are doing
+
+ps                        # Shows processes running by user
+ps -e                     # Shows all processes on system; try also '-a' and '-x' arguments
+ps aux | grep &lt;user_name&gt; # Shows all processes of one user
+ps ax --tree              # Shows the child-parent hierarchy of all processes
+ps -o %t -p &lt;pid&gt;         # Shows how long a particular process was running.
+                          # (E.g. 6-04:30:50 means 6 days 4 hours ...)
+
+Ctrl z &lt;enter&gt;       # Suspend (put to sleep) a process
+fg                   # Resume (wake up) a suspended process and brings it into foreground
+bg                   # Resume (wake up) a suspended process but keeps it running
+                     # in the background.
+
+Ctrl c               # Kills the process that is currently running in the foreground
+kill &lt;process-ID&gt;    # Kills a specific process
+kill -9 &lt;process-ID&gt; # NOTICE: &quot;kill -9&quot; is a very violent approach.
+                     # It does not give the process any time to perform cleanup procedures.
+kill -l                      # List all of the signals that can be sent to a proccess
+kill -s SIGSTOP &lt;process-ID&gt; # Suspend (put to sleep) a specific process
+kill -s SIGCONT &lt;process-ID&gt; # Resume (wake up) a specific process
+
+nice -n &lt;nice_value&gt; &lt;cmd&gt; # Run a program with lower priority. Be nice to other headnode users.
+                           # Higher &quot;nice&quot; values mean lower priority. Range 0-20
+renice -n &lt;priority_value&gt; &lt;process-ID&gt; # Changes the priority of an existing process.
+</code></pre>
+
+          <h4 id="more-on-terminating-processes">
+            More on Terminating Processes
+          </h4>
+          <p>
+            <a
+              href="https://www.digitalocean.com/community/tutorials/how-to-use-ps-kill-and-nice-to-manage-processes-in-linux"
+              target="_blank"
+              rel="noopener"
+              >DigitalOcean - How To Use ps, kill, and nice to Manage Processes
+              in Linux</a
+            >
+          </p>
+          <h2 id="vim-manual">Vim Manual</h2>
+          <h4 id="basics_1">Basics</h4>
+          <p>
+            <code>vim &lt;my_file_name&gt; # open/create file with vim</code>
+          </p>
+          <p>
+            Once you are in Vim the most important commands are <code>i</code> ,
+            <code>:</code> and <code>ESC</code>. The <code>i</code> key brings
+            you into the insert mode for typing. <code>ESC</code> brings you out
+            of there. And the <code>:</code> key starts the command mode at the
+            bottom of the screen. In the following text, all commands starting
+            with <code>:</code> need to be typed in the command mode. All other
+            commands are typed in the normal mode after hitting the
+            <code>ESC</code> key.
+          </p>
+          <p><strong>Modifier Keys to Control Vim</strong></p>
+          <pre><code class="bash">i   # INSERT MODE
+ESC # NORMAL (NON-EDITING) MODE
+:   # commands start with ':'
+:w  # save command; if you are in editing mode you have to hit ESC first!!
+:q  # quit file, don't save
+:q! # exits WITHOUT saving any changes you have made
+:wq # save and quit
+R   # replace MODE
+r   # replace only one character under cursor
+q:  # history of commands (from NORMAL MODE!), to reexecute one of them, select and hit enter!
+:w new_filename     # saves into new file
+:#,#w new_filename  # saves specific lines (#,#) to new file
+:#                  # go to specified line number
+</code></pre>
+
+          <h4 id="vim-help">Vim Help</h4>
+          <ul>
+            <li><strong>Online Help</strong></li>
+            <li>
+              Find help on the web. Google will find answers to most questions
+              on <strong>vi</strong> and <strong>vim</strong> (try searching for
+              both terms).
+            </li>
+            <li>
+              <a
+                href="https://engineering.purdue.edu/ECN/Support/KB/Docs/ViTextEditorTutorial"
+                target="_blank"
+                rel="noopener"
+                >Purdue University Vi Tutorial</a
+              >
+            </li>
+            <li>Animated Vim Tutorial: https://linuxconfig.org/vim-tutorial</li>
+            <li>
+              <p>Useful list of vim commands:</p>
+              <ul>
+                <li>
+                  <a
+                    href="http://www.fprintf.net/vimCheatSheet.html"
+                    target="_blank"
+                    rel="noopener"
+                    >Vim Commands Cheat Sheet</a
+                  >
+                </li>
+                <li>
+                  <a
+                    href="http://tnerual.eriogerg.free.fr/vimqrc.pdf"
+                    target="_blank"
+                    rel="noopener"
+                    >VimCard</a
+                  >
+                </li>
+              </ul>
+            </li>
+            <li>
+              <p><strong>Help from Command Line</strong></p>
+              <blockquote>
+                <p><code>vimtutor # open vim tutorial from shell</code></p>
+              </blockquote>
+            </li>
+            <li>
+              <p><strong>Help in Vim</strong></p>
+            </li>
+          </ul>
+          <pre><code class="bash">:help                # opens help within vim, hit :q to get back to your file
+:help &lt;topic&gt;        # opens help on specified topic
+:help_topic| CTRL-]  # when you are in help this command opens help topic specified between |...|,
+                     # CTRL-t brings you back to last topic
+:help &lt;topic&gt; CTRL-D # gives list of help topics that contain key word
+: &lt;up-down keys&gt;     # like in shell you get recent commands!!!!
+</code></pre>
+
+          <ul>
+            <li><strong>Moving Around in Files</strong></li>
+          </ul>
+          <pre><code class="bash">$        # moves cursor to end of line
+A        # same as $, but switches to insert mode
+0 (zero) # moves cursor to beginning of line
+CTRL-g   # shows at status line filename and the line you are on
+SHIFT-G  # brings you to bottom of file, type line number (isn't displayed) then SHIFT-G # brings you to specified line#
+</code></pre>
+
+          <ul>
+            <li><strong>Line Wrapping and Line Numbers</strong></li>
+          </ul>
+          <pre><code class="bash">:set nowrap # no word wrapping, :set wrap # back to wrapping
+:set number # shows line numbers, :set nonumber # back to no-number mode
+</code></pre>
+
+          <ul>
+            <li>
+              <strong>Working with Many Files &amp; Splitting Windows</strong>
+            </li>
+          </ul>
+          <pre><code class="bash">vim -o *.txt # opens many files at once and displays them with horizontal
+             # split, '-O' does vertical split
+vim *.txt    # opens many files at once; ':n' switches between files
+</code></pre>
+
+          <pre><code class="bash">:wall or :qall # write or quit all open files
+:args *.txt    # places all the relevant files in the argument list
+:all           # splits all files in the argument list (buffer) horizontally
+CTRL-w         # switch between windows
+:split         # shows same file in two windows
+:split &lt;file-to-open&gt; # opens second file in new window
+:vsplit        # splits windows vertically, very useful for tables, &quot;:set scrollbind&quot; let's you scroll all open windows simultaneously
+:close         # closes current window
+:only          # closes all windows except current one
+</code></pre>
+
+          <ul>
+            <li><strong>Spell Checking &amp; Dictionary</strong></li>
+          </ul>
+          <pre><code class="bash">:set spell # turns on spell checking
+:set nospell # turns spell checking off
+:! dict &lt;word&gt; # meaning of word
+:! wn 'word' -over # synonyms of word
+</code></pre>
+
+          <ul>
+            <li><strong>Enabling Syntax Highlighting</strong></li>
+          </ul>
+          <pre><code class="bash">:set filetype=perl # Turns on syntax coloring for a chosen programming language.
+:set syntax on # Turns syntax highlighting on
+:set syntax off # Turns syntax highlighting off
+</code></pre>
+
+          <ul>
+            <li><strong>Undo and Redo</strong></li>
+          </ul>
+          <pre><code class="bash">u      # undo last command
+U      # undo all changes on current line
+CTRL-R # redo one change which was undone
+</code></pre>
+
+          <ul>
+            <li><strong>Deleting Things</strong></li>
+          </ul>
+          <pre><code class="bash">x   # deletes what is under cursor
+dw  # deletes from curser to end of word including the space
+de  # deletes from curser to end of word NOT including the space
+cw  # deletes rest of word and lets you then insert, hit ESC to continue with NORMAL mode
+c$  # deletes rest of line and lets you then insert, hit ESC to continue with with NORMAL mode
+d$  # deletes from cursor to the end of the line
+dd  # deletes entire line
+2dd # deletes next two lines, continues: 3dd, 4dd and so on.
+</code></pre>
+
+          <ul>
+            <li><strong>Copy &amp; Paste</strong></li>
+          </ul>
+          <pre><code class="bash">yy # copies line, for copying several lines do 2yy, 3yy and so on
+p # pastes clipboard behind cursor
+</code></pre>
+
+          <ul>
+            <li><strong>Search in Files</strong></li>
+          </ul>
+          <pre><code class="bash">/my_pattern # searches for my_pattern downwards, type n for next match
+?my_pattern # seraches for my_pattern upwards, type n for next match
+:set ic # switches to ignore case search (case insensitive)
+:set hls # switches to highlight search (highlights search hits)
+</code></pre>
+
+          <ul>
+            <li>
+              <strong>Replacements with Regular Expression Support</strong>
+            </li>
+          </ul>
+          <p>
+            Great intro:
+            <a
+              href="http://www.scootersoftware.com/RegEx.html"
+              target="_blank"
+              rel="noopener"
+              >A Tao of Regular Expressions</a
+            >
+          </p>
+          <pre><code class="bash">:s/old_pat/new_pat/  # replaces first occurrence in a line
+:s/old_pat/new_pat/g  # replaces all occurrence in a line
+:s/old_pat/new_pat/gc  # add 'c' to ask for confirmation
+:#,#s/old_pat/new_pat/g  # replaces all occurrence between line numbers: #,#
+:%s/old_pat/new_pat/g  # replaces all occurrence in file
+:%s/\(pattern1\)\(pattern2\)/\1test\2/g  # regular expression to insert, you need here '\' in front of parentheses (&lt;# Perl)
+:%s/\(pattern.*\)/\1 my_tag/g  # appends something to line containing pattern (&lt;# .+ from Perl is .* in VIM)
+:%s/\(pattern\)\(.*\)/\1/g  # removes everything in lines after pattern
+:%s/\(At\dg\d\d\d\d\d\.\d\)\(.*\)/\1\t\2/g  # inserts tabs between At1g12345.1 and Description
+:%s/\n/new_pattern/g  # replaces return signs
+:%s/pattern/\r/g  # replace pattern with return signs!!
+:%s/\(\n\)/\1\1/g  # insert additional return signs
+:%s/\(^At\dg\d\d\d\d\d.\d\t.\{-}\t.\{-}\t.\{-}\t.\{-}\t\).\{-}\t/\1/g  # replaces content between 5th and 6th tab (5th column), '{-}' turns off 'greedy' behavior
+:#,#s/\( \{-} \|\.\|\n\)/\1/g  # performs simple word count in specified range of text
+:%s/\(E\{6,\}\)/&lt;font color=&quot;green&quot;&gt;\1&lt;\/font&gt;/g  # highlight pattern in html colors, here highlighting of &gt;= 6 occurences of Es
+:%s/\([A-Z]\)/\l\1/g  # change uppercase to lowercase, '%s/\([A-Z]\)/\u\1/g' does the opposite
+:g/my_pattern/ s/\([A-Z]\)/\l\1/g | copy $  # uses 'global' command to apply replace function only on those lines that match a certain pattern. The 'copy $' command after the pipe '|' prints all matching lines at the end of the file.
+:args *.txt | all | argdo %s/\old_pat/new_pat/ge | update  # command 'args' places all relevant files in the argument list (buffer); 'all' displays each file in separate split window; command 'argdo' applies replacement to all files in argument list (buffer); flag 'e' is necessary to avoid stop at error messages for files with no matches; command 'update' saves all changes to files that were updated.
+</code></pre>
+
+          <ul>
+            <li>
+              <p><strong>Useful Utilities in Vim</strong></p>
+            </li>
+            <li>
+              <p>Matching Parentheses</p>
+              <ul>
+                <li>
+                  Place cursor on (, [ or { and type % # cursor moves to
+                  matching parentheses
+                </li>
+              </ul>
+            </li>
+            <li>
+              <p>Printing and Inserting Files</p>
+              <ul>
+                <li><code>:ha # prints entire file</code></li>
+                <li><code>:#,#ha # prints specified lines: #,#</code></li>
+                <li>
+                  <code
+                    >:r &lt;filename&gt; # inserts content of specified file
+                    after cursor</code
+                  >
+                </li>
+              </ul>
+            </li>
+            <li>
+              <p>Convert Text File to HTML Format</p>
+              <ul>
+                <li>
+                  <code
+                    >:runtime! syntax/2html.vim # run this command with open
+                    file in Vim</code
+                  >
+                </li>
+              </ul>
+            </li>
+            <li>
+              <p>Shell Commands in Vim</p>
+              <ul>
+                <li>
+                  <code
+                    >:!&lt;SHELL_COMMAND&gt; &lt;ENTER&gt; # executes any shell
+                    command, hit &lt;enter&gt; to return</code
+                  >
+                </li>
+                <li>
+                  <code
+                    >:sh # switches window to shell, 'exit' switches back to
+                    vim</code
+                  >
+                </li>
+              </ul>
+            </li>
+            <li>
+              <p>Using Vim as Table Editor</p>
+              <ul>
+                <li>
+                  <code>v</code> starts visual mode for selecting characters
+                </li>
+                <li><code>V</code> starts visual mode for selecting lines`</li>
+                <li>
+                  <code>CTRL-V</code> starts visual mode for selecting blocks
+                  (use CTRL-q in gVim under Windows). This allows column-wise
+                  selections and operations like inserting and deleting columns.
+                  To restrict substitute commands to a column, one can select it
+                  and switch to the command-line by typing <code>:</code>. After
+                  this the substitution syntax for a selected block looks like
+                  this: <code>'&lt;,'&gt;s///.</code>
+                </li>
+                <li>
+                  <code>:set scrollbind</code> starts simultaneous scrolling of
+                  'vsplitted' files. To set to horizontal binding of files, use
+                  command <code>:set scrollopt=hor</code> (after first one). Run
+                  all these commands before the <code>:split</code> command.
+                </li>
+                <li>
+                  <code>:AlignCtrl I= \t then :%Align</code> This allows to
+                  align tables by column separators (here '\t') when the
+                  <a
+                    href="http://vim.sourceforge.net/scripts/script.php?script_id=294"
+                    target="_blank"
+                    rel="noopener"
+                    >Align utility from Charles Campbell's</a
+                  >
+                  is installed. To sort table rows by selected lines or block,
+                  perform the visual select and then hit F3 key. The rest is
+                  interactive. To enable this function, one has to include in
+                  the <code>.vimrc</code> file the
+                  <a
+                    href="https://cluster.hpcc.ucr.edu/%7Etgirke/Documents/UNIX/vim/vim_sort_fct.txt"
+                    target="_blank"
+                    rel="noopener"
+                    >Vim sort script</a
+                  >
+                  from Gerald Lai.
+                </li>
+              </ul>
+            </li>
+            <li>
+              <p><strong>Modify Vim Settings</strong></p>
+            </li>
+          </ul>
+          <p>
+            The default settings in Vim are controlled by the
+            <code>.vimrc</code> file in your home directory.
+          </p>
+          <ul>
+            <li>see last chapter of vimtutor (start from shell)</li>
+            <li>
+              useful
+              <a
+                href="http://phuzz.org/vimrc.html"
+                target="_blank"
+                rel="noopener"
+                >.vimrc sample</a
+              >
+            </li>
+            <li>
+              when vim starts to respond very slowly then one may need to delete
+              the <code>.viminf*</code> files in home directory
+            </li>
+          </ul>
+          <h2 id="text-viewing">Text Viewing</h2>
+          <pre><code class="bash">more &lt;my_file&gt;  # views text, use space bar to browse, hit 'q' to exit
+less &lt;my_file&gt;  # a more versatile text viewer than 'more', 'q' exits, 'G' moves to end of text,
+                # 'g' to beginning, '/' find forward, '?' find backwards
+cat  &lt;my_file&gt;  # concatenates files and prints content to standard output
+</code></pre>
+
+          <h2 id="text-editors">Text Editors</h2>
+          <ul>
+            <li><strong>Vi</strong> and <strong>Vim</strong></li>
+            <li>
+              Non-graphical (terminal-based) editor. Vi is guaranteed to be
+              available on any system. Vim is the improved version of vi.
+            </li>
+            <li><strong>Emacs</strong></li>
+            <li>
+              Non-graphical or window-based editor. You still need to know
+              keystroke commands to use it. Installed on all Linux distributions
+              and on most other Unix systems.
+            </li>
+            <li><strong>XEmacs</strong></li>
+            <li>
+              More sophisticated version of emacs, but usually not installed by
+              default. All common commands are available from menus. Very
+              powerful editor, with built-in syntax checking, Web-browsing,
+              news-reading, manual-page browsing, etc.
+            </li>
+            <li><strong>Pico</strong></li>
+            <li>
+              Simple terminal-based editor available on most versions of Unix.
+              Uses keystroke commands, but they are listed in logical fashion at
+              bottom of screen.
+            </li>
+            <li><strong>Nano</strong></li>
+            <li>
+              A simple terminal-based editor which is default on modern Debian
+              systems.
+            </li>
+          </ul>
+          <h2 id="the-unix-shell">The Unix Shell</h2>
+          <p>
+            When you log into UNIX/LINUX system, then is starts a program called
+            the Shell. It provides you with a working environment and interface
+            to the operating system. Usually there are several different shell
+            programs installed. The shell program bash is one of the most common
+            ones.
+          </p>
+          <pre><code class="bash">finger &lt;user_name&gt; # shows which shell you are using
+chsh -l # gives list of shell programs available on your system (does not work on all UNIX variants)
+&lt;shell_name&gt; # switches to different shell
+</code></pre>
+
+          <h4 id="stdin-stdout-stderr-redirections-and-wildcards">
+            STDIN, STDOUT, STDERR, Redirections, and Wildcards
+          </h4>
+          <p>
+            See
+            <a
+              href="http://www.tldp.org/HOWTO/Bash-Prog-Intro-HOWTO-3.html"
+              target="_blank"
+              rel="noopener"
+              >LINUX HOWTOs</a
+            >
+          </p>
+          <p>
+            By default, UNIX commands read from standard input (STDIN) and send
+            their output to standard out (STDOUT).
+          </p>
+          <p>You can redirect them by using the following commands:</p>
+          <pre><code class="bash">&lt;beginning-of-filename&gt;*         # * is wildcard to specify many files
+ls &gt; file                        # prints ls output into specified file
+command &lt; my_file                # uses file after '&lt;' as STDIN
+command &gt;&gt; my_file               # appends output of one command to file
+command | tee my_file            # writes STDOUT to file and prints it to screen
+command &gt; my_file; cat my_file   # writes STDOUT to file and prints it to screen
+command &gt; /dev/null              # turns off progress info of applications by redirecting
+                                 # their output to /dev/null
+grep my_pattern my_file | wc     # Pipes (|) output of 'grep' into 'wc'
+grep my_pattern my_non_existing_file 2 &gt; my_stderr # prints STDERR to file
+</code></pre>
+
+          <h4 id="useful-shell-commands">Useful shell commands</h4>
+          <pre><code class="bash">cat &lt;file1&gt; &lt;file2&gt; &gt; &lt;cat.out&gt;      # concatenate files in output file 'cat.out'
+paste &lt;file1&gt; &lt;file2&gt; &gt; &lt;paste.out&gt;  # merges lines of files and separates them by tabs (useful for tables)
+cmp &lt;file1&gt; &lt;file2&gt;                  # tells you whether two files are identical
+diff &lt;fileA&gt; &lt;fileB&gt;                 # finds differences between two files
+head -&lt;number&gt; &lt;file&gt;                # prints first lines of a file
+tail -&lt;number&gt; &lt;file&gt;                # prints last lines of a file
+split -l &lt;number&gt; &lt;file&gt;             # splits lines of file into many smaller ones
+csplit -f out fasta_batch &quot;%^&gt;%&quot; &quot;/^&gt;/&quot; &quot;{*}&quot; # splits fasta batch file into many files
+                                     # at '&gt;'
+sort &lt;file&gt;                          # sorts single file, many files and can merge (-m)
+                                     # them, -b ignores leading white space, ...
+sort -k 2,2 -k 3,3n input_file &gt; output_file # sorts in table column 2 alphabetically and
+                                     # column 3 numerically, '-k' for column, '-n' for
+                                     # numeric
+sort input_file | uniq &gt; output_file # uniq command removes duplicates and creates file/table
+                                     # with unique lines/fields
+join -1 1 -2 1 &lt;table1&gt; &lt;table2&gt;     # joins two tables based on specified column numbers
+                                     # (-1 file1, 1: col1; -2: file2, col2). It assumes
+                                     # that join fields are sorted. If that is not the case,
+                                     # use the next command:
+sort table1 &gt; table1a; sort table2 &gt; table2a; join -a 1 -t &quot;$(echo -e '\t')&quot; table1a table2a &gt; table3                               # '-a &lt;table&gt;' prints all lines of specified table!
+                                     # Default prints only all lines the two tables have in
+                                     # common. '-t &quot;$(echo -e '\t')&quot; -&gt;' forces join to
+                                     # use tabs as field separator in its output. Default is
+                                     # space(s)!!!
+cat my_table | cut -d , -f1-3        # cut command prints only specified sections of a table,
+                                     # -d specifies here comma as column separator (tab is
+                                     # default), -f specifies column numbers.
+grep                                 # see chapter 4
+egrep                                # see chapter 4
+</code></pre>
+
+          <h2 id="screen">Screen</h2>
+          <p>Screen references</p>
+          <ol>
+            <li>
+              <a
+                href="http://fosswire.com/post/2008/08/video-tutorial-getting-started-with-gnu-screen/"
+                target="_blank"
+                rel="noopener"
+                >Screen Turorial</a
+              >
+            </li>
+            <li>
+              <a
+                href="http://aperiodic.net/screen/quick_reference"
+                target="_blank"
+                rel="noopener"
+                >Screen Cheat Sheet</a
+              >
+            </li>
+          </ol>
+          <h4 id="starting-a-new-screen-session">
+            Starting a New Screen Session
+          </h4>
+          <pre><code class="bash">screen                 # Start a new session
+screen -S &lt;some-name&gt;  # Start a new session and gives it a name
+</code></pre>
+
+          <p>Commands to Control Screen</p>
+          <pre><code class="bash">Ctrl-a d #  Detach from the screen session
+Ctrl-a c # Create a new window inside the screen session
+Ctrl-a Space # Switch to the next window
+Ctrl-a a # Switch to the window that you were previously on
+Ctrl-a &quot; # List all open windows. Double-quotes &quot; are typed with the Shift key
+Ctrl-d or type exit # Exit out of the current window. Exiting form the last window will end the screen session
+Ctrl-a [ # Enters the scrolling mode. Use Page Up and Page Down keys to scroll through the window. Hit the Enter key twice to return to normal mode. 
+</code></pre>
+
+          <h4 id="attaching-to-screen-sessions">
+            Attaching to Screen Sessions
+          </h4>
+          <p>
+            From any computer, you can attach to a screen session after SSH-ing
+            into a server.
+          </p>
+          <pre><code class="bash">screen -r              # Attaches to an existing session, if there is only one
+screen -r              # Lists available sessions and their names, if there are more then one session running
+screen -r &lt;some-name&gt;  # Attaches to a specific session
+screen -r &lt;first-few-letters-of-name&gt; # Type just the first few letters of the name
+                       # and you will be attached to the session you need
+</code></pre>
+
+          <h4 id="destroying-screen-sessions">Destroying Screen Sessions</h4>
+          <ol>
+            <li>
+              Terminate all programs that are running in the screen session. The
+              standard way to do that is: <code>Ctrl-c</code>
+            </li>
+            <li>Exit out of your shell: <code>exit</code></li>
+            <li>
+              Repeat steps 1 and 2 until you see the message:
+              <code>[screen is terminating]</code>
+            </li>
+          </ol>
+          <p>
+            There may be programs running in different windows of the same
+            screen session. That's why you may need to terminate programs and
+            exit shells multiple time.
+          </p>
+          <h4 id="tabs-and-a-reasonably-large-history-buffer">
+            Tabs and a Reasonably Large History Buffer
+          </h4>
+          <p>For a better experience with screen, run</p>
+          <pre><code class="bash">cp ~/.screenrc ~/.screenrc.backup 2&gt; /dev/null
+echo 'startup_message off
+defscrollback 10240
+caption always &quot;%{=b dy}{ %{= dm}%H %{=b dy}}%={ %?%{= dc}%-Lw%?%{+b dy}(%{-b r}%n:%t%{+b dy})%?(%u)%?%{-dc}%?%{= dc}%+Lw%? %{=b dy}}&quot;
+' &gt; ~/.screenrc
+</code></pre>
+
+          <h2 id="simple-one-liner-shell-scripts">
+            Simple One-Liner Shell Scripts
+          </h2>
+          <p>
+            Web page for
+            <a
+              href="http://linuxcommand.org/script_library.php"
+              target="_blank"
+              rel="noopener"
+              >script download</a
+            >.
+          </p>
+          <p>
+            Renames many files <em>.old to </em>.new. To test things first,
+            replace 'do mv' with 'do echo mv':
+          </p>
+          <pre><code class="bash">for i in *.input; do mv $i ${i/\.old/\.new}; done
+for i in *\ *; do mv &quot;$i&quot; &quot;${i// /_}&quot;; done # Replaces spaces in files by underscores
+</code></pre>
+
+          <p>Run an application in loops on many input files:</p>
+          <pre><code class="bash">for i in *.input; do ./application $i; done
+</code></pre>
+
+          <p>
+            Run fastacmd from BLAST program in loops on many
+            <em>.input files and create corresponding </em>.out files:
+          </p>
+          <pre><code class="bash">for i in *.input; do fastacmd -d /data/../database_name -i $i &gt; $i.out; done
+</code></pre>
+
+          <p>Run SAM's target99 on many input files:</p>
+          <pre><code class="bash">for i in *.pep; do target99 -db /usr/../database_name -seed $i -out $i; done
+Search in many files for a pattern and print occurrences together with file names.
+for j in 0 1 2 3 4 5 6 7 8 9; do grep -iH &lt;my_pattern&gt; *$j.seq; done
+</code></pre>
+
+          <p>
+            Example of how to run an interactive application (tmpred) that asks
+            for file name input/output:
+          </p>
+          <pre><code class="bash">for i in *.pep; do echo -e &quot;$i\n\n17\n33\n\n\n&quot; | ./tmpred $i &gt; $i.out; done
+</code></pre>
+
+          <p>
+            Run BLAST2 for all <em>.fasa1/</em>.fasta2 file pairs in the order
+            specified by file names and write results into one file:
+          </p>
+          <pre><code class="bash">for i in *.fasta1; do blast2 -p blastp -i $i -j ${i/_*fasta1/_*fasta2} &gt;&gt; my_out_file; done
+</code></pre>
+
+          <pre><code>This example uses two variables in a for loop. The content of the second variable gets specified in each loop by a replace function.
+</code></pre>
+          <p>
+            Runs BLAST2 in all-against-all mode and writes results into one file
+            ('-F F' turns low-complexity filter off):
+          </p>
+          <pre><code class="bash">for i in *.fasta; do for j in *.fasta; do blast2 -p blastp -F F -i $i -j $j &gt;&gt; my_out_file; done; done;
+</code></pre>
+
+          <h2 id="simple-one-liner-perl-scripts">
+            Simple One-Liner Perl Scripts
+          </h2>
+          <p><em>Small collection of useful one-liners:</em></p>
+          <pre><code class="perl">perl -p -i -w -e 's/pattern1/pattern2/g' my_input_file
+            # Replaces a pattern in a file by a another pattern using regular expressions.
+            # $1 or \1: back-references to pattern placed in parentheses
+            # -p: lets perl know to write program
+            # -i.bak: creates backup file *.bak, only -i doesn't
+            # -w: turns on warnings
+            # -e: executable code follows
+</code></pre>
+
+          <p><em>Parse lines based on patterns:</em></p>
+          <pre><code class="perl">perl -ne 'print if (/my_pattern1/ ? ($c=1) : (--$c &gt; 0)); print if (/my_pattern2/ ? ($d = 1) : (--$d &gt; 0))' my_infile &gt; my_outfile
+            # Parses lines that contain pattern1 and pattern2.
+            # The following lines after the pattern can be specified in '$c=1' and '$d=1'.
+            # For logical OR use this syntax: '/(pattern1|pattern2)/'.
+</code></pre>
+
+          <h2 id="ssh">SSH</h2>
+          <p>
+            SSH is the main protocal used to communicate with or establish a
+            terminal on remote systems.
+          </p>
+          <h4 id="example">Example</h4>
+          <pre><code class="bash">ssh &lt;username&gt;@&lt;remote-address&gt;
+</code></pre>
+
+          <p>
+            If you want to use a specific ssh key for this connection use the
+            <code>-i</code> flag.
+          </p>
+          <pre><code class="bash">ssh -i ~/.ssh/mykey &lt;username&gt;@&lt;remote-address&gt;
+</code></pre>
+
+          <p>
+            If your username on the remote system is the same as your local
+            username then you can omit the username from the command.
+          </p>
+          <h4 id="passwordless-login">Passwordless login.</h4>
+          <p>
+            You can use ssh (RSA) keys to login with out the need for a
+            password. (this is much quicker and very useful)
+          </p>
+          <ul>
+            <li>Generate your ssh keys <code>ssh-keygen</code></li>
+            <li>
+              Enter a blank password when asked in order to have a passwordless
+              key
+            </li>
+            <li>
+              By default the key will be stored as <code>.ssh/id_rsa</code>
+              <ul>
+                <li>You can change this path to which ever you like</li>
+              </ul>
+            </li>
+            <li>
+              Copy the public key to the remote system (there is now a tool for
+              this)
+            </li>
+            <li>
+              <code>ssh-copy-id &lt;username&gt;@&lt;remote-system&gt;</code>
+            </li>
+            <li>
+              You can pass the <code>-i</code> flag to this command to copy a
+              specific public key.
+            </li>
+            <li>
+              This places your public key into the the file
+              <code>.ssh/authorized_keys</code> on the remote system.
+            </li>
+            <li>You can do this manually if you like.</li>
+          </ul>
+          <p>Once this is complete you can login without a password.</p>
+          <h4 id="ssh-remote-commands">SSH remote commands</h4>
+          <p>Often you may want to just run a command on the remote system.</p>
+          <p>
+            Just put the command or muplitple commands surounded by quotes after
+            the ssh command
+          </p>
+          <pre><code class="bash">ssh &lt;username&gt;@&lt;remote-host&gt; &lt;command-you-want-to-run&gt;
+
+ssh &lt;username&gt;@&lt;remote-host&gt; &quot;&lt;command-you-want-to-run&gt;; &lt;command-you-want-to-run&gt;; &lt;command-you-want-to-run&gt;&quot;
+</code></pre>
+
+          <h2 id="remote-copy-wget-scp-ncftp">Remote Copy: wget, scp, ncftp</h2>
+          <h4 id="wget">Wget</h4>
+          <p>Use wget to download a file from the web:</p>
+          <pre><code class="bash">wget ftp://ftp.ncbi.nih.... # file download from www; add option '-r' to download entire directories
+</code></pre>
+
+          <h4 id="scp">SCP</h4>
+          <p>Use scp to copy files between machines (ie. laptop to server):</p>
+          <pre><code class="bash">scp source target # Use form 'userid@machine_name' if your local and remote user ids are different.
+                  # If they are the same you can use only 'machine_name'.
+</code></pre>
+
+          <p>Here are more scp examples:</p>
+          <pre><code class="bash">scp user@remote_host:file.name . # Copies file from server to local machine (type from local
+                                 # machine prompt). The '.' copies to pwd, you can specify                                              # here any directory, use wildcards to copy many files.
+
+scp file.name user@remote_host:~/dir/newfile.name
+                                                                       # Copies file from local machine to server.
+
+scp -r user@remote_host:directory/ ~/dir
+                                 # Copies entire directory from server to local machine.
+</code></pre>
+
+          <h4 id="nice-ftp">Nice FTP</h4>
+          <p>From the linux command line run ncftp and use it to get files:</p>
+          <pre><code class="bash">ncftp
+ncftp&gt; open ftp.ncbi.nih.gov
+ncftp&gt; cd /blast/executables
+ncftp&gt; get blast.linux.tar.Z (skip extension: @)
+ncftp&gt; bye
+</code></pre>
+
+          <h2 id="archiving-and-compressing">Archiving and Compressing</h2>
+          <h4 id="creating-archives">Creating Archives</h4>
+          <pre><code class="bash">tar -cvf my_file.tar mydir/    # Builds tar archive of files or directories. For directories, execute command in parent directory. Don't use absolute path.    
+tar -czvf my_file.tgz mydir/   # Builds tar archive with compression of files or directories. For
+                               # directories, execute command in parent directory. Don't use absolute path.
+zip -r mydir.zip mydir/        # Command to archive a directory (here mydir) with zip.
+tar -jcvf mydir.tar.bz2 mydir/ # Creates *.tar.bz2 archive
+</code></pre>
+
+          <h4 id="viewing-archives">Viewing Archives</h4>
+          <pre><code class="bash">tar -tvf my_file.tar
+tar -tzvf my_file.tgz
+</code></pre>
+
+          <h4 id="extracting-archives">Extracting Archives</h4>
+          <pre><code class="bash">tar -xvf my_file.tar
+tar -xzvf my_file.tgz
+gunzip my_file.tar.gz # or unzip my_file.zip, uncompress my_file.Z,
+                      # or bunzip2 for file.tar.bz2
+find -name '*.zip' | xargs -n 1 unzip # this command usually works for unzipping
+                      # many files that were compressed under Windows
+tar -jxvf mydir.tar.bz2 # Extracts *.tar.bz2 archive
+</code></pre>
+
+          <p>Try also:</p>
+          <pre><code class="bash">tar zxf blast.linux.tar.Z
+tar xvzf file.tgz
+</code></pre>
+
+          <p>Important options:</p>
+          <pre><code class="bash">f: use archive file
+p: preserve permissions
+v: list files processed
+x: exclude files listed in FILE
+z: filter the archive through gzip 
+</code></pre>
+
+          <h2 id="environment-variables">Environment Variables</h2>
+          <pre><code class="bash">xhost user@host                # adds X permissions for user on server.
+echo $DISPLAY                  # shows current display settings
+export DISPLAY=&lt;local_IP&gt;:0    # change environment variable
+unsetenv DISPLAY               # removes display variable
+env                            # prints all environment variables
+</code></pre>
+
+          <p>
+            List of directories that the shell will search when you type a
+            command:
+          </p>
+          <pre><code class="bash">echo $PATH
+</code></pre>
+
+          <p>
+            You can edit your default DISPLAY setting for your account by adding
+            it to file .bash_profile
+          </p>
+        </article>
+      </div>
+    </main>
+
+    <footer class="section-dark">
+      <div class="container text-center">
+        <p class="footer-note">
+          Originally published 2018-2019 on the legacy HPC documentation site,
+          preserved here in full. |
+          <a href="index.html" class="subtle-link">Field Manual</a> |
+          <a href="../index.html" class="subtle-link"
+            >charles-forsyth.github.io</a
+          >
+        </p>
+      </div>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+      document.querySelectorAll('pre code').forEach(function (el) {
+        {
+          if (el.className === 'c++') el.className = 'language-cpp';
+          else if (el.className && el.className.indexOf('language-') !== 0)
+            el.className = 'language-' + el.className;
+          hljs.highlightElement(el);
+        }
+      });
+    </script>
+  </body>
+</html>

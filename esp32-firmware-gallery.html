@@ -1,339 +1,387 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ESP32 Cyber-Physical Edge Firmware Suite | Charles Forsyth</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Inter:wght@300;400;600;700&display=swap');
-        
-        :root {
-            --bg-color: #090c0e;
-            --panel-bg: rgba(18, 24, 28, 0.85);
-            --border-color: #2a4232;
-            --accent: #00ff41;
-            --accent-glow: rgba(0, 255, 65, 0.35);
-            --secondary: #00a8ff;
-            --khaki: #d4b886;
-            --text-main: #e4ebe6;
-            --text-muted: #8a9e91;
-            --code-bg: #07090b;
-        }
+      @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Inter:wght@300;400;600;700&display=swap');
 
-        * { box-sizing: border-box; }
+      :root {
+        --bg-color: #090c0e;
+        --panel-bg: rgba(18, 24, 28, 0.85);
+        --border-color: #2a4232;
+        --accent: #00ff41;
+        --accent-glow: rgba(0, 255, 65, 0.35);
+        --secondary: #00a8ff;
+        --khaki: #d4b886;
+        --text-main: #e4ebe6;
+        --text-muted: #8a9e91;
+        --code-bg: #07090b;
+      }
 
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            font-family: 'Inter', sans-serif;
-            overflow-x: hidden;
-            line-height: 1.6;
-        }
+      * {
+        box-sizing: border-box;
+      }
 
-        .mono {
-            font-family: 'Share Tech Mono', monospace;
-        }
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: var(--bg-color);
+        color: var(--text-main);
+        font-family: 'Inter', sans-serif;
+        overflow-x: hidden;
+        line-height: 1.6;
+      }
 
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 40px 20px;
-            position: relative;
-            z-index: 1;
-        }
+      .mono {
+        font-family: 'Share Tech Mono', monospace;
+      }
 
-        header {
-            text-align: center;
-            margin-bottom: 40px;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 30px;
-        }
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 40px 20px;
+        position: relative;
+        z-index: 1;
+      }
 
-        h1 {
-            font-family: 'Share Tech Mono', monospace;
-            color: var(--accent);
-            font-size: 2.6rem;
-            letter-spacing: 1.5px;
-            text-shadow: 0 0 15px var(--accent-glow);
-            margin-bottom: 8px;
-        }
+      header {
+        text-align: center;
+        margin-bottom: 40px;
+        border-bottom: 1px solid var(--border-color);
+        padding-bottom: 30px;
+      }
 
-        .subtitle {
-            color: var(--secondary);
-            font-family: 'Share Tech Mono', monospace;
-            font-size: 1.1rem;
-            letter-spacing: 1px;
-        }
+      h1 {
+        font-family: 'Share Tech Mono', monospace;
+        color: var(--accent);
+        font-size: 2.6rem;
+        letter-spacing: 1.5px;
+        text-shadow: 0 0 15px var(--accent-glow);
+        margin-bottom: 8px;
+      }
 
-        .intro-text {
-            max-width: 800px;
-            margin: 20px auto 0;
-            color: var(--text-muted);
-            font-size: 0.95rem;
-        }
+      .subtitle {
+        color: var(--secondary);
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 1.1rem;
+        letter-spacing: 1px;
+      }
 
-        .nav-links {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 30px;
-            font-family: 'Share Tech Mono', monospace;
-        }
+      .intro-text {
+        max-width: 800px;
+        margin: 20px auto 0;
+        color: var(--text-muted);
+        font-size: 0.95rem;
+      }
 
-        .nav-btn {
-            color: var(--text-main);
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            transition: color 0.2s;
-            font-size: 0.9rem;
-        }
+      .nav-links {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+        font-family: 'Share Tech Mono', monospace;
+      }
 
-        .nav-btn:hover {
-            color: var(--accent);
-        }
+      .nav-btn {
+        color: var(--text-main);
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        transition: color 0.2s;
+        font-size: 0.9rem;
+      }
 
-        /* Filter Pills */
-        .filter-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            justify-content: center;
-            margin-bottom: 35px;
-        }
+      .nav-btn:hover {
+        color: var(--accent);
+      }
 
-        .filter-btn {
-            background: rgba(42, 66, 50, 0.4);
-            border: 1px solid var(--border-color);
-            color: var(--text-muted);
-            padding: 6px 16px;
-            border-radius: 20px;
-            font-family: 'Share Tech Mono', monospace;
-            font-size: 0.85rem;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
+      /* Filter Pills */
+      .filter-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: center;
+        margin-bottom: 35px;
+      }
 
-        .filter-btn.active, .filter-btn:hover {
-            background: rgba(0, 255, 65, 0.15);
-            border-color: var(--accent);
-            color: var(--accent);
-            box-shadow: 0 0 10px var(--accent-glow);
-        }
+      .filter-btn {
+        background: rgba(42, 66, 50, 0.4);
+        border: 1px solid var(--border-color);
+        color: var(--text-muted);
+        padding: 6px 16px;
+        border-radius: 20px;
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
 
-        /* Firmware Cards Grid */
-        .firmware-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 28px;
-        }
+      .filter-btn.active,
+      .filter-btn:hover {
+        background: rgba(0, 255, 65, 0.15);
+        border-color: var(--accent);
+        color: var(--accent);
+        box-shadow: 0 0 10px var(--accent-glow);
+      }
 
-        .firmware-card {
-            background: var(--panel-bg);
-            border: 1px solid var(--border-color);
-            border-left: 4px solid var(--accent);
-            border-radius: 8px;
-            padding: 26px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-            backdrop-filter: blur(10px);
-            transition: border-color 0.2s, box-shadow 0.2s;
-        }
+      /* Firmware Cards Grid */
+      .firmware-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 28px;
+      }
 
-        .firmware-card:hover {
-            border-color: var(--accent);
-            box-shadow: 0 6px 25px rgba(0, 255, 65, 0.15);
-        }
+      .firmware-card {
+        background: var(--panel-bg);
+        border: 1px solid var(--border-color);
+        border-left: 4px solid var(--accent);
+        border-radius: 8px;
+        padding: 26px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(10px);
+        transition:
+          border-color 0.2s,
+          box-shadow 0.2s;
+      }
 
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            flex-wrap: wrap;
-            gap: 12px;
-            margin-bottom: 12px;
-        }
+      .firmware-card:hover {
+        border-color: var(--accent);
+        box-shadow: 0 6px 25px rgba(0, 255, 65, 0.15);
+      }
 
-        .card-title {
-            font-family: 'Share Tech Mono', monospace;
-            font-size: 1.45rem;
-            color: #ffffff;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin: 0;
-        }
+      .card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
 
-        .version-badge {
-            background: rgba(0, 168, 255, 0.15);
-            color: var(--secondary);
-            border: 1px solid var(--secondary);
-            padding: 3px 10px;
-            border-radius: 12px;
-            font-family: 'Share Tech Mono', monospace;
-            font-size: 0.75rem;
-        }
+      .card-title {
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 1.45rem;
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 0;
+      }
 
-        .card-desc {
-            color: #b0bec5;
-            font-size: 0.95rem;
-            margin-bottom: 16px;
-        }
+      .version-badge {
+        background: rgba(0, 168, 255, 0.15);
+        color: var(--secondary);
+        border: 1px solid var(--secondary);
+        padding: 3px 10px;
+        border-radius: 12px;
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 0.75rem;
+      }
 
-        .hardware-meta {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-bottom: 18px;
-        }
+      .card-desc {
+        color: #b0bec5;
+        font-size: 0.95rem;
+        margin-bottom: 16px;
+      }
 
-        .meta-tag {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            padding: 4px 10px;
-            border-radius: 4px;
-            font-family: 'Share Tech Mono', monospace;
-            font-size: 0.78rem;
-            color: var(--khaki);
-        }
+      .hardware-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 18px;
+      }
 
-        /* Code Viewer Accordion */
-        .code-accordion-btn {
-            background: #141b20;
-            border: 1px solid var(--border-color);
-            color: var(--accent);
-            font-family: 'Share Tech Mono', monospace;
-            padding: 10px 16px;
-            width: 100%;
-            text-align: left;
-            border-radius: 6px;
-            cursor: pointer;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 0.9rem;
-            transition: all 0.2s;
-        }
+      .meta-tag {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        padding: 4px 10px;
+        border-radius: 4px;
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 0.78rem;
+        color: var(--khaki);
+      }
 
-        .code-accordion-btn:hover {
-            background: #1c262d;
-            border-color: var(--accent);
-        }
+      /* Code Viewer Accordion */
+      .code-accordion-btn {
+        background: #141b20;
+        border: 1px solid var(--border-color);
+        color: var(--accent);
+        font-family: 'Share Tech Mono', monospace;
+        padding: 10px 16px;
+        width: 100%;
+        text-align: left;
+        border-radius: 6px;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.9rem;
+        transition: all 0.2s;
+      }
 
-        .code-box {
-            display: none;
-            margin-top: 12px;
-            background: var(--code-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 16px;
-            position: relative;
-            overflow-x: auto;
-        }
+      .code-accordion-btn:hover {
+        background: #1c262d;
+        border-color: var(--accent);
+      }
 
-        .code-box.open {
-            display: block;
-        }
+      .code-box {
+        display: none;
+        margin-top: 12px;
+        background: var(--code-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 16px;
+        position: relative;
+        overflow-x: auto;
+      }
 
-        .code-box pre {
-            margin: 0;
-            font-family: 'Share Tech Mono', monospace;
-            font-size: 0.82rem;
-            color: #c9d1d9;
-            line-height: 1.45;
-        }
+      .code-box.open {
+        display: block;
+      }
 
-        .copy-btn {
-            position: absolute;
-            top: 12px;
-            right: 12px;
-            background: rgba(0, 255, 65, 0.15);
-            border: 1px solid var(--accent);
-            color: var(--accent);
-            padding: 4px 10px;
-            border-radius: 4px;
-            font-family: 'Share Tech Mono', monospace;
-            font-size: 0.75rem;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
+      .code-box pre {
+        margin: 0;
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 0.82rem;
+        color: #c9d1d9;
+        line-height: 1.45;
+      }
 
-        .copy-btn:hover {
-            background: var(--accent);
-            color: #000;
-        }
+      .copy-btn {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        background: rgba(0, 255, 65, 0.15);
+        border: 1px solid var(--accent);
+        color: var(--accent);
+        padding: 4px 10px;
+        border-radius: 4px;
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 0.75rem;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
 
-        footer {
-            text-align: center;
-            margin-top: 60px;
-            padding-top: 25px;
-            border-top: 1px solid var(--border-color);
-            color: var(--text-muted);
-            font-size: 0.85rem;
-            font-family: 'Share Tech Mono', monospace;
-        }
+      .copy-btn:hover {
+        background: var(--accent);
+        color: #000;
+      }
+
+      footer {
+        text-align: center;
+        margin-top: 60px;
+        padding-top: 25px;
+        border-top: 1px solid var(--border-color);
+        color: var(--text-muted);
+        font-size: 0.85rem;
+        font-family: 'Share Tech Mono', monospace;
+      }
     </style>
-</head>
-<body>
-
+  </head>
+  <body>
     <div class="container">
-        <!-- Navigation -->
-        <div class="nav-links">
-            <a href="index.html" class="nav-btn"><i class="fas fa-arrow-left"></i> RETURN TO PORTFOLIO</a>
-            <a href="sigint-data-lake.html" class="nav-btn">VIEW OMNET ARCHITECTURE <i class="fas fa-arrow-right"></i></a>
+      <!-- Navigation -->
+      <div class="nav-links">
+        <a href="index.html" class="nav-btn"
+          ><i class="fas fa-arrow-left"></i> RETURN TO PORTFOLIO</a
+        >
+        <a href="sigint-data-lake.html" class="nav-btn"
+          >VIEW OMNET ARCHITECTURE <i class="fas fa-arrow-right"></i
+        ></a>
+      </div>
+
+      <!-- Header -->
+      <header>
+        <h1>ESP32 CYBER-PHYSICAL FIRMWARE SUITE</h1>
+        <div class="subtitle">
+          Autonomous Edge Payloads &bull; Tactical RF &bull; Sensor Fusion
+          &bull; Zero-LLM Ingestion
         </div>
+        <p class="intro-text">
+          Production-grade C++ embedded firmware running on headless ESP32,
+          ESP32-S3, and Heltec LoRa nodes. These custom payloads execute on-chip
+          promiscuous 802.11 frame sniffing, dual-band BLE radar, high-capacity
+          PSRAM wardriving caches, and seismic/atmospheric tripwires. All
+          network targets, SSIDs, and credentials have been strictly sanitized
+          for open-source reference.
+        </p>
+      </header>
 
-        <!-- Header -->
-        <header>
-            <h1>ESP32 CYBER-PHYSICAL FIRMWARE SUITE</h1>
-            <div class="subtitle">Autonomous Edge Payloads &bull; Tactical RF &bull; Sensor Fusion &bull; Zero-LLM Ingestion</div>
-            <p class="intro-text">
-                Production-grade C++ embedded firmware running on headless ESP32, ESP32-S3, and Heltec LoRa nodes. 
-                These custom payloads execute on-chip promiscuous 802.11 frame sniffing, dual-band BLE radar, 
-                high-capacity PSRAM wardriving caches, and seismic/atmospheric tripwires. All network targets, 
-                SSIDs, and credentials have been strictly sanitized for open-source reference.
-            </p>
-        </header>
+      <!-- Category Filters -->
+      <div class="filter-container">
+        <button class="filter-btn active" onclick="filterGallery('all')">
+          ALL PAYLOADS (6)
+        </button>
+        <button class="filter-btn" onclick="filterGallery('rf')">
+          SPECTRUM SURVEILLANCE
+        </button>
+        <button class="filter-btn" onclick="filterGallery('recon')">
+          RECONNAISSANCE & MAPPING
+        </button>
+        <button class="filter-btn" onclick="filterGallery('perimeter')">
+          PERIMETER & SENSORS
+        </button>
+      </div>
 
-        <!-- Category Filters -->
-        <div class="filter-container">
-            <button class="filter-btn active" onclick="filterGallery('all')">ALL PAYLOADS (6)</button>
-            <button class="filter-btn" onclick="filterGallery('rf')">SPECTRUM SURVEILLANCE</button>
-            <button class="filter-btn" onclick="filterGallery('recon')">RECONNAISSANCE & MAPPING</button>
-            <button class="filter-btn" onclick="filterGallery('perimeter')">PERIMETER & SENSORS</button>
-        </div>
-
-        <!-- Firmware Grid -->
-        <div class="firmware-grid">
-
-            <!-- 1. Aura Multi-Scanner -->
-            <div class="firmware-card" data-category="rf">
-                <div class="card-header">
-                    <h2 class="card-title"><i class="fas fa-satellite-dish" style="color:var(--accent);"></i> Aura Multi-Scanner HUD</h2>
-                    <span class="version-badge">Payload V1.1</span>
-                </div>
-                <div class="hardware-meta">
-                    <span class="meta-tag"><i class="fas fa-microchip"></i> Heltec WiFi LoRa 32 V3</span>
-                    <span class="meta-tag"><i class="fas fa-tv"></i> SSD1306 128x64 OLED</span>
-                    <span class="meta-tag"><i class="fas fa-bluetooth"></i> BLE 5.0</span>
-                    <span class="meta-tag"><i class="fas fa-wifi"></i> 802.11 b/g/n</span>
-                    <span class="meta-tag"><i class="fas fa-battery-half"></i> ADC VBat Monitor</span>
-                </div>
-                <p class="card-desc">
-                    A standalone tactical field dashboard with an interrupt-driven state machine controlled via the onboard BOOT button. 
-                    Cycles through three interactive display pages: real-time BLE proximity radar (ranked by RSSI), active 802.11 access point 
-                    radar, and real-time silicon hardware diagnostics (core temp, free heap, battery millivolts, and system uptime).
-                </p>
-                <button class="code-accordion-btn" onclick="toggleCode('code-multi-scanner')">
-                    <span><i class="fas fa-code"></i> View Sanitized Firmware Source (.ino)</span>
-                    <i class="fas fa-chevron-down"></i>
-                </button>
-                <div id="code-multi-scanner" class="code-box">
-                    <button class="copy-btn" onclick="copyCode('src-multi-scanner')">📋 Copy</button>
-                    <pre id="src-multi-scanner">/*
+      <!-- Firmware Grid -->
+      <div class="firmware-grid">
+        <!-- 1. Aura Multi-Scanner -->
+        <div class="firmware-card" data-category="rf">
+          <div class="card-header">
+            <h2 class="card-title">
+              <i class="fas fa-satellite-dish" style="color: var(--accent)"></i>
+              Aura Multi-Scanner HUD
+            </h2>
+            <span class="version-badge">Payload V1.1</span>
+          </div>
+          <div class="hardware-meta">
+            <span class="meta-tag"
+              ><i class="fas fa-microchip"></i> Heltec WiFi LoRa 32 V3</span
+            >
+            <span class="meta-tag"
+              ><i class="fas fa-tv"></i> SSD1306 128x64 OLED</span
+            >
+            <span class="meta-tag"
+              ><i class="fas fa-bluetooth"></i> BLE 5.0</span
+            >
+            <span class="meta-tag"
+              ><i class="fas fa-wifi"></i> 802.11 b/g/n</span
+            >
+            <span class="meta-tag"
+              ><i class="fas fa-battery-half"></i> ADC VBat Monitor</span
+            >
+          </div>
+          <p class="card-desc">
+            A standalone tactical field dashboard with an interrupt-driven state
+            machine controlled via the onboard BOOT button. Cycles through three
+            interactive display pages: real-time BLE proximity radar (ranked by
+            RSSI), active 802.11 access point radar, and real-time silicon
+            hardware diagnostics (core temp, free heap, battery millivolts, and
+            system uptime).
+          </p>
+          <button
+            class="code-accordion-btn"
+            onclick="toggleCode('code-multi-scanner')"
+          >
+            <span
+              ><i class="fas fa-code"></i> View Sanitized Firmware Source
+              (.ino)</span
+            >
+            <i class="fas fa-chevron-down"></i>
+          </button>
+          <div id="code-multi-scanner" class="code-box">
+            <button class="copy-btn" onclick="copyCode('src-multi-scanner')">
+              📋 Copy
+            </button>
+            <pre id="src-multi-scanner">
+/*
  * AURA // MULTI-SCANNER (Tactical Field Dashboard)
  * Target Hardware: Heltec WiFi LoRa 32 V3 / ESP32-S3 OLED
  * De-identified & Sanitized for Public Architecture Reference
@@ -438,35 +486,61 @@ void loop() {
     }
     display.display();
     delay(50);
-}</pre>
-                </div>
-            </div>
+}</pre
+            >
+          </div>
+        </div>
 
-            <!-- 2. Aura Packet Scythe -->
-            <div class="firmware-card" data-category="rf">
-                <div class="card-header">
-                    <h2 class="card-title"><i class="fas fa-shield-alt" style="color:var(--accent);"></i> Aura Packet Scythe</h2>
-                    <span class="version-badge">Payload V1.6</span>
-                </div>
-                <div class="hardware-meta">
-                    <span class="meta-tag"><i class="fas fa-microchip"></i> ESP32-S3 WROOM-1</span>
-                    <span class="meta-tag"><i class="fas fa-eye"></i> Promiscuous 802.11</span>
-                    <span class="meta-tag"><i class="fas fa-helicopter"></i> Drone OUI Radar</span>
-                    <span class="meta-tag"><i class="fas fa-network-wired"></i> MQTT Broker Uplink</span>
-                    <span class="meta-tag"><i class="fas fa-lightbulb"></i> WS2812B Activity LED</span>
-                </div>
-                <p class="card-desc">
-                    Configures the ESP32 Wi-Fi baseband into raw promiscuous mode to passively parse 802.11 management and control frames. 
-                    Calculates packets-per-second (PPS) to drive a dynamic color-graded status LED, detects deauthentication anomalies, 
-                    and triggers immediate MQTT perimeter intrusion alerts when surveillance drone or wireless camera MAC OUIs (DJI, Wyze, Ring, Arlo) are intercepted.
-                </p>
-                <button class="code-accordion-btn" onclick="toggleCode('code-packet-scythe')">
-                    <span><i class="fas fa-code"></i> View Sanitized Firmware Source (.ino)</span>
-                    <i class="fas fa-chevron-down"></i>
-                </button>
-                <div id="code-packet-scythe" class="code-box">
-                    <button class="copy-btn" onclick="copyCode('src-packet-scythe')">📋 Copy</button>
-                    <pre id="src-packet-scythe">/*
+        <!-- 2. Aura Packet Scythe -->
+        <div class="firmware-card" data-category="rf">
+          <div class="card-header">
+            <h2 class="card-title">
+              <i class="fas fa-shield-alt" style="color: var(--accent)"></i>
+              Aura Packet Scythe
+            </h2>
+            <span class="version-badge">Payload V1.6</span>
+          </div>
+          <div class="hardware-meta">
+            <span class="meta-tag"
+              ><i class="fas fa-microchip"></i> ESP32-S3 WROOM-1</span
+            >
+            <span class="meta-tag"
+              ><i class="fas fa-eye"></i> Promiscuous 802.11</span
+            >
+            <span class="meta-tag"
+              ><i class="fas fa-helicopter"></i> Drone OUI Radar</span
+            >
+            <span class="meta-tag"
+              ><i class="fas fa-network-wired"></i> MQTT Broker Uplink</span
+            >
+            <span class="meta-tag"
+              ><i class="fas fa-lightbulb"></i> WS2812B Activity LED</span
+            >
+          </div>
+          <p class="card-desc">
+            Configures the ESP32 Wi-Fi baseband into raw promiscuous mode to
+            passively parse 802.11 management and control frames. Calculates
+            packets-per-second (PPS) to drive a dynamic color-graded status LED,
+            detects deauthentication anomalies, and triggers immediate MQTT
+            perimeter intrusion alerts when surveillance drone or wireless
+            camera MAC OUIs (DJI, Wyze, Ring, Arlo) are intercepted.
+          </p>
+          <button
+            class="code-accordion-btn"
+            onclick="toggleCode('code-packet-scythe')"
+          >
+            <span
+              ><i class="fas fa-code"></i> View Sanitized Firmware Source
+              (.ino)</span
+            >
+            <i class="fas fa-chevron-down"></i>
+          </button>
+          <div id="code-packet-scythe" class="code-box">
+            <button class="copy-btn" onclick="copyCode('src-packet-scythe')">
+              📋 Copy
+            </button>
+            <pre id="src-packet-scythe">
+/*
  * AURA // PACKET SCYTHE (802.11 Frame Parser & Intrusion Sentry)
  * Target Hardware: ESP32-S3 Promiscuous Sniffer
  * De-identified & Sanitized for Public Architecture Reference
@@ -542,34 +616,58 @@ void loop() {
     currentChannel = (currentChannel % 13) + 1;
     esp_wifi_set_channel(currentChannel, WIFI_SECOND_CHAN_NONE);
     delay(200);
-}</pre>
-                </div>
-            </div>
+}</pre
+            >
+          </div>
+        </div>
 
-            <!-- 3. Aura PSRAM Wardriver -->
-            <div class="firmware-card" data-category="recon">
-                <div class="card-header">
-                    <h2 class="card-title"><i class="fas fa-database" style="color:var(--accent);"></i> Aura PSRAM Wardriver</h2>
-                    <span class="version-badge">Payload V1.0</span>
-                </div>
-                <div class="hardware-meta">
-                    <span class="meta-tag"><i class="fas fa-microchip"></i> ESP32-S3 (8MB Octal PSRAM)</span>
-                    <span class="meta-tag"><i class="fas fa-memory"></i> 10,000 In-Memory Cache</span>
-                    <span class="meta-tag"><i class="fas fa-bolt"></i> Burst Store-and-Forward</span>
-                    <span class="meta-tag"><i class="fas fa-shield-alt"></i> Zero SD Card Wear</span>
-                </div>
-                <p class="card-desc">
-                    Exploits 8MB of external pseudo-static RAM (PSRAM) via memory-mapped pointers (<code class="mono">EXT_RAM_BSS_ATTR</code>) to store 
-                    up to 10,000 unique 802.11 access points in an in-memory packed ring buffer. Operates entirely offline without SD card degradation. 
-                    When sovereign home Wi-Fi is recognized, it executes store-and-forward JSON burst uploads into the Core Pi telemetry data lake.
-                </p>
-                <button class="code-accordion-btn" onclick="toggleCode('code-psram-wardriver')">
-                    <span><i class="fas fa-code"></i> View Sanitized Firmware Source (.ino)</span>
-                    <i class="fas fa-chevron-down"></i>
-                </button>
-                <div id="code-psram-wardriver" class="code-box">
-                    <button class="copy-btn" onclick="copyCode('src-psram-wardriver')">📋 Copy</button>
-                    <pre id="src-psram-wardriver">/*
+        <!-- 3. Aura PSRAM Wardriver -->
+        <div class="firmware-card" data-category="recon">
+          <div class="card-header">
+            <h2 class="card-title">
+              <i class="fas fa-database" style="color: var(--accent)"></i> Aura
+              PSRAM Wardriver
+            </h2>
+            <span class="version-badge">Payload V1.0</span>
+          </div>
+          <div class="hardware-meta">
+            <span class="meta-tag"
+              ><i class="fas fa-microchip"></i> ESP32-S3 (8MB Octal PSRAM)</span
+            >
+            <span class="meta-tag"
+              ><i class="fas fa-memory"></i> 10,000 In-Memory Cache</span
+            >
+            <span class="meta-tag"
+              ><i class="fas fa-bolt"></i> Burst Store-and-Forward</span
+            >
+            <span class="meta-tag"
+              ><i class="fas fa-shield-alt"></i> Zero SD Card Wear</span
+            >
+          </div>
+          <p class="card-desc">
+            Exploits 8MB of external pseudo-static RAM (PSRAM) via memory-mapped
+            pointers (<code class="mono">EXT_RAM_BSS_ATTR</code>) to store up to
+            10,000 unique 802.11 access points in an in-memory packed ring
+            buffer. Operates entirely offline without SD card degradation. When
+            sovereign home Wi-Fi is recognized, it executes store-and-forward
+            JSON burst uploads into the Core Pi telemetry data lake.
+          </p>
+          <button
+            class="code-accordion-btn"
+            onclick="toggleCode('code-psram-wardriver')"
+          >
+            <span
+              ><i class="fas fa-code"></i> View Sanitized Firmware Source
+              (.ino)</span
+            >
+            <i class="fas fa-chevron-down"></i>
+          </button>
+          <div id="code-psram-wardriver" class="code-box">
+            <button class="copy-btn" onclick="copyCode('src-psram-wardriver')">
+              📋 Copy
+            </button>
+            <pre id="src-psram-wardriver">
+/*
  * AURA // PSRAM WARDRIVER (Store-and-Forward Edge Ingestion)
  * Target Hardware: ESP32-S3 with 8MB Octal PSRAM
  * De-identified & Sanitized for Public Architecture Reference
@@ -647,34 +745,58 @@ void loop() {
         cacheCount++;
     }
     delay(2000);
-}</pre>
-                </div>
-            </div>
+}</pre
+            >
+          </div>
+        </div>
 
-            <!-- 4. Aura Sentinel V4 PRO -->
-            <div class="firmware-card" data-category="perimeter">
-                <div class="card-header">
-                    <h2 class="card-title"><i class="fas fa-radar" style="color:var(--accent);"></i> Aura Sentinel V4 PRO</h2>
-                    <span class="version-badge">Payload V4.0</span>
-                </div>
-                <div class="hardware-meta">
-                    <span class="meta-tag"><i class="fas fa-microchip"></i> ESP32 Dual-Core (FreeRTOS)</span>
-                    <span class="meta-tag"><i class="fas fa-network-wired"></i> mDNS Service Scanner</span>
-                    <span class="meta-tag"><i class="fas fa-stopwatch"></i> Hardware Watchdog (WDT)</span>
-                    <span class="meta-tag"><i class="fas fa-lock"></i> Mutex Concurrency</span>
-                </div>
-                <p class="card-desc">
-                    Industrial edge sentry utilizing both Xtensa dual cores via FreeRTOS tasks. Core 0 executes asynchronous 
-                    mDNS multicast service inspection and active ICMP ping sweeps across the subnet, while Core 1 performs continuous 
-                    BLE advertising audits. Protected by an autonomous 5-minute hardware watchdog to prevent hangs during network dropouts.
-                </p>
-                <button class="code-accordion-btn" onclick="toggleCode('code-sentinel-v4')">
-                    <span><i class="fas fa-code"></i> View Sanitized Firmware Source (.ino)</span>
-                    <i class="fas fa-chevron-down"></i>
-                </button>
-                <div id="code-sentinel-v4" class="code-box">
-                    <button class="copy-btn" onclick="copyCode('src-sentinel-v4')">📋 Copy</button>
-                    <pre id="src-sentinel-v4">/*
+        <!-- 4. Aura Sentinel V4 PRO -->
+        <div class="firmware-card" data-category="perimeter">
+          <div class="card-header">
+            <h2 class="card-title">
+              <i class="fas fa-radar" style="color: var(--accent)"></i> Aura
+              Sentinel V4 PRO
+            </h2>
+            <span class="version-badge">Payload V4.0</span>
+          </div>
+          <div class="hardware-meta">
+            <span class="meta-tag"
+              ><i class="fas fa-microchip"></i> ESP32 Dual-Core (FreeRTOS)</span
+            >
+            <span class="meta-tag"
+              ><i class="fas fa-network-wired"></i> mDNS Service Scanner</span
+            >
+            <span class="meta-tag"
+              ><i class="fas fa-stopwatch"></i> Hardware Watchdog (WDT)</span
+            >
+            <span class="meta-tag"
+              ><i class="fas fa-lock"></i> Mutex Concurrency</span
+            >
+          </div>
+          <p class="card-desc">
+            Industrial edge sentry utilizing both Xtensa dual cores via FreeRTOS
+            tasks. Core 0 executes asynchronous mDNS multicast service
+            inspection and active ICMP ping sweeps across the subnet, while Core
+            1 performs continuous BLE advertising audits. Protected by an
+            autonomous 5-minute hardware watchdog to prevent hangs during
+            network dropouts.
+          </p>
+          <button
+            class="code-accordion-btn"
+            onclick="toggleCode('code-sentinel-v4')"
+          >
+            <span
+              ><i class="fas fa-code"></i> View Sanitized Firmware Source
+              (.ino)</span
+            >
+            <i class="fas fa-chevron-down"></i>
+          </button>
+          <div id="code-sentinel-v4" class="code-box">
+            <button class="copy-btn" onclick="copyCode('src-sentinel-v4')">
+              📋 Copy
+            </button>
+            <pre id="src-sentinel-v4">
+/*
  * AURA // SENTINEL V4 PRO (Concurrent Dual-Core Sentry)
  * Target Hardware: ESP32 Dual-Core FreeRTOS
  * De-identified & Sanitized for Public Architecture Reference
@@ -742,34 +864,60 @@ void loop() {
     }
     mqtt.loop();
     delay(100);
-}</pre>
-                </div>
-            </div>
+}</pre
+            >
+          </div>
+        </div>
 
-            <!-- 5. Aura Lightning & Seismometer -->
-            <div class="firmware-card" data-category="perimeter">
-                <div class="card-header">
-                    <h2 class="card-title"><i class="fas fa-bolt" style="color:var(--accent);"></i> Aura Lightning & Seismic Sentry</h2>
-                    <span class="version-badge">Payload V2.0</span>
-                </div>
-                <div class="hardware-meta">
-                    <span class="meta-tag"><i class="fas fa-microchip"></i> ESP32 WROOM (ADC1)</span>
-                    <span class="meta-tag"><i class="fas fa-cloud-bolt"></i> Sub-Millisecond RF Sampling</span>
-                    <span class="meta-tag"><i class="fas fa-wave-square"></i> Piezo Vibration Tripwire</span>
-                    <span class="meta-tag"><i class="fas fa-broadcast-tower"></i> Immediate MQTT Dispatch</span>
-                </div>
-                <p class="card-desc">
-                    High-speed analog-to-digital (ADC) continuous interrupt sampling on GPIO 39. Discriminates the microsecond RF pulse signature 
-                    of cloud-to-ground atmospheric lightning strikes while simultaneously monitoring piezoelectric ground sensors for physical 
-                    perimeter footsteps and vehicular approaches. Immediately dispatches MQTT telemetry to the sovereign Core Pi.
-                </p>
-                <button class="code-accordion-btn" onclick="toggleCode('code-lightning-sentry')">
-                    <span><i class="fas fa-code"></i> View Sanitized Firmware Source (.ino)</span>
-                    <i class="fas fa-chevron-down"></i>
-                </button>
-                <div id="code-lightning-sentry" class="code-box">
-                    <button class="copy-btn" onclick="copyCode('src-lightning-sentry')">📋 Copy</button>
-                    <pre id="src-lightning-sentry">/*
+        <!-- 5. Aura Lightning & Seismometer -->
+        <div class="firmware-card" data-category="perimeter">
+          <div class="card-header">
+            <h2 class="card-title">
+              <i class="fas fa-bolt" style="color: var(--accent)"></i> Aura
+              Lightning & Seismic Sentry
+            </h2>
+            <span class="version-badge">Payload V2.0</span>
+          </div>
+          <div class="hardware-meta">
+            <span class="meta-tag"
+              ><i class="fas fa-microchip"></i> ESP32 WROOM (ADC1)</span
+            >
+            <span class="meta-tag"
+              ><i class="fas fa-cloud-bolt"></i> Sub-Millisecond RF
+              Sampling</span
+            >
+            <span class="meta-tag"
+              ><i class="fas fa-wave-square"></i> Piezo Vibration Tripwire</span
+            >
+            <span class="meta-tag"
+              ><i class="fas fa-broadcast-tower"></i> Immediate MQTT
+              Dispatch</span
+            >
+          </div>
+          <p class="card-desc">
+            High-speed analog-to-digital (ADC) continuous interrupt sampling on
+            GPIO 39. Discriminates the microsecond RF pulse signature of
+            cloud-to-ground atmospheric lightning strikes while simultaneously
+            monitoring piezoelectric ground sensors for physical perimeter
+            footsteps and vehicular approaches. Immediately dispatches MQTT
+            telemetry to the sovereign Core Pi.
+          </p>
+          <button
+            class="code-accordion-btn"
+            onclick="toggleCode('code-lightning-sentry')"
+          >
+            <span
+              ><i class="fas fa-code"></i> View Sanitized Firmware Source
+              (.ino)</span
+            >
+            <i class="fas fa-chevron-down"></i>
+          </button>
+          <div id="code-lightning-sentry" class="code-box">
+            <button class="copy-btn" onclick="copyCode('src-lightning-sentry')">
+              📋 Copy
+            </button>
+            <pre id="src-lightning-sentry">
+/*
  * AURA // ATMOSPHERIC LIGHTNING & SEISMIC TRIPWIRE
  * Target Hardware: ESP32 High-Speed ADC (GPIO 39 / ADC1_CH3)
  * De-identified & Sanitized for Public Architecture Reference
@@ -822,34 +970,59 @@ void loop() {
         mqtt.publish(TOPIC_EVENT, buffer);
         delay(50); // Transient refractory window
     }
-}</pre>
-                </div>
-            </div>
+}</pre
+            >
+          </div>
+        </div>
 
-            <!-- 6. Aura EMF Spectrometer -->
-            <div class="firmware-card" data-category="perimeter">
-                <div class="card-header">
-                    <h2 class="card-title"><i class="fas fa-radiation" style="color:var(--accent);"></i> Aura EMF WebSockets Spectrometer</h2>
-                    <span class="version-badge">Payload V1.2</span>
-                </div>
-                <div class="hardware-meta">
-                    <span class="meta-tag"><i class="fas fa-microchip"></i> ESP32 DevKit</span>
-                    <span class="meta-tag"><i class="fas fa-ethernet"></i> Embedded WebSockets Server</span>
-                    <span class="meta-tag"><i class="fas fa-chart-line"></i> Real-time Geiger Stream (60Hz)</span>
-                    <span class="meta-tag"><i class="fas fa-shield-virus"></i> High-Impedance Sensor</span>
-                </div>
-                <p class="card-desc">
-                    An embedded edge instrumentation node combining high-impedance floating antenna sampling with a local asynchronous 
-                    WebSockets server. Streams millisecond voltage fluctuations directly to local tactical clients at 60 frames per second, 
-                    creating a real-time electromagnetic "Geiger counter" visualizer for auditing stray AC leakage and RF field density.
-                </p>
-                <button class="code-accordion-btn" onclick="toggleCode('code-emf-spectrometer')">
-                    <span><i class="fas fa-code"></i> View Sanitized Firmware Source (.ino)</span>
-                    <i class="fas fa-chevron-down"></i>
-                </button>
-                <div id="code-emf-spectrometer" class="code-box">
-                    <button class="copy-btn" onclick="copyCode('src-emf-spectrometer')">📋 Copy</button>
-                    <pre id="src-emf-spectrometer">/*
+        <!-- 6. Aura EMF Spectrometer -->
+        <div class="firmware-card" data-category="perimeter">
+          <div class="card-header">
+            <h2 class="card-title">
+              <i class="fas fa-radiation" style="color: var(--accent)"></i> Aura
+              EMF WebSockets Spectrometer
+            </h2>
+            <span class="version-badge">Payload V1.2</span>
+          </div>
+          <div class="hardware-meta">
+            <span class="meta-tag"
+              ><i class="fas fa-microchip"></i> ESP32 DevKit</span
+            >
+            <span class="meta-tag"
+              ><i class="fas fa-ethernet"></i> Embedded WebSockets Server</span
+            >
+            <span class="meta-tag"
+              ><i class="fas fa-chart-line"></i> Real-time Geiger Stream
+              (60Hz)</span
+            >
+            <span class="meta-tag"
+              ><i class="fas fa-shield-virus"></i> High-Impedance Sensor</span
+            >
+          </div>
+          <p class="card-desc">
+            An embedded edge instrumentation node combining high-impedance
+            floating antenna sampling with a local asynchronous WebSockets
+            server. Streams millisecond voltage fluctuations directly to local
+            tactical clients at 60 frames per second, creating a real-time
+            electromagnetic "Geiger counter" visualizer for auditing stray AC
+            leakage and RF field density.
+          </p>
+          <button
+            class="code-accordion-btn"
+            onclick="toggleCode('code-emf-spectrometer')"
+          >
+            <span
+              ><i class="fas fa-code"></i> View Sanitized Firmware Source
+              (.ino)</span
+            >
+            <i class="fas fa-chevron-down"></i>
+          </button>
+          <div id="code-emf-spectrometer" class="code-box">
+            <button class="copy-btn" onclick="copyCode('src-emf-spectrometer')">
+              📋 Copy
+            </button>
+            <pre id="src-emf-spectrometer">
+/*
  * AURA // EMF SPECTROMETER & WEBSOCKETS STREAMER
  * Target Hardware: ESP32 High-Impedance ADC (GPIO 36)
  * De-identified & Sanitized for Public Architecture Reference
@@ -896,50 +1069,59 @@ void loop() {
         snprintf(payload, sizeof(payload), "%d", raw);
         webSocket.broadcastTXT(payload);
     }
-}</pre>
-                </div>
-            </div>
-
+}</pre
+            >
+          </div>
         </div>
+      </div>
 
-        <!-- Footer -->
-        <footer>
-            <p>&copy; 2026 Charles Forsyth &bull; OmNet Sovereign Cyber-Physical Systems Architecture</p>
-            <p style="margin-top: 4px; color: var(--text-muted);">All firmware source code sanitized and distributed under MIT open-source license.</p>
-        </footer>
+      <!-- Footer -->
+      <footer>
+        <p>
+          &copy; 2026 Charles Forsyth &bull; OmNet Sovereign Cyber-Physical
+          Systems Architecture
+        </p>
+        <p style="margin-top: 4px; color: var(--text-muted)">
+          All firmware source code sanitized and distributed under MIT
+          open-source license.
+        </p>
+      </footer>
     </div>
 
     <script>
-        function toggleCode(boxId) {
-            const box = document.getElementById(boxId);
-            if (box) {
-                box.classList.toggle('open');
-            }
+      function toggleCode(boxId) {
+        const box = document.getElementById(boxId);
+        if (box) {
+          box.classList.toggle('open');
         }
+      }
 
-        function copyCode(preId) {
-            const el = document.getElementById(preId);
-            if (el) {
-                navigator.clipboard.writeText(el.innerText).then(() => {
-                    alert('Firmware source copied to clipboard.');
-                });
-            }
+      function copyCode(preId) {
+        const el = document.getElementById(preId);
+        if (el) {
+          navigator.clipboard.writeText(el.innerText).then(() => {
+            alert('Firmware source copied to clipboard.');
+          });
         }
+      }
 
-        function filterGallery(category) {
-            const buttons = document.querySelectorAll('.filter-btn');
-            buttons.forEach(b => b.classList.remove('active'));
-            event.target.classList.add('active');
+      function filterGallery(category) {
+        const buttons = document.querySelectorAll('.filter-btn');
+        buttons.forEach((b) => b.classList.remove('active'));
+        event.target.classList.add('active');
 
-            const cards = document.querySelectorAll('.firmware-card');
-            cards.forEach(card => {
-                if (category === 'all' || card.getAttribute('data-category') === category) {
-                    card.style.display = 'block';
-                } else {
-                    card.style.display = 'none';
-                }
-            });
-        }
+        const cards = document.querySelectorAll('.firmware-card');
+        cards.forEach((card) => {
+          if (
+            category === 'all' ||
+            card.getAttribute('data-category') === category
+          ) {
+            card.style.display = 'block';
+          } else {
+            card.style.display = 'none';
+          }
+        });
+      }
     </script>
-</body>
+  </body>
 </html>
