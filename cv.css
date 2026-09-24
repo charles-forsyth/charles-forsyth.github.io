@@ -1,0 +1,312 @@
+/* Curriculum vitae page, in the site's Forest Ranger palette */
+
+.cv-hero {
+  padding: 90px 20px 70px;
+}
+
+.cv-kicker {
+  font-family: var(--font-tech);
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  font-size: 0.85rem !important;
+  color: var(--primary) !important;
+  margin-bottom: 10px !important;
+}
+
+.cv-contact {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.cv-contact a {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-family: var(--font-tech);
+  font-size: 0.9rem;
+  padding: 6px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  background: var(--bg-surface-alt);
+  transition: all 0.2s;
+}
+
+.cv-contact a:hover {
+  color: var(--bg-deep);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.cv-body {
+  max-width: 900px;
+}
+
+.cv-section {
+  margin-bottom: 60px;
+}
+
+.cv-section h3 {
+  color: var(--accent);
+  font-size: 1.6rem;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 10px;
+  margin-bottom: 25px;
+}
+
+.cv-section > p {
+  color: var(--text-muted);
+  font-size: 1.08rem;
+}
+
+.cv-section a {
+  color: var(--accent);
+}
+
+/* Timeline of roles */
+.cv-role {
+  position: relative;
+  margin: 0 0 28px 12px;
+  padding: 0 0 4px 28px;
+  border-left: 2px solid var(--border-color);
+}
+
+.cv-role::before {
+  content: '';
+  position: absolute;
+  left: -7px;
+  top: 6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 10px var(--primary-glow);
+}
+
+.cv-role:first-of-type::before {
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+
+.cv-role header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.cv-role h4 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: var(--text-main);
+}
+
+.cv-org {
+  margin: 4px 0 10px;
+  color: var(--accent);
+  font-family: var(--font-tech);
+  font-size: 0.92rem;
+}
+
+.cv-dates {
+  flex-shrink: 0;
+  font-family: var(--font-tech);
+  font-size: 0.85rem;
+  color: var(--text-main);
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  padding: 4px 12px;
+  white-space: nowrap;
+}
+
+.cv-role ul {
+  margin: 0;
+  padding-left: 1.2em;
+  color: var(--text-muted);
+}
+
+.cv-role li {
+  margin: 6px 0;
+}
+
+.cv-role li::marker {
+  color: var(--primary);
+}
+
+.cv-role strong {
+  color: var(--text-main);
+}
+
+.cv-skill-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.cv-skill-grid div {
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 10px 14px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.cv-skill-grid strong {
+  display: block;
+  color: var(--accent);
+  font-family: var(--font-tech);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 3px;
+}
+
+.cv-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.cv-tags span {
+  font-family: var(--font-tech);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  padding: 4px 12px;
+}
+
+@media (max-width: 700px) {
+  .cv-role header {
+    flex-direction: column;
+    gap: 6px;
+  }
+}
+
+/* Print / PDF: clean black-on-white resume */
+@media print {
+  @page {
+    margin: 14mm 14mm;
+  }
+  body,
+  .section-light,
+  .section-dark,
+  .hero {
+    background: #fff !important;
+    color: #111 !important;
+  }
+  .hero {
+    padding: 0 0 10px !important;
+    border: 0 !important;
+  }
+  .hero::before,
+  .cta-buttons,
+  footer {
+    display: none !important;
+  }
+  .hero h1 {
+    font-size: 26pt !important;
+    color: #111 !important;
+    text-shadow: none !important;
+    margin: 0 0 4px;
+  }
+  .hero h2 {
+    font-size: 12pt !important;
+    color: #2c5234 !important;
+    margin: 0 0 8px;
+  }
+  .cv-kicker {
+    display: none;
+  }
+  .cv-contact a {
+    background: none !important;
+    border: 0 !important;
+    color: #111 !important;
+    font-size: 9.5pt;
+    padding: 0 6px;
+  }
+  .section-light {
+    padding: 10px 0 !important;
+    border: 0 !important;
+  }
+  .cv-section {
+    margin-bottom: 14px;
+  }
+  .cv-section > p {
+    margin: 0 0 6px;
+  }
+  .cv-section h3 {
+    color: #2c5234 !important;
+    border-bottom: 1px solid #999 !important;
+    font-size: 13pt;
+    margin-bottom: 10px;
+    break-after: avoid;
+  }
+  .cv-section > p,
+  .cv-role ul,
+  .cv-skill-grid div,
+  .cv-tags span {
+    color: #222 !important;
+    font-size: 9.5pt;
+  }
+  .cv-role {
+    border-left: 1px solid #bbb !important;
+    margin-bottom: 10px;
+  }
+  .cv-role header {
+    break-after: avoid;
+  }
+  .cv-role li {
+    margin: 2px 0;
+  }
+  .cv-body {
+    max-width: none;
+  }
+  .container {
+    max-width: none;
+  }
+  .cv-role::before {
+    background: #2c5234 !important;
+    box-shadow: none !important;
+    width: 9px;
+    height: 9px;
+    left: -5px;
+  }
+  .cv-role h4,
+  .cv-role strong {
+    color: #111 !important;
+    font-size: 10.5pt;
+  }
+  .cv-org {
+    color: #2c5234 !important;
+    font-size: 9.5pt;
+    margin: 2px 0 4px;
+  }
+  .cv-dates {
+    background: none !important;
+    border: 0 !important;
+    color: #111 !important;
+    font-size: 9.5pt;
+    padding: 0;
+  }
+  .cv-skill-grid div {
+    background: none !important;
+    border: 1px solid #ccc !important;
+    padding: 5px 8px;
+  }
+  .cv-skill-grid strong {
+    color: #2c5234 !important;
+    font-size: 8pt;
+  }
+  .cv-tags span {
+    border-color: #bbb !important;
+  }
+  .cv-section a {
+    color: #111 !important;
+  }
+}
