@@ -1,6 +1,7 @@
 /* Boat Specific Styles */
 .boat-hero {
-  background: linear-gradient(
+  background:
+    linear-gradient(
       135deg,
       rgba(10, 25, 47, 0.7) 0%,
       rgba(2, 12, 27, 0.7) 100%
@@ -123,17 +124,20 @@
   .log-entry::after {
     left: 20px;
   }
-  .log-entry, .log-entry:nth-child(even) {
+  .log-entry,
+  .log-entry:nth-child(even) {
     flex-direction: column;
     align-items: flex-start;
     padding-left: 45px;
   }
-  .log-date, .log-entry:nth-child(even) .log-date {
+  .log-date,
+  .log-entry:nth-child(even) .log-date {
     width: 100%;
     text-align: left;
     padding: 0 0 0.5rem 0;
   }
-  .log-content, .log-entry:nth-child(even) .log-content {
+  .log-content,
+  .log-entry:nth-child(even) .log-content {
     width: 100%;
     padding: 1rem;
   }
