@@ -1,0 +1,2115 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Memory and Storage | Field Manual</title>
+    <meta
+      name="description"
+      content="How memory bandwidth and capacity now bound most AI and HPC work, what HBM, unified memory and CXL actually give you, and how to size parallel file systems, local NVMe, checkpoints and data pipelines for a research center."
+    />
+    <link
+      rel="canonical"
+      href="https://charles-forsyth.github.io/handbook/memory-storage.html"
+    />
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="handbook.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
+    />
+  </head>
+  <body>
+    <header class="hero doc-hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="doc-kicker">
+            <i class="fas fa-memory"></i> AI + HPC Field Manual
+          </p>
+          <h1>Memory and Storage</h1>
+          <h2>
+            Feeding the accelerators, from HBM stacks to parallel file systems
+            and object tiers
+          </h2>
+          <div class="cta-buttons">
+            <a href="index.html" class="btn btn-secondary"
+              ><i class="fas fa-book-open"></i> Field Manual</a
+            >
+            <a href="../index.html" class="btn btn-secondary"
+              ><i class="fas fa-arrow-left"></i> Main Site</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+    <nav class="doc-nav" aria-label="Field manual chapters">
+      <div class="container">
+        <a href="convergence.html">Convergence</a
+        ><a href="accelerators.html">Accelerators</a
+        ><a href="memory-storage.html" class="active" aria-current="page"
+          >Memory &amp; Storage</a
+        ><a href="interconnects.html">Interconnects</a
+        ><a href="facilities.html">Facilities</a
+        ><a href="systems-software.html">Systems Software</a
+        ><a href="scheduling.html">Scheduling</a
+        ><a href="observability.html">Observability</a
+        ><a href="operations.html">Operations</a
+        ><a href="training.html">Training</a
+        ><a href="inference.html">Inference</a
+        ><a href="scientific-computing.html">Scientific Computing</a
+        ><a href="cloud.html">Cloud</a><a href="linux.html">Linux</a
+        ><a href="glossary.html">Glossary</a>
+      </div>
+    </nav>
+    <main class="section-light">
+      <div class="container doc-layout">
+        <aside class="doc-toc">
+          <h4><i class="fas fa-list"></i> On this page</h4>
+          <ul>
+            <li><a href="#the-memory-wall">The Memory Wall</a></li>
+            <li>
+              <a href="#high-bandwidth-memory">High Bandwidth Memory (HBM)</a>
+            </li>
+            <li>
+              <a href="#will-it-fit">Will It Fit? GPU Memory vs Model Size</a>
+            </li>
+            <li>
+              <a href="#beyond-hbm"
+                >Beyond HBM: Coherent Memory, Host DRAM and CXL</a
+              >
+            </li>
+            <li>
+              <a href="#storage-for-ai"
+                >Storage for AI: What the I/O Actually Looks Like</a
+              >
+            </li>
+            <li>
+              <a href="#parallel-file-systems-and-object-storage"
+                >Parallel File Systems and Object Storage</a
+              >
+            </li>
+            <li>
+              <a href="#gpudirect-storage-and-local-nvme"
+                >GPUDirect Storage, Local NVMe and Burst Buffers</a
+              >
+            </li>
+            <li>
+              <a href="#data-formats-and-pipelines"
+                >Data Formats and Pipelines</a
+              >
+            </li>
+            <li>
+              <a href="#checkpointing">Checkpointing Strategies and Sizes</a>
+            </li>
+            <li>
+              <a href="#data-management-and-security"
+                >Data Management, Lifecycle and Research Data Security</a
+              >
+            </li>
+            <li>
+              <a href="#benchmarks-mlperf-storage-and-io500"
+                >Benchmarks and Center Sizing</a
+              >
+            </li>
+            <li><a href="#key-takeaways">Key Takeaways</a></li>
+          </ul>
+        </aside>
+        <article class="doc-content">
+          <p>
+            In the 2019 edition of this manual, "storage" meant a Lustre or GPFS
+            scratch file system, an NFS home server and a tape library, and
+            "memory" meant choosing DIMMs so every channel was populated. Both
+            topics have moved to the center of cluster design. On a modern GPU
+            node the scarce things are bytes per second out of HBM, bytes of HBM
+            per GPU, and the rate at which the file system can absorb a
+            checkpoint from a few thousand GPUs at once. This chapter works
+            through the memory hierarchy from the top (HBM on the accelerator
+            package) to the bottom (object storage and archive), with the math
+            you need to decide whether a model fits, whether a data pipeline
+            will starve the GPUs, and how much storage bandwidth to buy.
+            Accelerator details are in
+            <a href="accelerators.html">Accelerators</a>, fabrics in
+            <a href="interconnects.html">Interconnects</a>, and parallelism
+            strategies in <a href="training.html">Training at Scale</a>.
+          </p>
+
+          <h2 id="the-memory-wall">The Memory Wall</h2>
+
+          <p>
+            The phrase "memory wall" goes back to Wulf and McKee in 1995: if
+            processors keep getting faster than DRAM, eventually every program
+            waits on memory. Gholami and colleagues revisited the trend for AI
+            hardware in 2024 and found that over the previous 20 years peak
+            server FLOPS grew about 3.0x every two years, while DRAM bandwidth
+            grew 1.6x and interconnect bandwidth 1.4x over the same interval.
+            Over the whole period they measured roughly a 60,000x increase in
+            peak compute against about 100x for DRAM bandwidth and 30x for
+            interconnect bandwidth.<a href="#src-1">[1]</a> Their conclusion,
+            which matches what most of us see on real clusters, is that memory
+            rather than compute is now the primary bottleneck for many AI
+            workloads, especially inference with decoder (GPT-style) models.<a
+              href="#src-1"
+              >[1]</a
+            >
+          </p>
+
+          <h3 id="arithmetic-intensity">
+            Arithmetic Intensity in One Paragraph
+          </h3>
+
+          <p>
+            Arithmetic intensity is FLOPs performed per byte moved from
+            memory.<a href="#src-1">[1]</a> A GPU with P FLOP/s of compute and B
+            bytes/s of memory bandwidth needs an intensity of at least P/B to
+            stay compute-bound. Large dense matrix multiplies at big batch sizes
+            clear that bar. Many other things do not: element-wise ops,
+            normalization, attention over long contexts, sparse and graph
+            workloads, stencil codes, and above all autoregressive decoding,
+            where each new token requires reading every weight once while doing
+            only a couple of FLOPs per weight. For the classic HPC side, the
+            same logic is why STREAM and HPCG track memory bandwidth far more
+            closely than HPL does.
+          </p>
+
+          <h3 id="a-decode-back-of-envelope">A Decode Back-of-Envelope</h3>
+
+          <p>
+            Take a 70-billion-parameter dense model stored in BF16 (2 bytes per
+            parameter): 140 GB of weights. At batch size 1, generating one token
+            means streaming all 140 GB from HBM. On a GPU with 8 TB/s of HBM
+            bandwidth (the AMD Instinct MI355X figure<a href="#src-17">[17]</a
+            >), that takes at least 140 / 8,000 s = 17.5 ms per token, a hard
+            ceiling of about 57 tokens/s per sequence no matter how many FLOPs
+            the chip has (and 140 GB exceeds the capacity of many single GPUs
+            anyway). Batching many sequences amortizes the weight reads, which
+            is why serving systems batch aggressively, and why the KV cache
+            (below) becomes the capacity problem. This is an upper-bound
+            calculation, not a benchmark; see
+            <a href="inference.html">Inference at Scale</a> for real serving
+            behavior.
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> When a user says "my job only gets 30
+              percent GPU utilization," check memory before anything else.
+              Nsight Compute or rocprof will tell you whether kernels are
+              bandwidth-bound. A faster GPU generation with the same HBM
+              bandwidth will not help a bandwidth-bound code much; more
+              bandwidth per GPU will.
+            </p>
+          </blockquote>
+
+          <h2 id="high-bandwidth-memory">High Bandwidth Memory (HBM)</h2>
+
+          <p>
+            HBM stacks DRAM dies vertically with through-silicon vias and places
+            the stack next to the GPU die on a silicon interposer or similar
+            package, giving a very wide, short interface. A GPU's total memory
+            bandwidth is essentially the per-stack bandwidth times the number of
+            stacks, and its capacity is stack capacity times stack count. That
+            is why HBM generation matters as much as the GPU architecture name.
+          </p>
+
+          <h3 id="hbm-generations">Generations and Per-Stack Numbers</h3>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Generation</th>
+                <th>Interface</th>
+                <th>Pin rate</th>
+                <th>Per-stack bandwidth</th>
+                <th>Per-stack capacity</th>
+                <th>Source</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>HBM2 (JESD235B, 2018)</td>
+                <td>1024-bit, 8 channels</td>
+                <td>up to 2.4 Gb/s</td>
+                <td>up to 307 GB/s</td>
+                <td>1-24 GB</td>
+                <td><a href="#src-2">[2]</a></td>
+              </tr>
+              <tr>
+                <td>HBM2E (SK hynix)</td>
+                <td>1024 I/Os</td>
+                <td>3.2-3.6 Gb/s</td>
+                <td>410-460 GB/s</td>
+                <td>8-16 GB</td>
+                <td><a href="#src-3">[3]</a></td>
+              </tr>
+              <tr>
+                <td>HBM3 (JESD238, 2022)</td>
+                <td>16 channels (32 pseudo)</td>
+                <td>up to 6.4 Gb/s</td>
+                <td>819 GB/s</td>
+                <td>4-64 GB defined</td>
+                <td><a href="#src-4">[4]</a></td>
+              </tr>
+              <tr>
+                <td>HBM3E (SK hynix, Micron)</td>
+                <td>1024-bit</td>
+                <td>9.6 Gb/s and higher</td>
+                <td>1.2 TB/s and higher</td>
+                <td>24-36 GB (8-high, 12-high)</td>
+                <td><a href="#src-3">[3]</a><a href="#src-7">[7]</a></td>
+              </tr>
+              <tr>
+                <td>HBM4 (JESD270-4, 2025)</td>
+                <td>2048-bit, 32 channels</td>
+                <td>up to 8 Gb/s (standard)</td>
+                <td>up to 2 TB/s (standard)</td>
+                <td>up to 64 GB (32 Gb x 16-high)</td>
+                <td><a href="#src-5">[5]</a></td>
+              </tr>
+              <tr>
+                <td>HBM4 (shipping vendor parts)</td>
+                <td>2048-bit</td>
+                <td>11.0-11.7 Gb/s, up to 13 Gb/s</td>
+                <td>2.8 TB/s to 3.3 TB/s</td>
+                <td>24-48 GB</td>
+                <td>
+                  <a href="#src-3">[3]</a><a href="#src-8">[8]</a
+                  ><a href="#src-9">[9]</a>
+                </td>
+              </tr>
+              <tr>
+                <td>HBM4E (Samsung samples)</td>
+                <td>not stated</td>
+                <td>14 Gb/s, up to 16 Gb/s</td>
+                <td>up to 3.6 TB/s</td>
+                <td>48 GB (12-high)</td>
+                <td><a href="#src-10">[10]</a></td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Note: HBM2E and HBM3E rows use memory-maker product figures, not a
+            JEDEC press release. Vendor HBM4 parts run faster than the JEDEC
+            baseline pin rate.
+          </p>
+
+          <h3 id="hbm4-status">HBM4 Status as of September 2026</h3>
+
+          <p>
+            JEDEC published JESD270-4 (HBM4) in April 2025. It doubles the
+            interface to 2048 bits and the channel count from 16 to 32, defines
+            8 Gb/s pins for up to 2 TB/s per stack, supports 4-, 8-, 12- and
+            16-high stacks of 24 Gb or 32 Gb dies (up to 64 GB per cube), adds
+            Directed Refresh Management for row-hammer mitigation, and keeps
+            controller compatibility with HBM3.<a href="#src-5">[5]</a> A
+            revision, JESD270-4A (version 1.1), followed in December 2025.<a
+              href="#src-6"
+              >[6]</a
+            >
+          </p>
+
+          <ul>
+            <li>
+              <strong>Samsung</strong> announced mass production and commercial
+              shipment of HBM4 on 12 February 2026: 11.7 Gb/s pins (capable of
+              13 Gb/s), up to 3.3 TB/s per stack, 24-36 GB in 12-high stacks,
+              with 16-high stacks planned to reach 48 GB.<a href="#src-9"
+                >[9]</a
+              >
+              Samsung began sampling 12-high, 48 GB HBM4E at 14 Gb/s (scalable
+              to 16 Gb/s, up to 3.6 TB/s per stack) on 29 May 2026; that part is
+              sampling, not in volume.<a href="#src-10">[10]</a>
+            </li>
+            <li>
+              <strong>SK hynix</strong> lists HBM4 at 11.0 Gb/s and higher (2.8
+              TB/s and higher) in 24-48 GB densities with 8-, 12- and 16-high
+              stacks.<a href="#src-3">[3]</a>
+            </li>
+            <li>
+              <strong>Micron</strong> lists HBM4 with a 2048-bit interface at
+              more than 11.0 Gb/s and more than 2.8 TB/s per stack, a 36 GB
+              12-high part in production and 48 GB 16-high samples in 2026.<a
+                href="#src-8"
+                >[8]</a
+              >
+            </li>
+          </ul>
+
+          <p>
+            The practical meaning: 2026-generation accelerators such as NVIDIA
+            Rubin (288 GB HBM4 at 19.2 TB/s per GPU on the current Vera Rubin
+            NVL72 page; NVIDIA's launch materials said 22 TB/s)<a href="#src-16"
+              >[16]</a
+            ><a href="#src-16">[16]</a> and AMD Instinct MI455X (432 GB HBM4, up
+            to 23.3 TB/s)<a href="#src-18">[18]</a> roughly double or better the
+            bandwidth of their HBM3E predecessors.
+          </p>
+
+          <h3 id="accelerator-memory-table">Accelerator Memory at a Glance</h3>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Accelerator</th>
+                <th>Memory</th>
+                <th>Bandwidth</th>
+                <th>Status</th>
+                <th>Source</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>NVIDIA A100 80GB SXM</td>
+                <td>80 GB HBM2e</td>
+                <td>2,039 GB/s</td>
+                <td>Shipping (older)</td>
+                <td><a href="#src-11">[11]</a></td>
+              </tr>
+              <tr>
+                <td>NVIDIA H100 SXM</td>
+                <td>80 GB</td>
+                <td>3.35 TB/s</td>
+                <td>Shipping</td>
+                <td><a href="#src-12">[12]</a></td>
+              </tr>
+              <tr>
+                <td>NVIDIA H200 SXM</td>
+                <td>141 GB HBM3e</td>
+                <td>4.8 TB/s</td>
+                <td>Shipping</td>
+                <td><a href="#src-13">[13]</a></td>
+              </tr>
+              <tr>
+                <td>NVIDIA GB200 superchip (2 GPUs)</td>
+                <td>372 GB HBM3E</td>
+                <td>16 TB/s</td>
+                <td>Shipping</td>
+                <td><a href="#src-14">[14]</a></td>
+              </tr>
+              <tr>
+                <td>NVIDIA GB300 NVL72 (72 GPUs)</td>
+                <td>20 TB HBM3E</td>
+                <td>up to 576 TB/s</td>
+                <td>Shipping</td>
+                <td><a href="#src-15">[15]</a></td>
+              </tr>
+              <tr>
+                <td>NVIDIA Rubin GPU</td>
+                <td>288 GB HBM4</td>
+                <td>19.2 TB/s</td>
+                <td>In full production per NVIDIA</td>
+                <td><a href="#src-16">[16]</a></td>
+              </tr>
+              <tr>
+                <td>AMD Instinct MI300A APU</td>
+                <td>128 GB HBM3 (unified)</td>
+                <td>5.3 TB/s</td>
+                <td>Shipping</td>
+                <td><a href="#src-19">[19]</a></td>
+              </tr>
+              <tr>
+                <td>AMD Instinct MI355X</td>
+                <td>288 GB HBM3E</td>
+                <td>8 TB/s</td>
+                <td>Shipping</td>
+                <td><a href="#src-17">[17]</a></td>
+              </tr>
+              <tr>
+                <td>AMD Instinct MI455X</td>
+                <td>432 GB HBM4</td>
+                <td>up to 23.3 TB/s</td>
+                <td>Announced (Helios rack)</td>
+                <td><a href="#src-18">[18]</a></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h2 id="will-it-fit">Will It Fit? GPU Memory vs Model Size</h2>
+
+          <p>
+            Most "CUDA out of memory" tickets can be answered with arithmetic
+            before anyone opens a profiler. The four big consumers are weights,
+            gradients and optimizer states (training only), activations
+            (training only, mostly), and the KV cache (inference and
+            long-context training).
+          </p>
+
+          <h3 id="weights">Weights</h3>
+
+          <p>
+            Weights = parameters x bytes per parameter. FP32 is 4 bytes,
+            BF16/FP16 2, FP8 1, and 4-bit formats half a byte (plus a small
+            overhead for scale factors). The ZeRO paper gives the canonical
+            example: the 1.5B-parameter GPT-2 needs only 3 GB for its weights in
+            16-bit precision.<a href="#src-21">[21]</a>
+          </p>
+
+          <h3 id="training-states">
+            Training: the 16 Bytes per Parameter Rule
+          </h3>
+
+          <p>
+            Mixed-precision training with Adam keeps an FP16/BF16 copy of the
+            weights (2 bytes per parameter) and gradients (2 bytes), plus FP32
+            optimizer states: a master copy of the weights, momentum and
+            variance (4 + 4 + 4 = 12 bytes). Total: 16 bytes per parameter
+            before any activations.<a href="#src-21">[21]</a> That is why the
+            same GPT-2 that has 3 GB of weights needs at least 24 GB of model
+            state to train, and could not be trained on a single 32 GB GPU with
+            plain data parallelism.<a href="#src-21">[21]</a> Activations are
+            extra; ZeRO reports about 60 GB of activations for GPT-2 at sequence
+            length 1K and batch 32, which activation checkpointing
+            (recomputation) reduces substantially at a compute cost.<a
+              href="#src-21"
+              >[21]</a
+            >
+          </p>
+
+          <p>
+            <strong
+              >Worked example (70B, full fine-tune or pretraining):</strong
+            >
+            70 x 10^9 x 16 bytes = 1,120 GB of model state. Even on 288 GB GPUs
+            that is at least four GPUs of pure state with nothing left for
+            activations, so in practice you shard with ZeRO/FSDP across a node
+            or more, and add tensor or pipeline parallelism as the model grows.
+            ZeRO-style sharding divides model state across data-parallel ranks
+            (the paper cites a 64x reduction across 64 GPUs).<a href="#src-21"
+              >[21]</a
+            >
+            ZeRO-Infinity goes further and offloads to CPU memory and NVMe,
+            motivated by the observation that the largest dense models grew over
+            1000x in three years while GPU memory grew 5x (16 GB to 80 GB).<a
+              href="#src-62"
+              >[62]</a
+            >
+          </p>
+
+          <h3 id="kv-cache">Inference: the KV Cache</h3>
+
+          <p>
+            For each token in the context, every layer stores a key and a value
+            vector. Per token: 2 x layers x KV heads x head dimension x bytes
+            per element. The vLLM paper works the example for OPT-13B (hidden
+            size 5120, 40 layers, FP16, no grouped-query attention): 800 KB per
+            token, or up to 1.6 GB for one 2048-token request.<a href="#src-22"
+              >[22]</a
+            >
+            KV cache fragmentation was bad enough that paging it like virtual
+            memory (PagedAttention) improved serving throughput 2-4x in their
+            evaluation.<a href="#src-22">[22]</a>
+          </p>
+
+          <p>
+            <strong>Worked example (Llama 3 70B):</strong> the published
+            architecture has 80 layers, model dimension 8192, 64 attention heads
+            and 8 KV heads (grouped-query attention).<a href="#src-23">[23]</a>
+            Head dimension is 8192 / 64 = 128. Per token in BF16: 2 x 80 x 8 x
+            128 x 2 bytes = 327,680 bytes (320 KiB). At a 32,768-token context
+            that is about 10.7 GB per sequence; 16 concurrent sequences need
+            about 172 GB of KV cache on top of 140 GB of BF16 weights. The same
+            arithmetic for Llama 3 405B (126 layers, 8 KV heads, dimension
+            16,384 with 128 heads)<a href="#src-23">[23]</a> gives 504 KiB per
+            token.
+          </p>
+
+          <pre><code class="language-python"># Example sizing helper: memory footprint of a dense transformer (illustrative)
+GB = 1e9
+
+def weights_gb(params, bytes_per_param):
+    return params * bytes_per_param / GB
+
+def train_states_gb(params, bytes_per_param=16):
+    # Mixed-precision Adam: 2 (fp16 weights) + 2 (fp16 grads) + 12 (fp32 master, m, v)
+    return params * bytes_per_param / GB
+
+def kv_bytes_per_token(layers, kv_heads, head_dim, bytes_per_elem=2):
+    return 2 * layers * kv_heads * head_dim * bytes_per_elem
+
+def kv_cache_gb(layers, kv_heads, head_dim, context, batch, bytes_per_elem=2):
+    return kv_bytes_per_token(layers, kv_heads, head_dim, bytes_per_elem) * context * batch / GB
+
+if __name__ == "__main__":
+    p = 70e9  # Llama 3 70B: 80 layers, 8 KV heads, head_dim 8192/64 = 128
+    print(f"BF16 weights: {weights_gb(p, 2):.0f} GB")                 # 140
+    print(f"FP8 weights:  {weights_gb(p, 1):.0f} GB")                 # 70
+    print(f"Adam model states: {train_states_gb(p):.0f} GB")          # 1120
+    print(f"KV per token: {kv_bytes_per_token(80, 8, 128) / 1024:.0f} KiB")  # 320
+    print(f"KV, 32K ctx x 16 seqs: {kv_cache_gb(80, 8, 128, 32768, 16):.0f} GB")  # 172
+</code></pre>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Put this arithmetic on your
+              user-facing documentation page and in your consultation intake
+              form. Half of the "which GPU should I request" questions we get
+              are answered by "parameters x 2 for inference, parameters x 16
+              plus activations for training, plus KV cache for long contexts."
+              It also stops people requesting eight GPUs for a model that fits
+              on one.
+            </p>
+          </blockquote>
+
+          <h2 id="beyond-hbm">
+            Beyond HBM: Coherent Memory, Host DRAM and CXL
+          </h2>
+
+          <p>
+            The PCIe-attached GPU treats host memory as a distant place reached
+            by explicit copies. Several current platforms remove that boundary,
+            and host DRAM and CXL add capacity tiers below HBM.
+          </p>
+
+          <h3 id="nvlink-c2c">
+            NVLink-C2C on Grace Hopper and Grace Blackwell
+          </h3>
+
+          <p>
+            The GH200 Grace Hopper Superchip connects a Grace CPU and Hopper GPU
+            with NVLink-C2C at 900 GB/s of coherent bandwidth, which NVIDIA
+            describes as 7x PCIe Gen5, and the CPU and GPU share a single
+            per-process page table so GPU threads can access all
+            system-allocated memory whether it physically sits in CPU LPDDR5X or
+            GPU HBM.<a href="#src-20">[20]</a> The GB200 superchip pairs one
+            Grace CPU (up to 480 GB LPDDR5X at up to 512 GB/s) with two
+            Blackwell GPUs (372 GB HBM3E at 16 TB/s combined) over NVLink-C2C.<a
+              href="#src-14"
+              >[14]</a
+            >
+            A GB300 NVL72 rack lists 20 TB of HBM3E plus 17 TB of LPDDR5X, which
+            NVIDIA sums as 37 TB of "fast memory."<a href="#src-15">[15]</a> The
+            Vera Rubin superchip raises NVLink-C2C to 1.8 TB/s.<a href="#src-16"
+              >[16]</a
+            >
+          </p>
+
+          <p>
+            What this buys you: large embedding tables, vector indexes, KV cache
+            overflow, optimizer state offload and out-of-core scientific arrays
+            can live in CPU memory and be touched directly by the GPU at far
+            above PCIe speed. What it does not buy you: HBM bandwidth. LPDDR5X
+            at hundreds of GB/s per socket is an order of magnitude below HBM,
+            so hot data still has to be in HBM.
+          </p>
+
+          <h3 id="mi300a">AMD Instinct MI300A</h3>
+
+          <p>
+            MI300A goes further: 24 Zen 4 CPU cores and 228 CDNA 3 compute units
+            share 128 GB of HBM3 in a single address space with 5.3 TB/s peak
+            bandwidth.<a href="#src-19">[19]</a> There is no separate host DRAM
+            to copy from, which makes it attractive for HPC codes that are hard
+            to port with explicit data movement. The trade-off is a fixed 128 GB
+            per socket.<a href="#src-19">[19]</a> See
+            <a href="scientific-computing.html"
+              >Scientific Computing in the AI Era</a
+            >
+            for porting strategy.
+          </p>
+
+          <h3 id="ddr5-and-mrdimm">DDR5 and MRDIMM</h3>
+
+          <p>
+            Host memory still matters on GPU nodes: data loader workers decode
+            and augment in host RAM, asynchronous checkpointing stages copies
+            there, and CPU-only HPC partitions depend on it entirely. Current
+            x86 server platforms have 12 DDR5 channels per socket. AMD EPYC 9005
+            supports 12 channels of DDR5-6400 and up to 6 TB per socket at two
+            DIMMs per channel, plus CXL 2.0.<a href="#src-24">[24]</a> A DDR5
+            channel is 64 data bits (8 bytes), so the theoretical peak is 6,400
+            MT/s x 8 bytes = 51.2 GB/s per channel, or 614.4 GB/s per 12-channel
+            socket; the CXL Consortium uses the round figure of 50 GB/s for
+            DDR5-6400.<a href="#src-31">[31]</a> Sustained STREAM numbers will
+            be lower.
+          </p>
+
+          <p>
+            MRDIMMs (multiplexed rank DIMMs) run two ranks in parallel behind a
+            data buffer to double the effective transfer rate at the module
+            interface. Intel Xeon 6 supports MRDIMMs at up to 8,800 MT/s, which
+            Intel says delivers more than 37 percent more bandwidth than
+            standard RDIMMs, alongside DDR5-6400 RDIMMs and up to 12 memory
+            channels.<a href="#src-25">[25]</a> JEDEC published a
+            second-generation MRDIMM data buffer standard (JESD82-552) in April
+            2026 and reported the MRDIMM Gen2 module standard nearing
+            completion, with raw cards targeting 12,800 MT/s still in
+            development.<a href="#src-26">[26]</a>
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Always populate every memory channel
+              on every socket, with identical DIMMs. A GPU node with half its
+              channels empty can bottleneck data loading and asynchronous
+              checkpoint staging long before the GPUs notice anything else
+              wrong. For CPU partitions running memory-bound HPC codes, MRDIMMs
+              are worth pricing against simply buying more nodes.
+            </p>
+          </blockquote>
+
+          <h3 id="cxl">CXL Memory Expansion and Pooling</h3>
+
+          <p>
+            Compute Express Link runs cache-coherent memory semantics over the
+            PCIe physical layer. The spec history, per the CXL Consortium:<a
+              href="#src-31"
+              >[31]</a
+            >
+          </p>
+
+          <ul>
+            <li>
+              <strong>CXL 1.0 / 1.1 (2019):</strong> direct-attached devices at
+              32 GT/s.
+            </li>
+            <li>
+              <strong>CXL 2.0 (November 2020):</strong> switching for fan-out,
+              memory pooling so capacity can be assigned on demand rather than
+              overprovisioned per server, and persistent memory support.<a
+                href="#src-27"
+                >[27]</a
+              >
+            </li>
+            <li>
+              <strong>CXL 3.0 (August 2022):</strong> 64 GT/s with no added
+              latency over 2.0, multi-headed and fabric-attached devices,
+              multi-level switching, enhanced pooling and coherent memory
+              sharing, peer-to-peer.<a href="#src-28">[28]</a>
+            </li>
+            <li>
+              <strong>CXL 3.1 (November 2023):</strong> port-based-routing
+              fabric switches, Global Integrated Memory for host-to-host
+              communication, and a TEE security protocol for confidential
+              computing with CXL memory.<a href="#src-29">[29]</a>
+            </li>
+            <li>
+              <strong>CXL 3.2 (December 2024)</strong> followed, and
+              <strong>CXL 4.0 (November 2025)</strong> doubles bandwidth to 128
+              GT/s, adds bundled ports and native x2 links, enhances memory RAS,
+              and stays backward compatible with 3.x, 2.0, 1.1 and 1.0.<a
+                href="#src-30"
+                >[30]</a
+              ><a href="#src-31">[31]</a>
+            </li>
+          </ul>
+
+          <p>
+            Status check: a specification release is not a product. What you can
+            buy and deploy today on mainstream servers is direct-attached CXL
+            memory expansion on CPUs that support CXL 2.0 (EPYC 9005 is one
+            example<a href="#src-24">[24]</a>). Switched pooling and
+            shared-memory fabrics are in demonstrations and early products; ask
+            vendors for shipping part numbers and supported OS versions before
+            planning around them. For AI nodes, CXL memory is a capacity tier
+            with higher latency than local DDR5, useful for large in-memory
+            datasets, vector databases and KV-cache offload, not a substitute
+            for HBM.
+          </p>
+
+          <pre><code class="language-bash"># Inspect NUMA layout; CXL expanders commonly show up as a memory-only node
+numactl --hardware
+
+# Example: bind a memory-hungry preprocessing job's allocations to node 2
+# (replace 2 with the node number reported on your system)
+numactl --cpunodebind=0 --membind=2 python preprocess.py
+</code></pre>
+
+          <h2 id="storage-for-ai">
+            Storage for AI: What the I/O Actually Looks Like
+          </h2>
+
+          <p>
+            NVIDIA's DGX SuperPOD reference architecture puts it plainly: the
+            key I/O operation in deep learning training is re-read. The dataset
+            is read over and over across epochs, checkpoints can be terabytes,
+            and checkpoint writes are typically synchronous and block
+            training.<a href="#src-32">[32]</a> There are three distinct
+            patterns to design for.
+          </p>
+
+          <h3 id="data-loading">Data Loading Throughput</h3>
+
+          <p>
+            Training reads are mostly large, parallel and read-dominant, but the
+            access pattern depends on the format. NVIDIA recommends planning for
+            4 GB/s of read per GPU for vision workloads with high-resolution
+            images where datasets exceed 30 TB, while noting that LLM training
+            usually needs less read bandwidth.<a href="#src-32">[32]</a> Its
+            reference storage tiers for one GB200 scalable unit are 40 GB/s read
+            and 20 GB/s write (standard) or 125 GB/s read and 62 GB/s write
+            (enhanced), scaling to 160/80 and 500/250 GB/s for four units.<a
+              href="#src-32"
+              >[32]</a
+            >
+            Caching the dataset in client RAM or on local NVMe after the first
+            epoch can be an order of magnitude faster than going back to remote
+            storage.<a href="#src-32">[32]</a>
+          </p>
+
+          <h3 id="checkpoint-bursts">Checkpoint Write Bursts</h3>
+
+          <p>
+            Checkpointing is a burst: every rank writes at once, the job waits
+            (unless you checkpoint asynchronously), and then the file system is
+            idle until the next one. Meta's Llama 3 paper describes a 240 PB
+            Tectonic storage fabric on 7,500 SSD servers sustaining 2 TB/s with
+            7 TB/s peak, where "a major challenge is supporting the highly
+            bursty checkpoint writes that saturate the storage fabric for short
+            durations," with per-GPU checkpoints from 1 MB to 4 GB.<a
+              href="#src-23"
+              >[23]</a
+            >
+            NVIDIA's guidance is to provision write bandwidth of at least half
+            the read bandwidth for LLM and large-model use cases.<a
+              href="#src-32"
+              >[32]</a
+            >
+          </p>
+
+          <h3 id="small-files">The Small-File Problem</h3>
+
+          <p>
+            Datasets of millions of small JPEGs, text snippets or per-sample
+            NumPy files turn a bandwidth problem into a metadata problem. Every
+            open, stat and close hits the metadata servers, and a parallel file
+            system that streams hundreds of GB/s on large files can be brought
+            to its knees by a single job listing a directory of ten million
+            files from 500 data loader workers. The IO500 benchmark measures
+            exactly this with its mdtest-hard phase: 3,901-byte files created,
+            stat-ed, read and deleted in one shared directory.<a href="#src-37"
+              >[37]</a
+            >
+            The fix is almost always to repack data into large shards (next
+            sections), not to buy more metadata servers.
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Set inode (file count) quotas on
+              scratch as well as capacity quotas, and alert on them. A user with
+              40 million files in scratch is a support ticket waiting to happen
+              for everyone else on the file system. Teach sharding in your
+              onboarding workshop; it is the cheapest storage performance
+              upgrade you will ever make.
+            </p>
+          </blockquote>
+
+          <h2 id="parallel-file-systems-and-object-storage">
+            Parallel File Systems and Object Storage
+          </h2>
+
+          <p>
+            All the systems below share the core idea of separating metadata
+            from data and striping file contents across many servers so that
+            aggregate bandwidth scales with server count. They differ in
+            licensing, hardware model, client, metadata design and operational
+            effort.
+          </p>
+
+          <h3 id="pfs-options">The Main Options</h3>
+
+          <table>
+            <thead>
+              <tr>
+                <th>System</th>
+                <th>Model</th>
+                <th>Notes for research centers</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Lustre</td>
+                <td>
+                  Open source; MDS/MDT for metadata, OSS/OST for data, LNet
+                  network layer, POSIX client
+                </td>
+                <td>
+                  The workhorse of HPC scratch. Per-file and per-directory
+                  striping control.<a href="#src-39">[39]</a
+                  ><a href="#src-40">[40]</a>
+                </td>
+              </tr>
+              <tr>
+                <td>DDN EXAScaler</td>
+                <td>Commercial Lustre appliance</td>
+                <td>
+                  Lustre with vendor integration and support; GDS supported.<a
+                    href="#src-46"
+                    >[46]</a
+                  ><a href="#src-49">[49]</a>
+                </td>
+              </tr>
+              <tr>
+                <td>IBM Storage Scale (GPFS)</td>
+                <td>Commercial parallel file system</td>
+                <td>
+                  Long HPC and enterprise history; GDS supported.<a
+                    href="#src-47"
+                    >[47]</a
+                  ><a href="#src-49">[49]</a>
+                </td>
+              </tr>
+              <tr>
+                <td>BeeGFS</td>
+                <td>
+                  User-space server daemons, kernel-module client, distributed
+                  metadata
+                </td>
+                <td>
+                  Straightforward to deploy on commodity servers; GDS
+                  supported.<a href="#src-41">[41]</a><a href="#src-49">[49]</a>
+                </td>
+              </tr>
+              <tr>
+                <td>WEKA</td>
+                <td>
+                  Software-defined, NVMe flash on x86 servers, tiering to object
+                  storage
+                </td>
+                <td>
+                  POSIX, NFS, SMB, S3 and GDS in one namespace.<a href="#src-44"
+                    >[44]</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>VAST Data</td>
+                <td>
+                  Disaggregated shared-everything (DASE): stateless servers,
+                  shared flash enclosures
+                </td>
+                <td>
+                  Scale capacity (enclosures) and performance (servers)
+                  separately; GDS via VAST NFS.<a href="#src-45">[45]</a
+                  ><a href="#src-49">[49]</a>
+                </td>
+              </tr>
+              <tr>
+                <td>DAOS</td>
+                <td>
+                  Open-source user-space object store on NVMe, OS bypass,
+                  POSIX/MPI-IO/HDF5 interfaces
+                </td>
+                <td>
+                  Aurora runs 230 PB and more than 30 TB/s from 1,024 DAOS
+                  servers.<a href="#src-42">[42]</a><a href="#src-43">[43]</a>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3 id="lustre-striping">Lustre Striping in Practice</h3>
+
+          <p>
+            Striping spreads a file over multiple OSTs. Wide stripes help large
+            shared files and checkpoints; small files should stay on one OST.
+            Progressive File Layouts (Lustre 2.10 and later) let one directory
+            default grow the stripe count as a file grows.<a href="#src-40"
+              >[40]</a
+            >
+          </p>
+
+          <pre><code class="language-bash"># Fixed layout: 4 MiB stripes over 2 OSTs (the example from the Lustre wiki)
+lfs setstripe -S 4M -c 2 /mnt/testfs/project
+
+# Example PFL for a checkpoint directory: small files on 1 OST,
+# growing to 4 OSTs, then all OSTs (-c -1) past 1 GiB to end of file (-E -1)
+lfs setstripe -E 64M -c 1 -E 1G -c 4 -E -1 -c -1 /mnt/testfs/project/checkpoints
+
+# Check what a file actually got
+lfs getstripe /mnt/testfs/project/checkpoints/step_1000/shard_0000.distcp
+</code></pre>
+
+          <h3 id="object-storage-tiers">Object Storage (S3) Tiers</h3>
+
+          <p>
+            Object storage (S3 API, on-premises or cloud) is now a first-class
+            tier for AI data: cheap per TB, effectively unlimited namespace,
+            good aggregate throughput for large objects, and weak at small
+            random POSIX I/O. MLPerf Storage v3.0 (September 2026) added an S3
+            access layer alongside POSIX for training, checkpointing and some
+            vector database tests, and about one-sixth of submissions used it;
+            the working group co-chair said they expect object storage to become
+            a viable, possibly preferred, alternative to file systems.<a
+              href="#src-35"
+              >[35]</a
+            >
+            A common pattern is object storage as the system of record for
+            datasets and archived checkpoints, a flash parallel file system as
+            the hot tier, and local NVMe as a cache. WEKA and others fold the
+            object tier into one namespace.<a href="#src-44">[44]</a> See
+            <a href="cloud.html">Cloud and Hybrid AI/HPC</a> for cloud object
+            and managed Lustre options.
+          </p>
+
+          <h2 id="gpudirect-storage-and-local-nvme">
+            GPUDirect Storage, Local NVMe and Burst Buffers
+          </h2>
+
+          <h3 id="gpudirect-storage">GPUDirect Storage (GDS)</h3>
+
+          <p>
+            GDS provides a direct DMA path between storage and GPU memory that
+            avoids a bounce buffer through CPU memory, reducing CPU load and
+            latency and relieving host bandwidth bottlenecks.<a href="#src-48"
+              >[48]</a
+            >
+            Applications use the cuFile API directly or through libraries built
+            on it. GDS is supported on third-party systems including DDN
+            EXAScaler, IBM Spectrum Scale, NetApp ONTAP, BeeGFS, WekaFS, VAST
+            NFS and Dell, and on Amazon FSx for Lustre; recent releases added an
+            NVMe P2PDMA mode using upstream Linux NVMe drivers (kernel 6.2 or
+            later, or RHEL 9.4's 5.14 kernel on x86_64).<a href="#src-49"
+              >[49]</a
+            >
+            When the direct path is unavailable, cuFile falls back to a
+            compatibility mode, so "it works" does not prove "it is using GDS."
+            The <code>gdscheck</code> tool reports which modes are supported,
+            and runtime settings live in <code>/etc/cufile.json</code>.<a
+              href="#src-49"
+              >[49]</a
+            ><a href="#src-50">[50]</a>
+          </p>
+
+          <pre><code class="language-bash"># Verify the GDS install and which modes are available (path per NVIDIA docs)
+/usr/local/cuda-&lt;x&gt;.&lt;y&gt;/gds/tools/gdscheck.py -p
+
+# Runtime configuration lives in /etc/cufile.json; logs go to cufile.log
+</code></pre>
+
+          <p>
+            GDS matters most when the GPU is the first and last to touch the
+            data (GPU decode, scientific arrays loaded straight to device) and
+            when CPU memory bandwidth is the bottleneck.<a href="#src-48"
+              >[48]</a
+            >
+            For a typical PyTorch pipeline doing JPEG decode and augmentation on
+            CPU workers, the bottleneck is elsewhere.
+          </p>
+
+          <h3 id="local-nvme-and-burst-buffers">
+            Local NVMe Scratch and Burst Buffers
+          </h3>
+
+          <p>
+            Every current GPU node ships with local NVMe, and NVIDIA recommends
+            using it to cache or stage data.<a href="#src-32">[32]</a> Uses:
+            stage a dataset once per job so every epoch reads locally; write
+            checkpoints locally first and drain them to shared storage in the
+            background; hold container images and compilation caches. MLPerf
+            Storage's checkpoint benchmark even includes a "subset" mode
+            representing node-local NVMe as the first checkpoint tier, with the
+            caveat that it does not by itself provide fault tolerance.<a
+              href="#src-33"
+              >[33]</a
+            >
+          </p>
+
+          <p>
+            Burst buffers generalize this. LLNL's El Capitan uses "Rabbit"
+            near-node storage: each Rabbit node has 16 SSDs and an AMD EPYC
+            storage processor, two per rack, each directly connected to 16
+            compute nodes, orchestrated by Flux; a static XFS allocation of
+            about 200 GB per node is mounted at <code>/l/ssd</code> on batch
+            nodes.<a href="#src-51">[51]</a>
+          </p>
+
+          <pre><code class="language-bash">#!/bin/bash
+#SBATCH --job-name=stage-and-train
+#SBATCH --nodes=4
+#SBATCH --ntasks-per-node=1
+#SBATCH --gpus-per-node=8
+#SBATCH --time=24:00:00
+# Example only: LOCAL path and shard layout are site/project specific.
+
+LOCAL=/local/scratch/$SLURM_JOB_ID
+SRC=/lustre/project/datasets/imagenet-wds
+
+# One task per node creates the local dir and copies the shards
+srun --ntasks=$SLURM_NNODES --ntasks-per-node=1 bash -c "
+  mkdir -p $LOCAL &amp;&amp; cp $SRC/shard-*.tar $LOCAL/
+"
+
+srun python train.py --data "$LOCAL/shard-{000000..001023}.tar"
+
+# Clean up local scratch on every node
+srun --ntasks=$SLURM_NNODES --ntasks-per-node=1 rm -rf "$LOCAL"
+</code></pre>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Make node-local scratch a
+              scheduler-managed resource (per-job directory created in a prolog,
+              wiped in an epilog) rather than a free-for-all <code>/tmp</code>.
+              Otherwise the first job that fills the NVMe breaks the next five
+              jobs on that node. See
+              <a href="scheduling.html">Scheduling and Orchestration</a>.
+            </p>
+          </blockquote>
+
+          <h2 id="data-formats-and-pipelines">Data Formats and Pipelines</h2>
+
+          <p>
+            Format choice decides whether your storage sees a few large
+            sequential reads or millions of tiny random ones.
+          </p>
+
+          <h3 id="ml-formats">Formats for Machine Learning</h3>
+
+          <ul>
+            <li>
+              <strong>WebDataset:</strong> plain POSIX tar files where files
+              belonging to one sample share a basename, with shards numbered for
+              brace expansion (<code>data-{000000..012345}.tar</code>). It reads
+              from local disk or any pipe, including object stores.<a
+                href="#src-52"
+                >[52]</a
+              >
+            </li>
+            <li>
+              <strong>Parquet:</strong> open-source column-oriented format with
+              compression and encoding schemes, the default for tabular and text
+              corpora.<a href="#src-53">[53]</a>
+            </li>
+            <li>
+              <strong>TFRecord:</strong> a sequence of binary records, usually
+              serialized <code>tf.train.Example</code> protocol buffers.<a
+                href="#src-54"
+                >[54]</a
+              >
+            </li>
+            <li>
+              <strong>Streaming datasets:</strong> MosaicML Streaming reads
+              sharded datasets from remote object storage with local caching and
+              resumable, deterministic shuffling.<a href="#src-58">[58]</a>
+              Hugging Face <code>datasets</code> streams with
+              <code>streaming=True</code>; its documentation example is the 45
+              TB English split of FineWeb.<a href="#src-59">[59]</a>
+            </li>
+          </ul>
+
+          <pre><code class="language-python"># WebDataset fluid interface (adapted from the project README)
+import webdataset as wds
+
+url = "/local/scratch/shards/train-{000000..001023}.tar"   # example path
+dataset = (
+    wds.WebDataset(url, shardshuffle=100)
+    .shuffle(1000)            # in-memory sample shuffle buffer
+    .decode("pil")
+    .to_tuple("png", "json")
+)
+</code></pre>
+
+          <h3 id="science-formats">Formats for Science</h3>
+
+          <ul>
+            <li>
+              <strong>HDF5:</strong> self-describing hierarchical container with
+              parallel I/O through MPI-IO; tune alignment to the file system
+              block size and pass MPI-IO hints.<a href="#src-56">[56]</a>
+            </li>
+            <li>
+              <strong>NetCDF-4:</strong> the climate and geoscience standard,
+              stored on disk as HDF5.<a href="#src-57">[57]</a>
+            </li>
+            <li>
+              <strong>Zarr:</strong> chunked, compressed N-dimensional typed
+              arrays, stored as many chunk objects, which makes it a natural fit
+              for object storage and cloud-native analysis (core specification
+              version 3.1).<a href="#src-55">[55]</a>
+            </li>
+          </ul>
+
+          <p>
+            For AI-for-science projects, the pattern that works is to keep the
+            canonical data in HDF5, NetCDF or Zarr, and generate training shards
+            (WebDataset, Parquet, or large NumPy/Zarr chunks aligned to the
+            sample) as a versioned derived product rather than having thousands
+            of data loader workers each open the canonical file.
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Target shard sizes in the hundreds of
+              MB to low GB. Much smaller and you are back to metadata storms;
+              much larger and shuffling granularity and restart times suffer.
+              Record the shard manifest and random seed with the checkpoint so a
+              restarted job resumes the same data order.
+            </p>
+          </blockquote>
+
+          <h2 id="checkpointing">Checkpointing Strategies and Sizes</h2>
+
+          <h3 id="why-and-how-often">Why and How Often</h3>
+
+          <p>
+            Synchronous training stalls when any one component fails. In Llama 3
+            pretraining on 16K GPUs, Meta saw 466 job interruptions in a 54-day
+            snapshot, 419 unexpected, about 78 percent attributed to confirmed
+            or suspected hardware issues, while still achieving more than 90
+            percent effective training time.<a href="#src-23">[23]</a> The
+            MLPerf Storage working group built a failure model from that data
+            and applied the rule of thumb of losing no more than 5 percent of
+            progress: about 20 checkpoints between expected failures. That
+            yields a checkpoint every 9.3 minutes at 16,000 accelerators (with
+            about 28 seconds allowed per checkpoint to keep overhead under 5
+            percent) and every 1.5 minutes at 100,000 accelerators (4.4 seconds
+            allowed).<a href="#src-33">[33]</a> A 64-GPU university cluster will
+            fail far less often per job, but the same method applies: estimate
+            job-level MTBF from your own incident data and set the interval from
+            it.
+          </p>
+
+          <h3 id="checkpoint-sizes">How Big Is a Checkpoint?</h3>
+
+          <p>
+            A full training checkpoint is dominated by optimizer state, not
+            weights. MLPerf Storage v2.0's checkpoint workload uses these
+            sizes:<a href="#src-33">[33]</a>
+          </p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th>Checkpoint size</th>
+                <th>Processes (CLOSED)</th>
+                <th>Size / parameter</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>8B</td>
+                <td>105 GB</td>
+                <td>8</td>
+                <td>about 13 bytes</td>
+              </tr>
+              <tr>
+                <td>70B</td>
+                <td>912 GB</td>
+                <td>64</td>
+                <td>about 13 bytes</td>
+              </tr>
+              <tr>
+                <td>405B</td>
+                <td>5.29 TB</td>
+                <td>512</td>
+                <td>about 13 bytes</td>
+              </tr>
+              <tr>
+                <td>1T</td>
+                <td>15 TB</td>
+                <td>1,024</td>
+                <td>15 bytes</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Note: sizes and process counts from MLCommons<a href="#src-33"
+              >[33]</a
+            >; the last column is simple division. Optimizer state is 90 GB of
+            the 8B checkpoint and 13.2 TB of the 1T checkpoint.<a href="#src-33"
+              >[33]</a
+            >
+          </p>
+
+          <p>
+            Worked example: writing the 912 GB 70B checkpoint takes about 46
+            seconds at the 20 GB/s "standard" single-SU write rate from NVIDIA's
+            reference, or about 15 seconds at the 62 GB/s "enhanced" rate.<a
+              href="#src-32"
+              >[32]</a
+            ><a href="#src-33">[33]</a> MLCommons notes that at 100,000
+            accelerators a 15 TB checkpoint every 1.5 minutes is more than 14 PB
+            of writes per day, and writing it synchronously in under 5 seconds
+            needs about 3.6 TB/s.<a href="#src-33">[33]</a> MLPerf Storage also
+            reports checkpoint time by the slowest process, because a checkpoint
+            is not done until every rank is done.<a href="#src-33">[33]</a>
+          </p>
+
+          <h3 id="checkpoint-strategies">Strategies That Work</h3>
+
+          <ul>
+            <li>
+              <strong>Sharded, parallel checkpoints.</strong> Each rank writes
+              its own shard (PyTorch Distributed Checkpoint, DeepSpeed,
+              Megatron) instead of gathering to rank 0. This spreads the burst
+              across all OSTs or storage servers.
+            </li>
+            <li>
+              <strong>Asynchronous save.</strong> PyTorch DCP's
+              <code>async_save</code> copies state to CPU buffers and writes in
+              the background. The cost is host memory (checkpoint size per rank
+              times ranks per node) and the need to manage outstanding saves;
+              PyTorch recommends at most one in flight. A pinned-memory staging
+              buffer speeds the copy but stays allocated between checkpoints.<a
+                href="#src-60"
+                >[60]</a
+              >
+            </li>
+            <li>
+              <strong>Tiered checkpoints.</strong> Write to local NVMe or peer
+              memory frequently, drain to the parallel file system less often,
+              and copy selected checkpoints to object storage or archive.
+            </li>
+            <li>
+              <strong>Retention policy.</strong> Keep the last few checkpoints
+              plus milestones. Five retained 70B checkpoints is 4.5 TB per run.
+            </li>
+          </ul>
+
+          <pre><code class="language-python"># Asynchronous DCP save, one outstanding request at a time
+# (pattern from the PyTorch async checkpoint recipe)
+import torch.distributed.checkpoint as dcp
+
+checkpoint_future = None
+for step in range(num_steps):
+    train_step()
+    if step % ckpt_every == 0:
+        if checkpoint_future is not None:
+            checkpoint_future.result()      # wait for the previous save
+        state_dict = {"app": AppState(model, optimizer)}
+        checkpoint_future = dcp.async_save(
+            state_dict, checkpoint_id=f"/lustre/project/ckpt/step{step}"
+        )
+</code></pre>
+
+          <p>
+            More on checkpoint/restart mechanics and elastic training is in
+            <a href="training.html">Training at Scale</a>.
+          </p>
+
+          <h2 id="data-management-and-security">
+            Data Management, Lifecycle and Research Data Security
+          </h2>
+
+          <h3 id="lifecycle">Lifecycle Tiers</h3>
+
+          <p>
+            Write the policy down and enforce it with tooling, not email. A
+            workable tier model:
+          </p>
+
+          <ul>
+            <li>
+              <strong>Node-local NVMe:</strong> per-job, wiped at job end.
+            </li>
+            <li>
+              <strong>Scratch (parallel file system):</strong> high performance,
+              not backed up, purged after a fixed period of no access, inode and
+              capacity quotas.
+            </li>
+            <li>
+              <strong>Project (parallel file system or NAS):</strong>
+              quota-managed per group, snapshots, for active datasets, code and
+              selected checkpoints.
+            </li>
+            <li>
+              <strong>Object / campus storage:</strong> system of record for
+              datasets and model artifacts, versioned, lifecycle rules to cold
+              tiers.
+            </li>
+            <li>
+              <strong>Archive:</strong> tape or cold cloud tier for data that
+              must be retained for publication, grant or regulatory reasons.
+            </li>
+          </ul>
+
+          <p>
+            Track provenance: which dataset version, shard manifest, code commit
+            and container produced each model. Funders increasingly require data
+            management and sharing plans; the storage tiers above are where
+            those plans become real.
+          </p>
+
+          <h3 id="security">Research Data Security</h3>
+
+          <p>
+            AI training concentrates sensitive data (clinical notes, genomic
+            data, student records, export-controlled simulation output) into
+            shards and checkpoints that are easy to copy and hard to audit.
+            Models trained on sensitive data can themselves be sensitive
+            artifacts. For federally funded work with Controlled Unclassified
+            Information, NIST SP 800-171 Revision 3 is the governing control set
+            for nonfederal systems.<a href="#src-61">[61]</a> Practical controls
+            at the storage layer: separate file systems or filesets per security
+            enclave; encryption at rest; POSIX ACLs and project groups rather
+            than world-readable scratch; logging of access to regulated
+            datasets; and making sure checkpoints, KV caches written to disk and
+            derived shards inherit the classification of their source data.
+            Governance and enclave operations are covered in
+            <a href="operations.html">Research Computing Operations</a>.
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> The purge policy on scratch is also a
+              security control. Regulated data copied to scratch "just for this
+              run" and never deleted is a common audit finding. Pair purges with
+              a clear, documented place where regulated data is allowed to live.
+            </p>
+          </blockquote>
+
+          <h2 id="benchmarks-mlperf-storage-and-io500">
+            Benchmarks and Center Sizing
+          </h2>
+
+          <h3 id="mlperf-storage">MLPerf Storage</h3>
+
+          <p>
+            MLPerf Storage emulates accelerators by replacing compute with
+            measured "think time," so it generates realistic storage patterns
+            without real GPUs.<a href="#src-34">[34]</a> The training workloads
+            pass only if the emulated accelerators stay busy: minimum
+            accelerator utilization is 90 percent for 3D U-Net (KiTS19, 140 MB
+            samples) and ResNet-50 (ImageNet, 150 KB samples) and 70 percent for
+            CosmoFlow (2 MB samples).<a href="#src-36">[36]</a> The headline
+            result is therefore "how many accelerators can this storage keep
+            fed," which is exactly the number you need for procurement. v2.0
+            (August 2025) added checkpointing and drew more than 200 results
+            from 26 organizations, with systems supporting roughly twice as many
+            accelerators as in v1.0.<a href="#src-34">[34]</a> v3.0 (September
+            2026) added KV cache and vector database tests and an S3 access
+            layer, with 19 submitting organizations.<a href="#src-35">[35]</a>
+          </p>
+
+          <h3 id="io500">IO500</h3>
+
+          <p>
+            IO500 is the HPC community's storage benchmark suite, combining IOR
+            and mdtest phases: ior-easy (each process writes its own file at
+            maximum throughput), ior-hard (interleaved 47,008-byte records to
+            one shared file), mdtest-easy (zero-byte files in per-process
+            directories), mdtest-hard (3,901-byte files in one shared directory)
+            and a find phase, each run against a 300-second stonewall timer.<a
+              href="#src-37"
+              >[37]</a
+            >
+            Separate lists cover production and research systems plus a 10-node
+            challenge; Argonne's Aurora DAOS system took the top production spot
+            at SC23.<a href="#src-38">[38]</a>
+          </p>
+
+          <p>
+            Use both as references, not purchase criteria by themselves. Ask
+            vendors for results at the node count and client configuration you
+            will actually run, run the benchmarks yourself during acceptance,
+            and remember the mdtest-hard phase is the closest proxy for the
+            small-file behavior your users will generate.
+          </p>
+
+          <h3 id="sizing-worksheet">A Sizing Worksheet for a Center</h3>
+
+          <p>
+            The worksheet below is a method, not a quote. Replace the example
+            values with your own measurements. The example is a hypothetical
+            64-GPU cluster (8 nodes x 8 GPUs) serving a mixed campus population.
+          </p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Line</th>
+                <th>Input or formula</th>
+                <th>Example (illustrative)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>A. GPUs</td>
+                <td>Count</td>
+                <td>64</td>
+              </tr>
+              <tr>
+                <td>B. Read per GPU</td>
+                <td>
+                  4 GB/s for image-heavy work per NVIDIA guidance<a
+                    href="#src-32"
+                    >[32]</a
+                  >; measure your own for LLM/text
+                </td>
+                <td>4 GB/s (worst case)</td>
+              </tr>
+              <tr>
+                <td>C. Aggregate read</td>
+                <td>A x B</td>
+                <td>256 GB/s</td>
+              </tr>
+              <tr>
+                <td>D. Aggregate write</td>
+                <td>At least C / 2 for LLM work<a href="#src-32">[32]</a></td>
+                <td>128 GB/s</td>
+              </tr>
+              <tr>
+                <td>E. Largest routine checkpoint</td>
+                <td>
+                  Params x 13-16 bytes (see MLPerf sizes<a href="#src-33"
+                    >[33]</a
+                  >)
+                </td>
+                <td>70B -&gt; 912 GB</td>
+              </tr>
+              <tr>
+                <td>F. Checkpoint write time</td>
+                <td>E / D</td>
+                <td>about 7 s</td>
+              </tr>
+              <tr>
+                <td>G. Checkpoint capacity</td>
+                <td>E x retained copies x concurrent large runs</td>
+                <td>912 GB x 5 x 3 = 13.7 TB</td>
+              </tr>
+              <tr>
+                <td>H. Hot datasets</td>
+                <td>Sum of active training sets</td>
+                <td>Survey users; e.g. 300 TB</td>
+              </tr>
+              <tr>
+                <td>I. Scratch capacity</td>
+                <td>(G + H) x headroom for growth and purge lag</td>
+                <td>e.g. 2x -&gt; about 630 TB</td>
+              </tr>
+              <tr>
+                <td>J. Local NVMe per node</td>
+                <td>
+                  Largest dataset you want to stage + local checkpoint tier
+                </td>
+                <td>e.g. 30 TB+ per node</td>
+              </tr>
+              <tr>
+                <td>K. Metadata</td>
+                <td>Files per TB after sharding; mdtest-hard results</td>
+                <td>Enforce inode quotas</td>
+              </tr>
+              <tr>
+                <td>L. Object / archive</td>
+                <td>
+                  Datasets of record + milestone checkpoints x retention years
+                </td>
+                <td>Per data management plans</td>
+              </tr>
+              <tr>
+                <td>M. Network</td>
+                <td>C and D must fit through storage NICs and fabric</td>
+                <td>See <a href="interconnects.html">Interconnects</a></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <p>
+            Two sanity checks. First, the worst case in line B is rarely the
+            average: if most of your GPU hours are LLM fine-tuning and
+            inference, read demand is lower and checkpoint write bursts
+            dominate, so weight line D more heavily. Second, compare against
+            MLPerf Storage results: find submissions that sustain your target
+            accelerator count at the required utilization, and see what hardware
+            they needed.<a href="#src-34">[34]</a
+            ><a href="#src-36">[36]</a> Power and floor space for storage are
+            real line items too; see
+            <a href="facilities.html">Power, Cooling and Facilities</a>, and
+            instrument all of this per
+            <a href="observability.html"
+              >Observability, Performance and Efficiency</a
+            >
+            so next year's worksheet uses measured numbers.
+          </p>
+
+          <h2 id="key-takeaways">Key Takeaways</h2>
+
+          <ul>
+            <li>
+              Peak compute has grown much faster than memory and interconnect
+              bandwidth; many AI workloads, especially decoding, are bound by
+              HBM bandwidth and capacity, not FLOPS.
+            </li>
+            <li>
+              HBM4 is standardized (JESD270-4, 2025) and shipping in 2026
+              accelerators, with vendor parts at 2.8-3.3 TB/s per stack, above
+              the JEDEC 2 TB/s baseline; HBM4E is sampling.
+            </li>
+            <li>
+              Fit models with arithmetic first: 2 bytes per parameter for BF16
+              inference, about 16 bytes per parameter plus activations for
+              mixed-precision Adam training, plus KV cache that grows with
+              context x concurrent sequences.
+            </li>
+            <li>
+              Coherent CPU-GPU memory (NVLink-C2C, MI300A) and CXL expand
+              capacity, not HBM bandwidth; treat them as a warm tier for
+              offload, embeddings, indexes and KV overflow.
+            </li>
+            <li>
+              Design storage for three patterns: repeated dataset reads,
+              synchronous checkpoint write bursts, and small-file metadata
+              storms. Size writes at half of reads or better for LLM work.
+            </li>
+            <li>
+              Shard data into large files (WebDataset, Parquet, TFRecord,
+              chunked Zarr/HDF5), stage to local NVMe, and enforce inode quotas;
+              it is cheaper than more hardware.
+            </li>
+            <li>
+              Checkpoints are mostly optimizer state (about 13-15 bytes per
+              parameter in MLPerf's workload); use sharded, asynchronous, tiered
+              checkpointing and a retention policy.
+            </li>
+            <li>
+              Use MLPerf Storage (accelerators kept busy) and IO500 (bandwidth
+              plus metadata) as procurement references, and verify at your own
+              scale during acceptance.
+            </li>
+          </ul>
+
+          <h2 id="sources">Sources</h2>
+          <ol class="sources">
+            <li id="src-1">
+              <a
+                href="https://arxiv.org/html/2403.14123v1"
+                target="_blank"
+                rel="noopener"
+                >Gholami et al., AI and Memory Wall (arXiv 2403.14123, IEEE
+                Micro, 2024)</a
+              >
+            </li>
+            <li id="src-2">
+              <a
+                href="https://www.jedec.org/news/pressreleases/jedec-updates-groundbreaking-high-bandwidth-memory-hbm-standard-0"
+                target="_blank"
+                rel="noopener"
+                >JEDEC Updates Groundbreaking High Bandwidth Memory (HBM)
+                Standard, JESD235B (JEDEC, 2018)</a
+              >
+            </li>
+            <li id="src-3">
+              <a
+                href="https://product.skhynix.com/products/dram/hbm.go"
+                target="_blank"
+                rel="noopener"
+                >HBM product lineup: HBM2E, HBM3, HBM3E, HBM4 (SK hynix,
+                accessed 2026)</a
+              >
+            </li>
+            <li id="src-4">
+              <a
+                href="https://www.jedec.org/news/pressreleases/jedec-publishes-hbm3-update-high-bandwidth-memory-hbm-standard"
+                target="_blank"
+                rel="noopener"
+                >JEDEC Publishes HBM3 Update to High Bandwidth Memory (HBM)
+                Standard, JESD238 (JEDEC, 2022)</a
+              >
+            </li>
+            <li id="src-5">
+              <a
+                href="https://www.jedec.org/news/pressreleases/jedec%C2%AE-and-industry-leaders-collaborate-release-jesd270-4-hbm4-standard-advancing"
+                target="_blank"
+                rel="noopener"
+                >JEDEC and Industry Leaders Collaborate to Release JESD270-4
+                HBM4 Standard (JEDEC, 2025)</a
+              >
+            </li>
+            <li id="src-6">
+              <a
+                href="https://www.jedec.org/standards-documents/docs/jesd270-4a"
+                target="_blank"
+                rel="noopener"
+                >High Bandwidth Memory (HBM4) DRAM, JESD270-4A (JEDEC, 2025)</a
+              >
+            </li>
+            <li id="src-7">
+              <a
+                href="https://www.micron.com/products/memory/hbm/hbm3e"
+                target="_blank"
+                rel="noopener"
+                >HBM3E (Micron, accessed 2026)</a
+              >
+            </li>
+            <li id="src-8">
+              <a
+                href="https://www.micron.com/products/memory/hbm/hbm4"
+                target="_blank"
+                rel="noopener"
+                >HBM4 (Micron, accessed 2026)</a
+              >
+            </li>
+            <li id="src-9">
+              <a
+                href="https://news.samsung.com/global/samsung-ships-industry-first-commercial-hbm4-with-ultimate-performance-for-ai-computing"
+                target="_blank"
+                rel="noopener"
+                >Samsung Ships Industry-First Commercial HBM4 (Samsung Newsroom,
+                2026)</a
+              >
+            </li>
+            <li id="src-10">
+              <a
+                href="https://news.samsung.com/global/samsung-electronics-begins-shipment-of-industry-first-hbm4e-samples"
+                target="_blank"
+                rel="noopener"
+                >Samsung Electronics Begins Shipment of Industry-First HBM4E
+                Samples (Samsung Newsroom, 2026)</a
+              >
+            </li>
+            <li id="src-11">
+              <a
+                href="https://nvidia.com/content/dam/en-zz/Solutions/Data-Center/a100/pdf/nvidia-a100-datasheet-nvidia-us-2188504-web.pdf"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA A100 Tensor Core GPU Datasheet (NVIDIA)</a
+              >
+            </li>
+            <li id="src-12">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/h100/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA H100 Tensor Core GPU (NVIDIA, accessed 2026)</a
+              >
+            </li>
+            <li id="src-13">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/h200/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA H200 GPU (NVIDIA, accessed 2026)</a
+              >
+            </li>
+            <li id="src-14">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/gb200-nvl72/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA GB200 NVL72 (NVIDIA, accessed 2026)</a
+              >
+            </li>
+            <li id="src-15">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/gb300-nvl72/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA GB300 NVL72 (NVIDIA, accessed 2026)</a
+              >
+            </li>
+            <li id="src-16">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/vera-rubin-nvl72/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA Vera Rubin NVL72 (NVIDIA, accessed 2026)</a
+              >
+            </li>
+            <li id="src-17">
+              <a
+                href="https://amd.com/content/dam/amd/en/documents/instinct-tech-docs/product-briefs/amd-instinct-mi355x-gpu-brochure.pdf"
+                target="_blank"
+                rel="noopener"
+                >AMD Instinct MI355X GPU Brochure (AMD, 2025)</a
+              >
+            </li>
+            <li id="src-18">
+              <a
+                href="https://www.amd.com/en/products/accelerators/instinct/mi400.html"
+                target="_blank"
+                rel="noopener"
+                >AMD Instinct MI400 Series GPUs (AMD, accessed 2026)</a
+              >
+            </li>
+            <li id="src-19">
+              <a
+                href="https://www.amd.com/content/dam/amd/en/documents/instinct-tech-docs/data-sheets/amd-instinct-mi300a-data-sheet.pdf"
+                target="_blank"
+                rel="noopener"
+                >AMD Instinct MI300A APU Data Sheet (AMD, 2025)</a
+              >
+            </li>
+            <li id="src-20">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/grace-hopper-superchip/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA GH200 Grace Hopper Superchip (NVIDIA, accessed 2026)</a
+              >
+            </li>
+            <li id="src-21">
+              <a
+                href="https://arxiv.org/html/1910.02054v3"
+                target="_blank"
+                rel="noopener"
+                >Rajbhandari et al., ZeRO: Memory Optimizations Toward Training
+                Trillion Parameter Models (arXiv 1910.02054, 2020)</a
+              >
+            </li>
+            <li id="src-22">
+              <a
+                href="https://arxiv.org/html/2309.06180v1"
+                target="_blank"
+                rel="noopener"
+                >Kwon et al., Efficient Memory Management for Large Language
+                Model Serving with PagedAttention (SOSP, 2023)</a
+              >
+            </li>
+            <li id="src-23">
+              <a
+                href="https://arxiv.org/html/2407.21783"
+                target="_blank"
+                rel="noopener"
+                >Llama Team, The Llama 3 Herd of Models (arXiv 2407.21783, Meta,
+                2024)</a
+              >
+            </li>
+            <li id="src-24">
+              <a
+                href="https://www.amd.com/content/dam/amd/en/documents/epyc-business-docs/datasheets/amd-epyc-9005-series-processor-datasheet.pdf"
+                target="_blank"
+                rel="noopener"
+                >AMD EPYC 9005 Series Server CPUs Datasheet (AMD)</a
+              >
+            </li>
+            <li id="src-25">
+              <a
+                href="https://cdrdv2-public.intel.com/845771/Intel-Xeon6-ProductBrief.pdf"
+                target="_blank"
+                rel="noopener"
+                >The Intel Xeon 6 Processor Family Product Brief (Intel)</a
+              >
+            </li>
+            <li id="src-26">
+              <a
+                href="https://www.jedec.org/news/pressreleases/jedec%C2%AE-advances-ddr5-mrdimm-ecosystem-new-memory-interface-logic-and-expanded"
+                target="_blank"
+                rel="noopener"
+                >JEDEC Advances DDR5 MRDIMM Ecosystem with New Memory Interface
+                Logic (JEDEC, 2026)</a
+              >
+            </li>
+            <li id="src-27">
+              <a
+                href="https://via.tt.se/pressmeddelande/cxl-consortium-releases-compute-express-link-20-specification?publisherId=259167&amp;releaseId=3286723"
+                target="_blank"
+                rel="noopener"
+                >CXL Consortium Releases Compute Express Link 2.0 Specification
+                (CXL Consortium via Business Wire, 2020)</a
+              >
+            </li>
+            <li id="src-28">
+              <a
+                href="https://computeexpresslink.org/wp-content/uploads/2024/01/CXL_3.0-Specification-Release_FINAL-1.pdf"
+                target="_blank"
+                rel="noopener"
+                >CXL Consortium Releases Compute Express Link 3.0 Specification
+                (CXL Consortium, 2022)</a
+              >
+            </li>
+            <li id="src-29">
+              <a
+                href="https://computeexpresslink.org/wp-content/uploads/2023/12/CXL_3.1-White-Paper_FINAL.pdf"
+                target="_blank"
+                rel="noopener"
+                >Introducing Compute Express Link 3.1 (CXL Consortium white
+                paper, 2023)</a
+              >
+            </li>
+            <li id="src-30">
+              <a
+                href="https://computeexpresslink.org/wp-content/uploads/2025/11/CXL_4.0-Specification-Release_FINAL_Website-Copy.pdf"
+                target="_blank"
+                rel="noopener"
+                >CXL Consortium Releases the Compute Express Link 4.0
+                Specification (CXL Consortium, 2025)</a
+              >
+            </li>
+            <li id="src-31">
+              <a
+                href="https://computeexpresslink.org/wp-content/uploads/2025/12/CXL_4.0-Webinar_December-2025_FINAL.pdf"
+                target="_blank"
+                rel="noopener"
+                >Introducing the CXL 4.0 Specification, webinar slides (CXL
+                Consortium, 2025)</a
+              >
+            </li>
+            <li id="src-32">
+              <a
+                href="https://docs.nvidia.com/dgx-superpod/reference-architecture-scalable-infrastructure-gb200/latest/storage-architecture.html"
+                target="_blank"
+                rel="noopener"
+                >DGX SuperPOD GB200 Reference Architecture: Storage Architecture
+                (NVIDIA)</a
+              >
+            </li>
+            <li id="src-33">
+              <a
+                href="https://mlcommons.org/2025/08/storage-2-checkpointing/"
+                target="_blank"
+                rel="noopener"
+                >Announcing the MLPerf Storage v2.0 Checkpointing Workload
+                (MLCommons, 2025)</a
+              >
+            </li>
+            <li id="src-34">
+              <a
+                href="https://mlcommons.org/2025/08/mlperf-storage-v2-0-results/"
+                target="_blank"
+                rel="noopener"
+                >New MLPerf Storage v2.0 Benchmark Results (MLCommons, 2025)</a
+              >
+            </li>
+            <li id="src-35">
+              <a
+                href="https://mlcommons.org/2026/09/mlperf-storage-v3-0-results/"
+                target="_blank"
+                rel="noopener"
+                >MLCommons Releases New MLPerf Storage v3.0 Benchmark Results
+                (MLCommons, 2026)</a
+              >
+            </li>
+            <li id="src-36">
+              <a
+                href="https://github.com/mlcommons/storage/blob/main/Submission_guidelines.md"
+                target="_blank"
+                rel="noopener"
+                >MLPerf Storage Submission Guidelines (MLCommons, GitHub)</a
+              >
+            </li>
+            <li id="src-37">
+              <a href="https://io500.org/about" target="_blank" rel="noopener"
+                >About the IO500 (IO500 Foundation)</a
+              >
+            </li>
+            <li id="src-38">
+              <a href="https://io500.org/news" target="_blank" rel="noopener"
+                >IO500 News (IO500 Foundation)</a
+              >
+            </li>
+            <li id="src-39">
+              <a
+                href="https://wiki.lustre.org/Lustre_Architecture_for_Admins"
+                target="_blank"
+                rel="noopener"
+                >Lustre Architecture for Admins (Lustre Wiki)</a
+              >
+            </li>
+            <li id="src-40">
+              <a
+                href="https://wiki.lustre.org/Configuring_Lustre_File_Striping"
+                target="_blank"
+                rel="noopener"
+                >Configuring Lustre File Striping (Lustre Wiki)</a
+              >
+            </li>
+            <li id="src-41">
+              <a
+                href="https://doc.beegfs.io/latest/architecture/overview.html"
+                target="_blank"
+                rel="noopener"
+                >BeeGFS Architecture Overview (BeeGFS Documentation)</a
+              >
+            </li>
+            <li id="src-42">
+              <a
+                href="https://docs.daos.io/v2.4/overview/architecture/"
+                target="_blank"
+                rel="noopener"
+                >DAOS Architecture (DAOS v2.4 Documentation)</a
+              >
+            </li>
+            <li id="src-43">
+              <a
+                href="https://docs.alcf.anl.gov/aurora/data-management/daos/daos-overview"
+                target="_blank"
+                rel="noopener"
+                >DAOS on Aurora (Argonne Leadership Computing Facility User
+                Guides)</a
+              >
+            </li>
+            <li id="src-44">
+              <a
+                href="https://docs.weka.io/4.3/weka-system-overview/about"
+                target="_blank"
+                rel="noopener"
+                >WEKA Data Platform Introduction (WEKA Documentation 4.3)</a
+              >
+            </li>
+            <li id="src-45">
+              <a
+                href="https://www.vastdata.com/disaggregated-shared-everything-architecture-dase"
+                target="_blank"
+                rel="noopener"
+                >What is Disaggregated Shared Everything (DASE)? (VAST Data)</a
+              >
+            </li>
+            <li id="src-46">
+              <a
+                href="https://www.ddn.com/products/lustre-file-system-exascaler/"
+                target="_blank"
+                rel="noopener"
+                >EXAScaler Lustre File System (DDN)</a
+              >
+            </li>
+            <li id="src-47">
+              <a
+                href="https://www.ibm.com/products/storage-scale"
+                target="_blank"
+                rel="noopener"
+                >IBM Storage Scale (IBM)</a
+              >
+            </li>
+            <li id="src-48">
+              <a
+                href="https://docs.nvidia.com/gpudirect-storage/overview-guide/index.html"
+                target="_blank"
+                rel="noopener"
+                >GPUDirect Storage Overview Guide (NVIDIA)</a
+              >
+            </li>
+            <li id="src-49">
+              <a
+                href="https://docs.nvidia.com/gpudirect-storage/release-notes/index.html"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA GPUDirect Storage Release Notes (NVIDIA)</a
+              >
+            </li>
+            <li id="src-50">
+              <a
+                href="https://docs.nvidia.com/gpudirect-storage/troubleshooting-guide/index.html"
+                target="_blank"
+                rel="noopener"
+                >GPUDirect Storage Installation and Troubleshooting Guide
+                (NVIDIA)</a
+              >
+            </li>
+            <li id="src-51">
+              <a
+                href="https://hpc.llnl.gov/documentation/user-guides/using-el-capitan-systems/file-systems-rabbits"
+                target="_blank"
+                rel="noopener"
+                >Using El Capitan Systems: File Systems and Rabbits (LLNL)</a
+              >
+            </li>
+            <li id="src-52">
+              <a
+                href="https://github.com/webdataset/webdataset"
+                target="_blank"
+                rel="noopener"
+                >WebDataset (GitHub)</a
+              >
+            </li>
+            <li id="src-53">
+              <a
+                href="https://parquet.apache.org/docs/overview/"
+                target="_blank"
+                rel="noopener"
+                >Apache Parquet Overview (Apache Software Foundation)</a
+              >
+            </li>
+            <li id="src-54">
+              <a
+                href="https://www.tensorflow.org/tutorials/load_data/tfrecord"
+                target="_blank"
+                rel="noopener"
+                >TFRecord and tf.train.Example (TensorFlow)</a
+              >
+            </li>
+            <li id="src-55">
+              <a
+                href="https://zarr-specs.readthedocs.io/en/latest/v3/core/index.html"
+                target="_blank"
+                rel="noopener"
+                >Zarr Core Specification Version 3.1 (Zarr)</a
+              >
+            </li>
+            <li id="src-56">
+              <a
+                href="https://support.hdfgroup.org/documentation/hdf5-docs/hdf5_topics/ParallelHDF5.html"
+                target="_blank"
+                rel="noopener"
+                >Parallel HDF5 (The HDF Group)</a
+              >
+            </li>
+            <li id="src-57">
+              <a
+                href="https://docs.unidata.ucar.edu/nug/2.0-draft/nc4_file_format.html"
+                target="_blank"
+                rel="noopener"
+                >NetCDF-4 File Format, NetCDF User's Guide (NSF Unidata)</a
+              >
+            </li>
+            <li id="src-58">
+              <a
+                href="https://docs.mosaicml.com/projects/streaming/en/stable/api_reference/generated/streaming.StreamingDataset.html"
+                target="_blank"
+                rel="noopener"
+                >StreamingDataset (MosaicML Streaming Documentation)</a
+              >
+            </li>
+            <li id="src-59">
+              <a
+                href="https://huggingface.co/docs/datasets/stream"
+                target="_blank"
+                rel="noopener"
+                >Stream (Hugging Face Datasets Documentation)</a
+              >
+            </li>
+            <li id="src-60">
+              <a
+                href="https://docs.pytorch.org/tutorials/recipes/distributed_async_checkpoint_recipe.html"
+                target="_blank"
+                rel="noopener"
+                >Asynchronous Saving with Distributed Checkpoint (DCP) (PyTorch,
+                2026)</a
+              >
+            </li>
+            <li id="src-61">
+              <a
+                href="https://nvlpubs.nist.gov/nistpubs/SpecialPublications/800-171r3/NIST.SP.800-171r3.html"
+                target="_blank"
+                rel="noopener"
+                >NIST SP 800-171 Rev. 3, Protecting Controlled Unclassified
+                Information in Nonfederal Systems (NIST)</a
+              >
+            </li>
+            <li id="src-62">
+              <a
+                href="https://arxiv.org/abs/2104.07857"
+                target="_blank"
+                rel="noopener"
+                >Rajbhandari et al., ZeRO-Infinity: Breaking the GPU Memory Wall
+                for Extreme Scale Deep Learning (arXiv 2104.07857, 2021)</a
+              >
+            </li>
+          </ol>
+          <nav class="doc-pager" aria-label="Chapter navigation">
+            <a class="pager-prev" href="accelerators.html"
+              ><span>Previous</span>Accelerators: GPUs, TPUs and Beyond</a
+            ><a class="pager-next" href="interconnects.html"
+              ><span>Next</span>Interconnects: Scale-Up and Scale-Out</a
+            >
+          </nav>
+        </article>
+      </div>
+    </main>
+
+    <footer class="section-dark">
+      <div class="container text-center">
+        <p class="footer-note">
+          2026 edition |
+          <a href="index.html" class="subtle-link">Field Manual</a> |
+          <a href="../index.html" class="subtle-link"
+            >charles-forsyth.github.io</a
+          >
+        </p>
+      </div>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+      document.querySelectorAll('pre code').forEach(function (el) {
+        if (el.className === 'c++') el.className = 'language-cpp';
+        else if (el.className && el.className.indexOf('language-') !== 0)
+          el.className = 'language-' + el.className;
+        hljs.highlightElement(el);
+      });
+    </script>
+  </body>
+</html>

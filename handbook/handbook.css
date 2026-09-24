@@ -404,3 +404,72 @@
     columns: 1;
   }
 }
+
+/* 2026 edition: part headings and chapter pager */
+.manual-part {
+  color: var(--accent);
+  font-family: var(--font-tech);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-size: 1rem;
+  margin: 45px 0 0;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 8px;
+}
+
+.manual-grid {
+  margin-top: 20px;
+}
+
+.doc-pager {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  margin-top: 60px;
+  padding-top: 25px;
+  border-top: 1px solid var(--border-color);
+}
+
+.doc-pager a {
+  display: flex;
+  flex-direction: column;
+  max-width: 48%;
+  padding: 14px 18px;
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-main) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.doc-pager a:hover {
+  border-color: var(--accent) !important;
+}
+
+.doc-pager span {
+  font-family: var(--font-tech);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.doc-pager .pager-next {
+  text-align: right;
+  margin-left: auto;
+}
+
+.doc-content ol.sources {
+  font-size: 0.88rem;
+}
+
+.doc-content ol.sources li {
+  margin: 4px 0;
+  word-break: break-word;
+}
+
+.doc-content .sources li:target {
+  background: var(--bg-surface-alt);
+  outline: 1px solid var(--accent);
+}

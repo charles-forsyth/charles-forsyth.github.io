@@ -1,0 +1,1604 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>The Convergence | Field Manual</title>
+    <meta
+      name="description"
+      content="Why GPU-dense systems now serve both simulation and AI, how the two scoreboards (TOP500 and MLPerf) differ, what the numeric precision spectrum means for science, and how this manual is organized."
+    />
+    <link
+      rel="canonical"
+      href="https://charles-forsyth.github.io/handbook/convergence.html"
+    />
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="handbook.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
+    />
+  </head>
+  <body>
+    <header class="hero doc-hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="doc-kicker">
+            <i class="fas fa-layer-group"></i> AI + HPC Field Manual
+          </p>
+          <h1>The Convergence</h1>
+          <h2>How AI and HPC became the same machine room</h2>
+          <div class="cta-buttons">
+            <a href="index.html" class="btn btn-secondary"
+              ><i class="fas fa-book-open"></i> Field Manual</a
+            >
+            <a href="../index.html" class="btn btn-secondary"
+              ><i class="fas fa-arrow-left"></i> Main Site</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+    <nav class="doc-nav" aria-label="Field manual chapters">
+      <div class="container">
+        <a href="convergence.html" class="active" aria-current="page"
+          >Convergence</a
+        ><a href="accelerators.html">Accelerators</a
+        ><a href="memory-storage.html">Memory &amp; Storage</a
+        ><a href="interconnects.html">Interconnects</a
+        ><a href="facilities.html">Facilities</a
+        ><a href="systems-software.html">Systems Software</a
+        ><a href="scheduling.html">Scheduling</a
+        ><a href="observability.html">Observability</a
+        ><a href="operations.html">Operations</a
+        ><a href="training.html">Training</a
+        ><a href="inference.html">Inference</a
+        ><a href="scientific-computing.html">Scientific Computing</a
+        ><a href="cloud.html">Cloud</a><a href="linux.html">Linux</a
+        ><a href="glossary.html">Glossary</a>
+      </div>
+    </nav>
+    <main class="section-light">
+      <div class="container doc-layout">
+        <aside class="doc-toc">
+          <h4><i class="fas fa-list"></i> On this page</h4>
+          <ul>
+            <li>
+              <a href="#from-mpi-clusters-to-gpu-dense-systems"
+                >From MPI Clusters to GPU-Dense Systems</a
+              >
+            </li>
+            <li>
+              <a href="#the-two-scoreboards"
+                >The Two Scoreboards: TOP500 and MLPerf</a
+              >
+            </li>
+            <li>
+              <a href="#a-workload-taxonomy">A Workload Taxonomy for 2026</a>
+            </li>
+            <li>
+              <a href="#the-numeric-precision-spectrum"
+                >The Numeric Precision Spectrum</a
+              >
+            </li>
+            <li>
+              <a href="#mixed-precision-and-emulated-fp64"
+                >Mixed Precision and Emulated FP64</a
+              >
+            </li>
+            <li>
+              <a href="#the-roofline-model-and-the-memory-wall"
+                >The Roofline Model and the Memory Wall</a
+              >
+            </li>
+            <li>
+              <a href="#how-the-research-computing-center-has-changed"
+                >How the Research Computing Center Has Changed</a
+              >
+            </li>
+            <li><a href="#what-stays-the-same">What Stays the Same</a></li>
+            <li>
+              <a href="#roadmap-of-this-manual">Roadmap of This Manual</a>
+            </li>
+            <li><a href="#key-takeaways">Key Takeaways</a></li>
+          </ul>
+        </aside>
+        <article class="doc-content">
+          <p>
+            When I wrote the first HPC Field Manual in 2018, a research cluster
+            was a rack of dual-socket CPU nodes, an InfiniBand fabric, a Lustre
+            or GPFS scratch file system, and Slurm. GPUs were a partition in the
+            corner that a few molecular dynamics and deep learning groups fought
+            over. In 2026 that picture has flipped. The largest systems on the
+            planet are GPU or APU machines, the same hardware trains frontier
+            language models and runs climate codes, and the question a
+            facilitator hears most often is not "how many cores?" but "how much
+            GPU memory, at what precision?" This chapter explains how that
+            happened, what the two scoreboards measure, why numeric precision is
+            now a first-order design decision for scientists, and which parts of
+            the craft have not changed at all. It closes with a roadmap of the
+            rest of the manual.
+          </p>
+
+          <h2 id="from-mpi-clusters-to-gpu-dense-systems">
+            From MPI Clusters to GPU-Dense Systems
+          </h2>
+
+          <h3 id="the-cpu-cluster-era">The CPU cluster era</h3>
+          <p>
+            For roughly two decades, the standard recipe for research computing
+            was commodity x86 servers glued together with MPI. Performance came
+            from more nodes and more cores, and the programming model was
+            message passing between ranks with some OpenMP threading inside each
+            node. The TOP500 list, which started in 1993 and has been published
+            every June and November since, tracked that growth.<a href="#src-1"
+              >[1]</a
+            >
+            That model still describes a large share of campus workloads, and
+            nothing in this manual argues it is obsolete. What changed is where
+            the floating-point operations live.
+          </p>
+
+          <h3 id="accelerators-take-over-the-top-of-the-list">
+            Accelerators take over the top of the list
+          </h3>
+          <p>
+            By the time Frontier arrived, GPUs were already established at the
+            top. The May 2022 TOP500 announcement, which recorded Frontier as
+            the first system to exceed one exaflop/s on HPL (1.102 Exaflop/s),
+            listed Summit at No. 4 with six NVIDIA V100 GPUs per node and Sierra
+            at No. 5 with four V100s per node.<a href="#src-3">[3]</a> Frontier
+            itself paired one 64-core AMD EPYC CPU with four AMD Instinct MI250X
+            GPUs per node across 9,856 nodes, for 53 TF of double precision per
+            node.<a href="#src-4">[4]</a> The CPU had become the host; the
+            accelerators did the math.
+          </p>
+          <p>Three forces drove this:</p>
+          <ul>
+            <li>
+              <strong>Power.</strong> Dense matrix units deliver far more
+              floating-point work per watt than general-purpose cores. Every
+              exascale design is, first, a power budget.
+            </li>
+            <li>
+              <strong>Memory bandwidth.</strong> GPUs sit on stacks of high
+              bandwidth memory (HBM). A 2020-era A100 already offered 1,555 GB/s
+              from 40 GB of HBM2.<a href="#src-11">[11]</a> Many simulation
+              kernels are bandwidth-bound, so this matters as much as FLOPS (see
+              <a href="#the-roofline-model-and-the-memory-wall"
+                >the roofline section</a
+              >
+              below).
+            </li>
+            <li>
+              <strong>Money following AI.</strong> Once deep learning became the
+              largest market for accelerators, vendors put their silicon,
+              software and networking investment there. Scientific computing now
+              rides on hardware whose feature list is set largely by AI.
+            </li>
+          </ul>
+
+          <h3 id="the-exascale-generation-in-2026">
+            The exascale generation in 2026
+          </h3>
+          <p>
+            The June 2026 TOP500 (the 67th edition) lists five systems above one
+            exaflop/s on HPL.<a href="#src-1">[1]</a> Four of them are
+            accelerator machines built for both simulation and AI; the new No. 1
+            is a CPU-only design, which is a useful reminder that there is more
+            than one path.
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Rank (June 2026)</th>
+                <th>System and site</th>
+                <th>HPL Rmax (EF/s)</th>
+                <th>Node architecture</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>1</td>
+                <td>LineShine, NSC Shenzhen (China)</td>
+                <td>2.198</td>
+                <td>
+                  CPU-only, 304-core LX2 processors, LingQi interconnect<a
+                    href="#src-1"
+                    >[1]</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>2</td>
+                <td>El Capitan, LLNL (US)</td>
+                <td>1.809</td>
+                <td>
+                  4 AMD MI300A APUs per node, 128 GB per APU<a href="#src-5"
+                    >[5]</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>3</td>
+                <td>Frontier, ORNL (US)</td>
+                <td>1.353</td>
+                <td>
+                  1 AMD EPYC + 4 AMD MI250X per node<a href="#src-4">[4]</a>
+                </td>
+              </tr>
+              <tr>
+                <td>4</td>
+                <td>Aurora, ANL (US)</td>
+                <td>1.012</td>
+                <td>
+                  2 Intel Xeon CPU Max + 6 Intel Data Center GPU Max per node<a
+                    href="#src-6"
+                    >[6]</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>5</td>
+                <td>JUPITER Booster, JSC (Germany)</td>
+                <td>1.000</td>
+                <td>
+                  NVIDIA GH200 Grace Hopper Superchips, quad-rail InfiniBand
+                  NDR200<a href="#src-2">[2]</a>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Rmax values are from the June 2026 TOP500 press release.<a
+              href="#src-1"
+              >[1]</a
+            >
+            A few details worth knowing about each:
+          </p>
+          <ul>
+            <li>
+              <strong>El Capitan</strong> uses the AMD MI300A, an APU that puts
+              CPU cores and GPU compute dies in one package with shared HBM.
+              LLNL lists 61.3 TFLOPS of vector FP64 and 122.6 TFLOPS of matrix
+              FP64 per MI300A.<a href="#src-5">[5]</a> It reports 60.94 GFLOPS/W
+              on HPL.<a href="#src-1">[1]</a>
+            </li>
+            <li>
+              <strong>Aurora</strong> has 10,624 nodes, 63,744 GPUs, 20.4 PB of
+              aggregate memory, and a 230 PB DAOS storage system rated at 31
+              TB/s.<a href="#src-6">[6]</a>
+            </li>
+            <li>
+              <strong>JUPITER Booster</strong> is Europe's first exascale system
+              and runs on Eviden BullSequana XH3000 direct liquid-cooled
+              hardware.<a href="#src-2">[2]</a>
+            </li>
+            <li>
+              <strong>LineShine</strong> reached 2.198 EF/s at about 42.2 MW, or
+              52.07 GFLOPS/W, with 13.79 million cores.<a href="#src-1">[1]</a>
+            </li>
+          </ul>
+
+          <h3 id="ai-supercomputers-and-the-cloud">
+            AI supercomputers and the cloud
+          </h3>
+          <p>
+            Alongside national lab machines, purpose-built AI systems and cloud
+            clusters now sit on the same list. Microsoft's Azure Eagle system
+            (Intel Xeon with NVIDIA H100) is No. 7 in June 2026 at 561.2 PF/s.<a
+              href="#src-1"
+              >[1]</a
+            >
+            The next generation of lab systems is being designed explicitly for
+            both roles. NVIDIA's June 2026 announcement of Vera Rubin for
+            scientific computing names NERSC's Doudna, LRZ's Blue Lion
+            (scheduled for 2027) and Los Alamos's Mission, Vision and Veritas
+            systems, and describes Veritas as "designed for agents".<a
+              href="#src-7"
+              >[7]</a
+            >
+            These are announced systems, not yet on the list.
+          </p>
+          <p>
+            The line between "AI supercomputer" and "HPC supercomputer" is now
+            mostly a question of who paid for it and what the procurement
+            document emphasized. The hardware underneath - accelerators with
+            HBM, a scale-up fabric inside the node or rack, a scale-out fabric
+            between them, a parallel file system, Linux and a batch scheduler -
+            is the same.
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> When faculty ask whether they need
+              "an AI cluster" or "an HPC cluster," the honest answer in 2026 is
+              usually "one cluster with a few different partitions." Size the
+              GPU memory, interconnect and storage for the most demanding
+              workload you plan to support, and let the scheduler carve it up.
+              Buying two separate islands doubles the operations cost and halves
+              the utilization.
+            </p>
+          </blockquote>
+
+          <h2 id="the-two-scoreboards">
+            The Two Scoreboards: TOP500 and MLPerf
+          </h2>
+
+          <h3 id="top500-hpl-hpcg-and-hpl-mxp">
+            TOP500: HPL, HPCG and HPL-MxP
+          </h3>
+          <p>
+            The TOP500 ranks systems by the High Performance Linpack (HPL)
+            benchmark, which solves a dense linear system in 64-bit floating
+            point. HPL rewards peak FP64 matrix throughput and a well-tuned
+            interconnect. It has well-known limits: real applications rarely
+            look like a dense LU factorization. Two companion benchmarks fill in
+            the picture:
+          </p>
+          <ul>
+            <li>
+              <strong>HPCG</strong> exercises sparse, memory-bound access
+              patterns closer to real solvers. In June 2026 LineShine leads at
+              22.00 PF/s, ahead of El Capitan at 17.41 and Fugaku at 16.00.<a
+                href="#src-1"
+                >[1]</a
+              >
+              Note how small those numbers are relative to HPL: that gap is the
+              memory wall in one line.
+            </li>
+            <li>
+              <strong>HPL-MxP</strong> (formerly HPL-AI) solves the same problem
+              but lets the LU factorization run in low precision, then uses
+              iterative refinement to recover a 64-bit accurate answer.<a
+                href="#src-20"
+                >[20]</a
+              >
+              El Capitan leads at 16.7 EF/s, a 9.2x speedup over its HPL score;
+              Aurora (11.6 EF/s, 11.5x) and Frontier (11.4 EF/s, 8.4x) follow.
+              LineShine, being CPU-only, posts 7.92 EF/s, a 3.6x speedup.<a
+                href="#src-1"
+                >[1]</a
+              >
+            </li>
+          </ul>
+          <p>
+            HPL-MxP is the benchmark that most directly measures the
+            convergence: it asks how much of a machine's AI-oriented
+            low-precision hardware can be turned into a scientifically valid
+            FP64 answer.
+          </p>
+
+          <h3 id="mlperf-training-and-inference">
+            MLPerf: training and inference
+          </h3>
+          <p>
+            MLPerf, run by the MLCommons consortium, measures time-to-train and
+            inference throughput on fixed reference models with accuracy
+            targets. The Closed division holds the model fixed so results are
+            comparable; the Open division allows other optimizations.<a
+              href="#src-10"
+              >[10]</a
+            >
+            Recent rounds show where AI workloads are going:
+          </p>
+          <ul>
+            <li>
+              <strong>Training v6.0 (June 2026)</strong> added DeepSeek V3 (671
+              billion total parameters, 37 billion active per token) and GPT-OSS
+              20B, both Mixture-of-Experts models. Submitters used 95 unique
+              systems with thirteen different accelerators; 60 percent of
+              systems were multi-node, and cloud submissions more than doubled
+              compared with v5.1. Submitters used multiple different FP4
+              training recipes.<a href="#src-8">[8]</a>
+            </li>
+            <li>
+              <strong>Inference v6.0 (April 2026)</strong> added GPT-OSS 120B,
+              DLRMv3, a text-to-video test and a vision-language benchmark. The
+              largest system had 72 nodes and 288 accelerators.<a href="#src-9"
+                >[9]</a
+              >
+            </li>
+            <li>
+              <strong>Inference v6.1 (September 2026)</strong> drew a record 30
+              submitters and 120 systems, added end-to-end RAG and agentic edge
+              benchmarks, and set a scale record with a 512-GPU submission.
+              MLCommons attributes part of the gains to some submissions moving
+              from FP8 to FP4 while meeting accuracy requirements. The largest
+              per-accelerator jumps came from NVIDIA Vera Rubin systems
+              submitted in the Preview category.<a href="#src-10">[10]</a>
+            </li>
+          </ul>
+
+          <h3 id="reading-the-scoreboards">Reading the scoreboards</h3>
+          <p>
+            TOP500 tells you about FP64 capability and fabric quality. MLPerf
+            tells you about low-precision throughput, software maturity and
+            scale-out for AI. Neither tells you how your users' codes will run.
+            Use both as sanity checks against vendor claims, then benchmark your
+            own workloads (see
+            <a href="observability.html"
+              >Observability, Performance and Efficiency</a
+            >).
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> When a vendor quotes a TFLOPS number,
+              ask three questions before you write it in a proposal: which
+              precision, dense or sparse, and is it a single GPU or a whole
+              rack? The same product page can show numbers that differ by 100x
+              depending on those answers.
+            </p>
+          </blockquote>
+
+          <h2 id="a-workload-taxonomy">A Workload Taxonomy for 2026</h2>
+          <p>
+            A modern research computing center supports at least seven kinds of
+            work on the same hardware. They stress the system differently, and
+            they need different scheduling, storage and support.
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Workload</th>
+                <th>Typical precision</th>
+                <th>Main bottleneck</th>
+                <th>Manual chapter</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Simulation (CFD, climate, MD, QCD)</td>
+                <td>FP64, some FP32</td>
+                <td>Memory bandwidth, network latency</td>
+                <td>
+                  <a href="scientific-computing.html">Scientific Computing</a>
+                </td>
+              </tr>
+              <tr>
+                <td>Model pre-training</td>
+                <td>BF16, FP8, increasingly FP4</td>
+                <td>Matrix throughput, collectives</td>
+                <td><a href="training.html">Training at Scale</a></td>
+              </tr>
+              <tr>
+                <td>Fine-tuning (full, LoRA)</td>
+                <td>BF16, FP8</td>
+                <td>GPU memory capacity</td>
+                <td><a href="training.html">Training at Scale</a></td>
+              </tr>
+              <tr>
+                <td>Inference and serving</td>
+                <td>FP8, FP4, INT8</td>
+                <td>HBM bandwidth, KV cache capacity</td>
+                <td><a href="inference.html">Inference at Scale</a></td>
+              </tr>
+              <tr>
+                <td>Data analytics and pipelines</td>
+                <td>Mixed</td>
+                <td>Storage and I/O</td>
+                <td><a href="memory-storage.html">Memory and Storage</a></td>
+              </tr>
+              <tr>
+                <td>AI-for-science surrogates</td>
+                <td>FP32/BF16 training, FP64 validation</td>
+                <td>Data movement between codes</td>
+                <td>
+                  <a href="scientific-computing.html">Scientific Computing</a>
+                </td>
+              </tr>
+              <tr>
+                <td>Agentic and LLM research workflows</td>
+                <td>FP8/FP4 inference</td>
+                <td>Latency, many small jobs</td>
+                <td>
+                  <a href="scheduling.html">Scheduling</a>,
+                  <a href="inference.html">Inference</a>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            The precision and bottleneck columns are general patterns, not
+            rules; individual codes vary.
+          </p>
+
+          <h3 id="simulation">Simulation</h3>
+          <p>
+            Classic tightly coupled codes: domain decomposition, halo exchanges,
+            implicit solvers, FFTs. These are the workloads HPL and HPCG stand
+            in for. Most still require FP64 for stability or for results that
+            match validated references. Many have been ported to GPUs over the
+            past decade, often with help from the DOE Exascale Computing
+            Project, which prepared applications for Aurora and its peers.<a
+              href="#src-6"
+              >[6]</a
+            >
+          </p>
+
+          <h3 id="training-and-fine-tuning">Training and fine-tuning</h3>
+          <p>
+            Pre-training a large model is the most demanding synchronous
+            workload most centers will ever see: thousands of accelerators,
+            all-reduce and all-to-all collectives every step, and checkpoint
+            writes measured in terabytes. Few campuses pre-train frontier
+            models, but many support fine-tuning of open-weight models, where
+            the main constraint is fitting weights, gradients and optimizer
+            state into GPU memory.
+          </p>
+
+          <h3 id="inference">Inference</h3>
+          <p>
+            Serving a model is dominated by memory bandwidth during token
+            generation and by KV cache capacity for long contexts. MLPerf's move
+            to multi-node and 512-GPU inference submissions shows that inference
+            is now a scale-out workload in its own right.<a href="#src-10"
+              >[10]</a
+            >
+          </p>
+
+          <h3 id="data-analytics">Data analytics</h3>
+          <p>
+            Dataset preparation, tokenization, deduplication, image
+            preprocessing and post-simulation analysis. Often CPU-heavy and
+            I/O-heavy. These jobs are where a parallel file system is either
+            adequate or a disaster.
+          </p>
+
+          <h3 id="ai-for-science-surrogates">AI-for-science surrogates</h3>
+          <p>
+            Machine-learned models trained on simulation output or observational
+            data, then used in place of (or alongside) the expensive solver.
+            GraphCast is the reference example: trained on reanalysis data, it
+            predicts hundreds of weather variables over 10 days at 0.25 degree
+            resolution in under one minute, and outperformed the most accurate
+            operational deterministic systems on 90 percent of 1,380
+            verification targets.<a href="#src-28">[28]</a> Surrogates blur the
+            line between simulation and training: the same group runs FP64
+            solvers to generate training data and BF16 training to build the
+            model.
+          </p>
+
+          <h3 id="agentic-and-llm-workflows-in-research">
+            Agentic and LLM workflows in research
+          </h3>
+          <p>
+            The newest category: researchers running LLM agents that call tools,
+            launch jobs, search literature, write code and analyze results.
+            MLPerf Inference v6.1 introduced agentic and end-to-end RAG
+            benchmarks for exactly this reason.<a href="#src-10">[10]</a> The US
+            DOE Genesis Mission, launched by executive order in November 2025,
+            aims to connect national lab supercomputers, AI systems and
+            scientific instruments into an integrated discovery platform.<a
+              href="#src-27"
+              >[27]</a
+            >
+            For a campus center, agentic workloads look like a swarm of small,
+            latency-sensitive inference calls plus bursts of ordinary batch
+            jobs, which is an awkward fit for a queue designed around multi-day
+            MPI runs.
+          </p>
+
+          <h2 id="the-numeric-precision-spectrum">
+            The Numeric Precision Spectrum
+          </h2>
+          <p>
+            If there is one concept a research computing professional must
+            understand in 2026, it is floating-point precision. It decides which
+            hardware a workload can use, how fast it runs, and whether the
+            answer is trustworthy.
+          </p>
+
+          <h3 id="how-the-formats-differ">How the formats differ</h3>
+          <p>
+            A floating-point number has a sign bit, exponent bits (which set the
+            dynamic range) and mantissa bits (which set the precision). The
+            formats below are listed from widest to narrowest.
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Format</th>
+                <th>Exponent bits</th>
+                <th>Mantissa bits (stored)</th>
+                <th>Typical use</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>FP64 (IEEE double)</td>
+                <td>11</td>
+                <td>52 (53-bit significand)</td>
+                <td>Simulation, solvers, validation</td>
+              </tr>
+              <tr>
+                <td>FP32 (IEEE single)</td>
+                <td>8</td>
+                <td>23</td>
+                <td>Many science codes, AI master weights</td>
+              </tr>
+              <tr>
+                <td>TF32 (NVIDIA tensor core mode)</td>
+                <td>8</td>
+                <td>10</td>
+                <td>FP32 matmuls on tensor cores</td>
+              </tr>
+              <tr>
+                <td>BF16 (bfloat16)</td>
+                <td>8</td>
+                <td>7</td>
+                <td>Default AI training format</td>
+              </tr>
+              <tr>
+                <td>FP16 (IEEE half)</td>
+                <td>5</td>
+                <td>10</td>
+                <td>Older mixed-precision training, inference</td>
+              </tr>
+              <tr>
+                <td>FP8 E4M3 / E5M2</td>
+                <td>4 / 5</td>
+                <td>3 / 2</td>
+                <td>Training and inference on Hopper and later</td>
+              </tr>
+              <tr>
+                <td>FP4 E2M1 (as in MXFP4, NVFP4)</td>
+                <td>2</td>
+                <td>1</td>
+                <td>Inference, emerging training recipes</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Sources for the table: FP64 significand from NVIDIA's cuBLAS
+            emulation documentation<a href="#src-18">[18]</a>; FP32 and BF16
+            mantissa bits from the PyTorch documentation<a href="#src-17"
+              >[17]</a
+            >; TF32 from the NVIDIA Ampere architecture description<a
+              href="#src-11"
+              >[11]</a
+            >; BF16 exponent from Google<a href="#src-12">[12]</a>; FP16
+            mantissa from NVIDIA<a href="#src-11">[11]</a> and its 5-bit
+            exponent from the FP8 paper, which describes E5M2 as IEEE half
+            precision with fewer mantissa bits<a href="#src-13">[13]</a>; FP8
+            encodings from the FP8 paper<a href="#src-13">[13]</a>; FP4 E2M1
+            from NVIDIA<a href="#src-15">[15]</a>. The 11 exponent bits and 52
+            stored bits of FP64 match the IEEE 754 binary64 layout, and you can
+            check them yourself:
+          </p>
+          <pre><code class="language-python">import numpy as np
+
+for t in (np.float64, np.float32, np.float16):
+    f = np.finfo(t)
+    print(t.__name__, "bits", f.bits, "exp", f.nexp, "mantissa", f.nmant, "eps", f.eps)
+
+# float64 bits 64 exp 11 mantissa 52 eps 2.220446049250313e-16
+# float32 bits 32 exp 8 mantissa 23 eps 1.1920929e-07
+# float16 bits 16 exp 5 mantissa 10 eps 0.000977</code></pre>
+
+          <h3 id="the-16-bit-and-tf32-formats">The 16-bit and TF32 formats</h3>
+          <p>
+            <strong>BF16</strong> was designed at Google Brain for TPUs. It
+            keeps FP32's 8-bit exponent, so it has the same dynamic range as
+            FP32, and gives up mantissa bits. On TPUs, each multiply uses
+            bfloat16 and the accumulation is done in FP32.<a href="#src-12"
+              >[12]</a
+            >
+            That combination (low-precision multiply, higher-precision
+            accumulate) is the pattern behind nearly all AI hardware.
+          </p>
+          <p>
+            <strong>TF32</strong> arrived with the A100. Tensor cores read FP32
+            inputs, compute internally with the FP32 range and FP16-level
+            precision (10 mantissa bits), and write FP32 outputs.<a
+              href="#src-11"
+              >[11]</a
+            >
+            In PyTorch it is opt-in for matrix multiplications through
+            <code>torch.set_float32_matmul_precision</code>: "highest" (the
+            default) keeps full FP32, while "high" allows TF32 or a two-BF16
+            decomposition.<a href="#src-17">[17]</a>
+          </p>
+          <pre><code class="language-python">import torch
+
+# Default: full FP32 internal precision for float32 matmuls
+torch.set_float32_matmul_precision("highest")
+
+# Opt in to TF32 (or bf16x2 where available) for float32 matmuls
+torch.set_float32_matmul_precision("high")</code></pre>
+          <p>
+            This matters for scientists who use PyTorch or JAX as a numerical
+            library rather than for deep learning: know which setting your code
+            runs with before you publish numbers from it.
+          </p>
+
+          <h3 id="fp8-fp4-and-microscaling">FP8, FP4 and microscaling</h3>
+          <p>
+            The FP8 proposal from NVIDIA, Arm and Intel defines two encodings:
+            E4M3 (more precision) and E5M2 (more range). The authors showed FP8
+            training matching 16-bit results on models up to 175 billion
+            parameters without changing hyperparameters.<a href="#src-13"
+              >[13]</a
+            >
+          </p>
+          <p>
+            Below 8 bits, a single per-tensor scale factor is not enough.
+            <strong>Microscaling (MX)</strong> formats attach a shared scale to
+            small blocks of values. The OCP MX specification v1.0, backed by
+            AMD, Arm, Intel, Meta, Microsoft, NVIDIA and Qualcomm, defines
+            MXFP8, MXFP6, MXFP4 and MXINT8.<a href="#src-14">[14]</a> MXFP4 uses
+            one power-of-two scale per 32-value block. NVIDIA's
+            <strong>NVFP4</strong> uses a smaller 16-value block with an FP8
+            (E4M3) scale plus a per-tensor FP32 scale, for about 4.5 bits per
+            value. NVIDIA reports roughly 3.5x lower memory footprint than FP16,
+            and 1 percent or less accuracy degradation when DeepSeek-R1-0528 was
+            quantized from FP8 to NVFP4.<a href="#src-15">[15]</a> AMD's MI355X
+            also lists MXFP6 and MXFP4 support.<a href="#src-23">[23]</a>
+          </p>
+
+          <h3 id="why-precision-matters-differently-for-science-and-ai">
+            Why precision matters differently for science and AI
+          </h3>
+          <p>
+            Neural network training is statistically noisy by design; stochastic
+            gradient descent tolerates rounding error the way it tolerates
+            minibatch noise. Many scientific computations are not like that.
+            Long time integrations accumulate error, ill-conditioned linear
+            systems amplify it, and conservation laws must hold to tight
+            tolerances. A climate model that drifts, or an eigenvalue solver
+            that converges to the wrong answer, is worse than a slow one.
+          </p>
+          <p>
+            That is why the precision trend in accelerator design is a real
+            concern for science. For years FP64 grew with each generation: a
+            single H100 SXM lists 34 TFLOPS of FP64 and 67 TFLOPS of FP64 Tensor
+            Core.<a href="#src-21">[21]</a> Then look at NVIDIA's HGX
+            specification table. An 8-GPU HGX B200 lists 296 TFLOPS of FP64/FP64
+            Tensor Core. The Blackwell Ultra HGX B300, with the same TF32 tensor
+            rating (18 PFLOPS, which NVIDIA footnotes as a sparse figure), lists
+            10 TFLOPS of FP64 for all eight GPUs.<a href="#src-22">[22]</a> The
+            HPL-MxP authors describe this directly as a performance inversion:
+            the move from Hopper to Blackwell lowers performance in the IEEE
+            64-bit format.<a href="#src-20">[20]</a> For a center buying
+            hardware, the specific SKU now matters as much as the generation.
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Before you buy AI-oriented GPUs for a
+              mixed community, inventory which of your heavy users need native
+              FP64. Ask them to run their code with a representative input on a
+              loaner or cloud instance of the exact SKU. The spec sheet FP64
+              line is the single most common surprise in 2025-2026 procurements.
+            </p>
+          </blockquote>
+
+          <h2 id="mixed-precision-and-emulated-fp64">
+            Mixed Precision and Emulated FP64
+          </h2>
+
+          <h3 id="mixed-precision-training">Mixed-precision training</h3>
+          <p>
+            The 2017 mixed-precision training paper set out the recipe AI still
+            uses: keep an FP32 master copy of the weights, use loss scaling to
+            keep small gradients representable, and do half-precision arithmetic
+            that accumulates into FP32.<a href="#src-16">[16]</a> BF16 largely
+            removed the need for loss scaling because it has FP32's range. FP8
+            and FP4 training bring scaling back, now per tensor or per block.<a
+              href="#src-13"
+              >[13]</a
+            ><a href="#src-15">[15]</a> Details and framework settings are in
+            <a href="training.html">Training at Scale</a>.
+          </p>
+
+          <h3 id="mixed-precision-solvers-and-iterative-refinement">
+            Mixed-precision solvers and iterative refinement
+          </h3>
+          <p>
+            Numerical analysts have their own version: factor the matrix in low
+            precision, then iteratively refine the solution using residuals
+            computed in high precision. That is exactly what HPL-MxP does,
+            recovering 64-bit accuracy from a low-precision LU.<a href="#src-20"
+              >[20]</a
+            >
+            Where a code's inner loop is a dense solve or can be preconditioned
+            by one, this pattern can turn AI-oriented matrix units into science
+            throughput, and the HPL-MxP speedups on El Capitan, Aurora and
+            Frontier show the scale of the opportunity.<a href="#src-1">[1]</a>
+          </p>
+
+          <h3 id="emulating-fp64-on-low-precision-units">
+            Emulating FP64 on low-precision units
+          </h3>
+          <p>
+            A second approach leaves the algorithm alone and emulates FP64
+            matrix multiplication itself. The <strong>Ozaki scheme</strong>,
+            proposed in 2012, splits FP64 operands into slices that
+            low-precision units can multiply exactly and then sums the partial
+            products; later work extended it to integer and FP8 tensor cores.<a
+              href="#src-19"
+              >[19]</a
+            >
+          </p>
+          <p>
+            This is no longer a research curiosity. cuBLAS in CUDA Toolkit 13.0
+            Update 2 added FP64 matmul emulation on Blackwell INT8 tensor cores,
+            alongside BF16x9 emulation of FP32 on BF16 tensor cores. An
+            automatic dynamic precision framework inspects the inputs, picks
+            emulation parameters to give accuracy equal to or better than native
+            FP64, and falls back to native execution when emulation would not
+            help. NVIDIA reports a 1.5x end-to-end speedup for Quantum ESPRESSO
+            with the default automatic settings on an RTX PRO 6000 Blackwell
+            Server Edition, and nearly 3x with a manually reduced 39 mantissa
+            bits, with output values consistent to 12 significant digits.<a
+              href="#src-18"
+              >[18]</a
+            >
+          </p>
+          <p>
+            Vendors are now building this into their specifications. NVIDIA's
+            preliminary HGX Rubin NVL8 table lists 265 TFLOPS of native FP64 and
+            1,600 TFLOPS of FP64 DGEMM for eight GPUs, footnoting the DGEMM
+            figure as peak performance using tensor-core emulation algorithms;
+            the per-GPU figures are 33 and 200 TFLOPS.<a href="#src-22">[22]</a>
+            Rubin is announced, with specifications marked preliminary; it
+            appeared in MLPerf Inference v6.1 only in the Preview category.<a
+              href="#src-10"
+              >[10]</a
+            >
+          </p>
+          <p>
+            Two cautions. Emulation accelerates matrix multiplication (GEMM),
+            not the vector, stencil and sparse operations that dominate many
+            codes, so a code's speedup depends on how much of its time is in
+            dense matmul. And because the Ozaki scheme needs a data-dependent
+            number of mantissa bits, performance varies with the input.<a
+              href="#src-18"
+              >[18]</a
+            >
+            Profile before you promise anyone a speedup.
+            <a href="scientific-computing.html"
+              >Scientific Computing in the AI Era</a
+            >
+            covers porting strategy in depth.
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Treat emulated FP64 like any other
+              numerical change: rerun your validation suite, compare against a
+              native-FP64 reference to the digits your field cares about, and
+              record the library version and emulation settings in the paper's
+              methods section. Reviewers will ask.
+            </p>
+          </blockquote>
+
+          <h2 id="the-roofline-model-and-the-memory-wall">
+            The Roofline Model and the Memory Wall
+          </h2>
+
+          <h3 id="the-roofline-model">The roofline model</h3>
+          <p>
+            Williams, Waterman and Patterson's roofline model relates a
+            processor's attainable performance to its off-chip memory traffic.<a
+              href="#src-24"
+              >[24]</a
+            >
+            The key quantity is <strong>arithmetic intensity</strong>:
+            floating-point operations performed per byte moved from memory.<a
+              href="#src-25"
+              >[25]</a
+            >
+            Attainable performance is the lesser of peak compute and (arithmetic
+            intensity x memory bandwidth). The crossover point, peak FLOPS
+            divided by bandwidth, is the <strong>ridge point</strong>. Kernels
+            left of the ridge are memory-bound; kernels to the right are
+            compute-bound.
+          </p>
+
+          <h3 id="a-worked-example">A worked example</h3>
+          <p>
+            Take the AMD Instinct MI355X, whose product page lists 78.6 TFLOPS
+            peak FP64, 2.5 PFLOPS peak dense BF16 matrix, and 8 TB/s of HBM3E
+            bandwidth.<a href="#src-23">[23]</a> Dividing peak by bandwidth
+            gives:
+          </p>
+          <ul>
+            <li>
+              FP64 ridge point: 78.6 TFLOPS / 8 TB/s = about 9.8 FLOP/byte.
+            </li>
+            <li>
+              BF16 dense ridge point: 2,500 TFLOPS / 8 TB/s = about 312
+              FLOP/byte.
+            </li>
+          </ul>
+          <p>Now compare two kernels:</p>
+          <ul>
+            <li>
+              <strong>A STREAM-style triad in FP64</strong> (<code
+                >a[i] = b[i] + s * c[i]</code
+              >) does 2 FLOPs per element while moving 24 bytes (two 8-byte
+              reads, one 8-byte write): about 0.083 FLOP/byte. At 8 TB/s that
+              caps out near 0.67 TFLOPS, under 1 percent of the FP64 peak. No
+              amount of extra FLOPS helps this code; only bandwidth does.
+            </li>
+            <li>
+              <strong
+                >LLM token generation at batch size 1 with BF16 weights</strong
+              >
+              reads each 2-byte weight once for one multiply-add (2 FLOPs):
+              about 1 FLOP/byte, two orders of magnitude left of the BF16 ridge
+              point. This is why decoding is memory-bound and why serving
+              systems batch requests aggressively, as Gholami and colleagues
+              analyze for decoder models.<a href="#src-25">[25]</a>
+            </li>
+          </ul>
+          <p>
+            These are idealized bounds from vendor peak numbers, not
+            measurements; real kernels land below the roof. The value is in the
+            shape: for both a sparse CFD solver and a chatbot, the limiting
+            resource is memory bandwidth.
+          </p>
+
+          <h3 id="the-memory-wall">The memory wall</h3>
+          <p>
+            The term "memory wall" dates to Wulf and McKee in 1995. Gholami and
+            colleagues quantify the modern version: over the past 20 years, peak
+            server FLOPS grew about 3.0x every two years, while DRAM bandwidth
+            grew 1.6x and interconnect bandwidth 1.4x over the same interval.<a
+              href="#src-25"
+              >[25]</a
+            >
+            Every generation, the ridge point moves further right and more
+            kernels become memory-bound.
+          </p>
+          <p>
+            Hardware responses include wider and faster HBM (the JEDEC HBM4
+            standard, published April 2025, defines transfer speeds up to 8 Gb/s
+            across a 2048-bit interface, for total bandwidth up to 2 TB/s<a
+              href="#src-26"
+              >[26]</a
+            >), larger on-die caches, and fast scale-up fabrics such as NVLink,
+            whose sixth generation lists 3.6 TB/s per GPU on the announced Rubin
+            platform (a preliminary specification).<a href="#src-31">[31]</a>
+            Software responses include kernel fusion, IO-aware algorithms,
+            lower-precision storage (which cuts bytes moved as well as FLOPs),
+            and batching. The memory hierarchy has its own chapter:
+            <a href="memory-storage.html">Memory and Storage</a>. Interconnects
+            are in <a href="interconnects.html">Interconnects</a>.
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Teach every new GPU user to compute
+              the arithmetic intensity of their hottest kernel on a whiteboard
+              before they ask for more GPUs. Half the time the answer is "you
+              are bandwidth-bound; more GPUs of the same kind will scale your
+              cost faster than your speed."
+            </p>
+          </blockquote>
+
+          <h2 id="how-the-research-computing-center-has-changed">
+            How the Research Computing Center Has Changed
+          </h2>
+
+          <h3 id="a-new-user-base">A new user base</h3>
+          <p>
+            Ten years ago, a typical campus HPC user came from physics,
+            chemistry, engineering or genomics, and knew what a job script was.
+            In 2026, a large and growing share of new accounts come from
+            computer science, linguistics, economics, social sciences, medicine
+            and the arts, and their first question is how to run a notebook or a
+            model on a GPU. Many have never used a terminal. They arrive with
+            Python environments, container images and model checkpoints, not
+            Fortran and Makefiles.
+          </p>
+
+          <h3 id="a-new-mission">A new mission</h3>
+          <p>
+            The center's job has widened from "run the cluster" to something
+            closer to "run the campus AI and computing platform." In practice
+            that means:
+          </p>
+          <ul>
+            <li>
+              <strong>Serving, not just batch.</strong> Hosting shared inference
+              endpoints and interactive sessions alongside the queue, with very
+              different latency expectations (see
+              <a href="inference.html">Inference at Scale</a> and
+              <a href="scheduling.html">Scheduling and Orchestration</a>).
+            </li>
+            <li>
+              <strong>Data governance.</strong> Model weights, licensed datasets
+              and sensitive data (human subjects, controlled unclassified
+              information) all need policy and technical controls (see
+              <a href="operations.html">Research Computing Operations</a>).
+            </li>
+            <li>
+              <strong>Hybrid capacity.</strong> Few campuses can buy enough GPUs
+              for peak demand; cloud and national resources fill the gaps (see
+              <a href="cloud.html">Cloud and Hybrid AI/HPC</a>).
+            </li>
+            <li>
+              <strong>Facilities.</strong> GPU racks drive power density and
+              liquid cooling requirements that most campus data centers were not
+              built for. JUPITER, the Green500 leaders and the announced Vera
+              Rubin systems all use direct liquid cooling.<a href="#src-1"
+                >[1]</a
+              ><a href="#src-2">[2]</a><a href="#src-7">[7]</a> See
+              <a href="facilities.html">Power, Cooling and Facilities</a>.
+            </li>
+            <li>
+              <strong>Facilitation at a different level.</strong> Teaching
+              precision, memory budgets and parallelism strategy, not just
+              <code>sbatch</code>.
+            </li>
+          </ul>
+
+          <h3 id="utilization-and-fairness">Utilization and fairness</h3>
+          <p>
+            GPU capacity is the most expensive resource most centers operate, so
+            idle GPUs are the most expensive waste in the building, and
+            fair-share policies designed around core-hours need rethinking for
+            GPU-hours, GPU memory and partitioned GPUs.
+            <a href="observability.html">Observability</a> covers how to measure
+            it; <a href="scheduling.html">Scheduling</a> covers how to enforce
+            it.
+          </p>
+
+          <h2 id="what-stays-the-same">What Stays the Same</h2>
+          <p>
+            For all the change, the foundations of the 2019 manual still hold.
+            That is good news for anyone with a decade of cluster experience.
+          </p>
+          <ul>
+            <li>
+              <strong>Linux.</strong> Leadership systems still run Linux
+              distributions. The June 2026 top ten includes systems running Red
+              Hat Enterprise Linux (JUPITER Booster and Eni's HPC7) and Kylin OS
+              (LineShine).<a href="#src-2">[2]</a><a href="#src-32">[32]</a> The
+              <a href="linux.html">Linux Essentials</a> chapter from 2019 is
+              still accurate.
+            </li>
+            <li>
+              <strong>Batch schedulers.</strong> Slurm is still doing the job it
+              did in 2019: an open-source cluster manager and job scheduler for
+              Linux clusters that allocates resources, launches and monitors
+              parallel jobs, and arbitrates a queue of pending work.<a
+                href="#src-30"
+                >[30]</a
+              >
+              Kubernetes has arrived alongside it, especially for serving, but
+              it has not replaced it.
+            </li>
+            <li>
+              <strong>Parallel file systems.</strong> Lustre, GPFS (IBM Storage
+              Scale) and newer systems such as DAOS are still the storage layer
+              under large machines; Aurora's DAOS system is rated at 31 TB/s.<a
+                href="#src-6"
+                >[6]</a
+              >
+              AI training added new I/O patterns (millions of small files, huge
+              checkpoints) but not a new category of storage.
+            </li>
+            <li>
+              <strong>MPI.</strong> The MPI Forum approved MPI 5.0 on June 5,
+              2025.<a href="#src-29">[29]</a> NCCL and its peers borrowed MPI's
+              collective vocabulary: all-reduce, all-gather, reduce-scatter and
+              broadcast mean the same thing in a PyTorch training job as in a
+              1990s Fortran code.
+            </li>
+            <li>
+              <strong>High-speed fabrics.</strong> InfiniBand and HPE Slingshot
+              connect every system in the June 2026 top five except LineShine.<a
+                href="#src-32"
+                >[32]</a
+              >
+              The scale-out fabric is still a fat tree or dragonfly of switches
+              carrying RDMA traffic.
+            </li>
+            <li>
+              <strong>The human side.</strong> Users still need accounts,
+              allocations, training, documentation and someone to answer the
+              ticket at 4:55 PM on a Friday.
+            </li>
+          </ul>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Do not let the AI vocabulary
+              intimidate your HPC staff. A "collective communication library" is
+              MPI collectives on GPUs; a "scale-out fabric" is the InfiniBand
+              network they already run; "checkpointing" is the same restart-file
+              problem they have solved for twenty years. Map the new words onto
+              the old skills and your team is most of the way there.
+            </p>
+          </blockquote>
+
+          <h2 id="roadmap-of-this-manual">Roadmap of This Manual</h2>
+          <p>
+            The manual is organized in five parts. Read the Foundations and
+            Hardware parts in order if you are building or buying; jump straight
+            to Workloads if you are a user.
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Part</th>
+                <th>Chapter</th>
+                <th>What it covers</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Foundations</td>
+                <td><a href="convergence.html">The Convergence</a></td>
+                <td>This chapter: history, workloads, precision, roofline</td>
+              </tr>
+              <tr>
+                <td>Hardware</td>
+                <td>
+                  <a href="accelerators.html"
+                    >Accelerators: GPUs, TPUs and Beyond</a
+                  >
+                </td>
+                <td>
+                  GPU and APU generations, TPUs and other accelerators, how to
+                  read spec sheets
+                </td>
+              </tr>
+              <tr>
+                <td>Hardware</td>
+                <td><a href="memory-storage.html">Memory and Storage</a></td>
+                <td>
+                  HBM, CXL, parallel file systems, data pipelines, checkpoint
+                  I/O
+                </td>
+              </tr>
+              <tr>
+                <td>Hardware</td>
+                <td><a href="interconnects.html">Interconnects</a></td>
+                <td>
+                  NVLink and scale-up, InfiniBand and Ethernet scale-out,
+                  collectives, UEC and UALink
+                </td>
+              </tr>
+              <tr>
+                <td>Hardware</td>
+                <td>
+                  <a href="facilities.html">Power, Cooling and Facilities</a>
+                </td>
+                <td>
+                  Rack density, liquid cooling, power delivery, campus data
+                  center planning
+                </td>
+              </tr>
+              <tr>
+                <td>Software and Operations</td>
+                <td>
+                  <a href="systems-software.html"
+                    >Systems Software and Provisioning</a
+                  >
+                </td>
+                <td>OS images, drivers, CUDA and ROCm stacks, containers</td>
+              </tr>
+              <tr>
+                <td>Software and Operations</td>
+                <td>
+                  <a href="scheduling.html">Scheduling and Orchestration</a>
+                </td>
+                <td>Slurm, Kubernetes, GPU sharing, fair share</td>
+              </tr>
+              <tr>
+                <td>Software and Operations</td>
+                <td>
+                  <a href="observability.html"
+                    >Observability, Performance and Efficiency</a
+                  >
+                </td>
+                <td>Monitoring, profiling, utilization, energy</td>
+              </tr>
+              <tr>
+                <td>Software and Operations</td>
+                <td>
+                  <a href="operations.html">Research Computing Operations</a>
+                </td>
+                <td>Access, facilitation, security, governance</td>
+              </tr>
+              <tr>
+                <td>Workloads</td>
+                <td><a href="training.html">Training at Scale</a></td>
+                <td>
+                  Data, tensor, pipeline and expert parallelism; FSDP and ZeRO;
+                  checkpointing
+                </td>
+              </tr>
+              <tr>
+                <td>Workloads</td>
+                <td><a href="inference.html">Inference at Scale</a></td>
+                <td>Serving engines, KV cache, batching, quantization</td>
+              </tr>
+              <tr>
+                <td>Workloads</td>
+                <td>
+                  <a href="scientific-computing.html"
+                    >Scientific Computing in the AI Era</a
+                  >
+                </td>
+                <td>MPI codes, GPU porting, emulated FP64, AI for science</td>
+              </tr>
+              <tr>
+                <td>Workloads</td>
+                <td><a href="cloud.html">Cloud and Hybrid AI/HPC</a></td>
+                <td>Cloud GPUs, bursting, cost control, national resources</td>
+              </tr>
+              <tr>
+                <td>Reference</td>
+                <td><a href="linux.html">Linux Essentials</a></td>
+                <td>The 2019 command-line reference, still current</td>
+              </tr>
+              <tr>
+                <td>Reference</td>
+                <td><a href="glossary.html">Glossary</a></td>
+                <td>A-Z definitions of AI and HPC terms used throughout</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h2 id="key-takeaways">Key Takeaways</h2>
+          <ul>
+            <li>
+              AI and HPC now run on the same hardware: accelerators with HBM, a
+              scale-up fabric, a scale-out fabric, a parallel file system, Linux
+              and a scheduler. Four of the five exascale systems on the June
+              2026 TOP500 are accelerator machines.
+            </li>
+            <li>
+              TOP500 (HPL, HPCG, HPL-MxP) and MLPerf measure different things.
+              Use both to check vendor claims, then benchmark your own codes.
+            </li>
+            <li>
+              Precision is a first-order design decision. Always ask which
+              precision, dense or sparse, and per GPU or per rack when reading a
+              FLOPS number.
+            </li>
+            <li>
+              Native FP64 is no longer a given on AI-oriented GPUs; check the
+              exact SKU. Mixed-precision solvers and Ozaki-style FP64 emulation
+              can recover much of the gap for GEMM-heavy codes, but must be
+              validated.
+            </li>
+            <li>
+              Most scientific kernels and LLM token generation are memory-bound.
+              The roofline model and arithmetic intensity explain why, and they
+              should guide both purchases and user advice.
+            </li>
+            <li>
+              The research computing center's user base and mission have
+              broadened to include inference serving, data governance, hybrid
+              capacity and liquid-cooled facilities.
+            </li>
+            <li>
+              Linux, Slurm, MPI, parallel file systems and RDMA fabrics remain
+              the foundation. Existing HPC skills carry over directly.
+            </li>
+          </ul>
+
+          <h2 id="sources">Sources</h2>
+          <ol class="sources">
+            <li id="src-1">
+              <a
+                href="https://top500.org/news/lineshine-debuts-no-1-top500-enters-new-global-exascale-era/"
+                target="_blank"
+                rel="noopener"
+                >LineShine Debuts at No. 1 as the TOP500 Enters a New Global
+                Exascale Era (TOP500, 2026)</a
+              >
+            </li>
+            <li id="src-2">
+              <a
+                href="https://top500.org/lists/top500/2026/06/"
+                target="_blank"
+                rel="noopener"
+                >June 2026 TOP500 list release page (TOP500, 2026)</a
+              >
+            </li>
+            <li id="src-3">
+              <a
+                href="https://www.top500.org/news/ornls-frontier-first-to-break-the-exaflop-ceiling"
+                target="_blank"
+                rel="noopener"
+                >ORNL's Frontier First to Break the Exaflop Ceiling (TOP500,
+                2022)</a
+              >
+            </li>
+            <li id="src-4">
+              <a
+                href="https://www.olcf.ornl.gov/olcf-resources/compute-systems/frontier/"
+                target="_blank"
+                rel="noopener"
+                >Frontier system specifications (Oak Ridge Leadership Computing
+                Facility)</a
+              >
+            </li>
+            <li id="src-5">
+              <a
+                href="https://hpc.llnl.gov/documentation/user-guides/using-el-capitan-systems/hardware-overview"
+                target="_blank"
+                rel="noopener"
+                >Using El Capitan Systems: Hardware Overview (Lawrence Livermore
+                National Laboratory)</a
+              >
+            </li>
+            <li id="src-6">
+              <a
+                href="https://alcf.anl.gov/aurora"
+                target="_blank"
+                rel="noopener"
+                >Aurora system specifications (Argonne Leadership Computing
+                Facility)</a
+              >
+            </li>
+            <li id="src-7">
+              <a
+                href="https://nvidianews.nvidia.com/news/nvidia-vera-rubin-delivers-world-class-supercomputers-for-science"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA Vera Rubin Delivers World-Class Supercomputers for
+                Science (NVIDIA, 2026)</a
+              >
+            </li>
+            <li id="src-8">
+              <a
+                href="https://mlcommons.org/2026/06/mlperf-training-v6-0-results/"
+                target="_blank"
+                rel="noopener"
+                >MLCommons Releases MLPerf Training v6.0 Results (MLCommons,
+                2026)</a
+              >
+            </li>
+            <li id="src-9">
+              <a
+                href="https://mlcommons.org/2026/04/mlperf-inference-v6-0-results/"
+                target="_blank"
+                rel="noopener"
+                >MLCommons Releases New MLPerf Inference v6.0 Benchmark Results
+                (MLCommons, 2026)</a
+              >
+            </li>
+            <li id="src-10">
+              <a
+                href="https://mlcommons.org/2026/09/chairs-mlperf-inference-v6-1/"
+                target="_blank"
+                rel="noopener"
+                >Where the Industry Is Investing: A Look at MLPerf Inference
+                v6.1 (MLCommons, 2026)</a
+              >
+            </li>
+            <li id="src-11">
+              <a
+                href="https://developer.nvidia.com/blog/nvidia-ampere-architecture-in-depth/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA Ampere Architecture In-Depth (NVIDIA Technical Blog,
+                2020)</a
+              >
+            </li>
+            <li id="src-12">
+              <a
+                href="https://cloud.google.com/blog/products/ai-machine-learning/bfloat16-the-secret-to-high-performance-on-cloud-tpus"
+                target="_blank"
+                rel="noopener"
+                >BFloat16: The secret to high performance on Cloud TPUs (Google
+                Cloud, 2019)</a
+              >
+            </li>
+            <li id="src-13">
+              <a
+                href="https://arxiv.org/abs/2209.05433"
+                target="_blank"
+                rel="noopener"
+                >Micikevicius et al., FP8 Formats for Deep Learning (arXiv,
+                2022)</a
+              >
+            </li>
+            <li id="src-14">
+              <a
+                href="https://www.opencompute.org/blog/amd-arm-intel-meta-microsoft-nvidia-and-qualcomm-standardize-next-generation-narrow-precision-data-formats-for-ai"
+                target="_blank"
+                rel="noopener"
+                >AMD, Arm, Intel, Meta, Microsoft, NVIDIA, and Qualcomm
+                Standardize Next-Generation Narrow Precision Data Formats for AI
+                (Open Compute Project, 2023)</a
+              >
+            </li>
+            <li id="src-15">
+              <a
+                href="https://developer.nvidia.com/blog/introducing-nvfp4-for-efficient-and-accurate-low-precision-inference/"
+                target="_blank"
+                rel="noopener"
+                >Introducing NVFP4 for Efficient and Accurate Low-Precision
+                Inference (NVIDIA Technical Blog, 2025)</a
+              >
+            </li>
+            <li id="src-16">
+              <a
+                href="https://arxiv.org/abs/1710.03740"
+                target="_blank"
+                rel="noopener"
+                >Micikevicius et al., Mixed Precision Training (arXiv, 2017)</a
+              >
+            </li>
+            <li id="src-17">
+              <a
+                href="https://docs.pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html"
+                target="_blank"
+                rel="noopener"
+                >torch.set_float32_matmul_precision (PyTorch documentation)</a
+              >
+            </li>
+            <li id="src-18">
+              <a
+                href="https://developer.nvidia.com/blog/unlocking-tensor-core-performance-with-floating-point-emulation-in-cublas/"
+                target="_blank"
+                rel="noopener"
+                >Unlocking Tensor Core Performance with Floating Point Emulation
+                in cuBLAS (NVIDIA Technical Blog, 2025)</a
+              >
+            </li>
+            <li id="src-19">
+              <a
+                href="https://arxiv.org/abs/2508.00441"
+                target="_blank"
+                rel="noopener"
+                >DGEMM without FP64 Arithmetic: Using FP64 Emulation and FP8
+                Tensor Cores with Ozaki Scheme (arXiv, 2025)</a
+              >
+            </li>
+            <li id="src-20">
+              <a
+                href="https://doi.org/10.48550/arxiv.2509.19618"
+                target="_blank"
+                rel="noopener"
+                >HPL-MxP Benchmark: Mixed-Precision Algorithms, Iterative
+                Refinement, and Scalable Data Generators (arXiv, 2025)</a
+              >
+            </li>
+            <li id="src-21">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/h100/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA H100 Tensor Core GPU product specifications (NVIDIA)</a
+              >
+            </li>
+            <li id="src-22">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/hgx/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA HGX Platform specifications: HGX Rubin NVL8, B300, B200
+                (NVIDIA)</a
+              >
+            </li>
+            <li id="src-23">
+              <a
+                href="https://www.amd.com/en/products/accelerators/instinct/mi350/mi355x.html"
+                target="_blank"
+                rel="noopener"
+                >AMD Instinct MI355X GPU specifications (AMD)</a
+              >
+            </li>
+            <li id="src-24">
+              <a
+                href="https://people.eecs.berkeley.edu/~kubitron/cs252/handouts/papers/RooflineVyNoYellow.pdf"
+                target="_blank"
+                rel="noopener"
+                >Williams, Waterman and Patterson, Roofline: An Insightful
+                Visual Performance Model (Communications of the ACM, 2009)</a
+              >
+            </li>
+            <li id="src-25">
+              <a
+                href="https://arxiv.org/abs/2403.14123"
+                target="_blank"
+                rel="noopener"
+                >Gholami et al., AI and Memory Wall (arXiv, 2024)</a
+              >
+            </li>
+            <li id="src-26">
+              <a
+                href="https://www.jedec.org/news/pressreleases/jedec%C2%AE-and-industry-leaders-collaborate-release-jesd270-4-hbm4-standard-advancing"
+                target="_blank"
+                rel="noopener"
+                >JEDEC Releases JESD270-4 HBM4 Standard (JEDEC, 2025)</a
+              >
+            </li>
+            <li id="src-27">
+              <a
+                href="https://www.energy.gov/articles/energy-department-launches-genesis-mission-transform-american-science-and-innovation"
+                target="_blank"
+                rel="noopener"
+                >Energy Department Launches Genesis Mission (US Department of
+                Energy, 2025)</a
+              >
+            </li>
+            <li id="src-28">
+              <a
+                href="https://arxiv.org/abs/2212.12794"
+                target="_blank"
+                rel="noopener"
+                >Lam et al., GraphCast: Learning skillful medium-range global
+                weather forecasting (arXiv / Science, 2023)</a
+              >
+            </li>
+            <li id="src-29">
+              <a
+                href="https://www.mpi-forum.org/docs/"
+                target="_blank"
+                rel="noopener"
+                >MPI Documents: MPI 5.0 (MPI Forum, 2025)</a
+              >
+            </li>
+            <li id="src-30">
+              <a
+                href="https://slurm.schedmd.com/overview.html"
+                target="_blank"
+                rel="noopener"
+                >Slurm Workload Manager Overview (SchedMD)</a
+              >
+            </li>
+            <li id="src-31">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/nvlink/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA NVLink and NVLink Switch specifications (NVIDIA)</a
+              >
+            </li>
+            <li id="src-32">
+              <a
+                href="https://top500.org/lists/top500/2026/06/highs/"
+                target="_blank"
+                rel="noopener"
+                >June 2026 TOP500 list highlights (TOP500, 2026)</a
+              >
+            </li>
+          </ol>
+          <nav class="doc-pager" aria-label="Chapter navigation">
+            <span></span
+            ><a class="pager-next" href="accelerators.html"
+              ><span>Next</span>Accelerators: GPUs, TPUs and Beyond</a
+            >
+          </nav>
+        </article>
+      </div>
+    </main>
+
+    <footer class="section-dark">
+      <div class="container text-center">
+        <p class="footer-note">
+          2026 edition |
+          <a href="index.html" class="subtle-link">Field Manual</a> |
+          <a href="../index.html" class="subtle-link"
+            >charles-forsyth.github.io</a
+          >
+        </p>
+      </div>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+      document.querySelectorAll('pre code').forEach(function (el) {
+        if (el.className === 'c++') el.className = 'language-cpp';
+        else if (el.className && el.className.indexOf('language-') !== 0)
+          el.className = 'language-' + el.className;
+        hljs.highlightElement(el);
+      });
+    </script>
+  </body>
+</html>

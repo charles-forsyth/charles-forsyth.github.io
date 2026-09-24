@@ -1,0 +1,2096 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Inference at Scale | Field Manual</title>
+    <meta
+      name="description"
+      content="How LLM inference actually works on GPUs, why decode is bound by memory bandwidth, and how to size, serve, benchmark and budget models on a research cluster with vLLM, SGLang, TensorRT-LLM and friends."
+    />
+    <link
+      rel="canonical"
+      href="https://charles-forsyth.github.io/handbook/inference.html"
+    />
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="handbook.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
+    />
+  </head>
+  <body>
+    <header class="hero doc-hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="doc-kicker">
+            <i class="fas fa-rocket"></i> AI + HPC Field Manual
+          </p>
+          <h1>Inference at Scale</h1>
+          <h2>
+            Serving models to people and pipelines: KV cache, batching,
+            quantization and sizing
+          </h2>
+          <div class="cta-buttons">
+            <a href="index.html" class="btn btn-secondary"
+              ><i class="fas fa-book-open"></i> Field Manual</a
+            >
+            <a href="../index.html" class="btn btn-secondary"
+              ><i class="fas fa-arrow-left"></i> Main Site</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+    <nav class="doc-nav" aria-label="Field manual chapters">
+      <div class="container">
+        <a href="convergence.html">Convergence</a
+        ><a href="accelerators.html">Accelerators</a
+        ><a href="memory-storage.html">Memory &amp; Storage</a
+        ><a href="interconnects.html">Interconnects</a
+        ><a href="facilities.html">Facilities</a
+        ><a href="systems-software.html">Systems Software</a
+        ><a href="scheduling.html">Scheduling</a
+        ><a href="observability.html">Observability</a
+        ><a href="operations.html">Operations</a
+        ><a href="training.html">Training</a
+        ><a href="inference.html" class="active" aria-current="page"
+          >Inference</a
+        ><a href="scientific-computing.html">Scientific Computing</a
+        ><a href="cloud.html">Cloud</a><a href="linux.html">Linux</a
+        ><a href="glossary.html">Glossary</a>
+      </div>
+    </nav>
+    <main class="section-light">
+      <div class="container doc-layout">
+        <aside class="doc-toc">
+          <h4><i class="fas fa-list"></i> On this page</h4>
+          <ul>
+            <li>
+              <a href="#why-inference-dominates"
+                >Why Inference Dominates, and Why Decode Is Memory Bound</a
+              >
+            </li>
+            <li>
+              <a href="#metrics-and-slos"
+                >Metrics That Matter: TTFT, ITL, Throughput and Goodput</a
+              >
+            </li>
+            <li>
+              <a href="#the-kv-cache">The KV Cache and Memory Management</a>
+            </li>
+            <li><a href="#serving-engines">Serving Engines in 2026</a></li>
+            <li>
+              <a href="#advanced-serving-techniques"
+                >Advanced Serving: Disaggregation, KV Offload and Speculation</a
+              >
+            </li>
+            <li><a href="#quantization">Quantization for Inference</a></li>
+            <li>
+              <a href="#multi-gpu-inference">Multi-GPU Inference and Sizing</a>
+            </li>
+            <li>
+              <a href="#embeddings-and-rag"
+                >Embeddings, RAG and Vector Databases</a
+              >
+            </li>
+            <li>
+              <a href="#batch-vs-interactive"
+                >Offline Batch Inference vs. Interactive Serving</a
+              >
+            </li>
+            <li>
+              <a href="#apis-and-gateways"
+                >OpenAI-Compatible APIs and Campus AI Gateways</a
+              >
+            </li>
+            <li>
+              <a href="#benchmarking-cost-energy"
+                >Benchmarking, Cost and Energy</a
+              >
+            </li>
+            <li><a href="#key-takeaways">Key Takeaways</a></li>
+          </ul>
+        </aside>
+        <article class="doc-content">
+          <p>
+            Training gets the headlines, but inference is where the GPU-hours go
+            once a model is useful. Every chat session, agent loop and batch job
+            that labels a million abstracts is inference, running every day the
+            model is in service. Research computing groups that used to schedule
+            batch jobs and walk away now also run long-lived, latency-sensitive
+            services. This chapter covers how LLM inference works on the
+            hardware, the metrics that matter, the KV cache and why it dominates
+            memory planning, the serving engines worth knowing in 2026,
+            quantization, multi-GPU layouts, sizing, RAG infrastructure, campus
+            gateways, energy, and benchmarking. It ends with a working vLLM
+            launch and a Slurm batch-inference job you can adapt.
+          </p>
+
+          <h2 id="why-inference-dominates">
+            Why Inference Dominates, and Why Decode Is Memory Bound
+          </h2>
+
+          <p>
+            Training is a one-time cost per model; inference recurs and scales
+            with users and output length. Google reported that across 2019-2021,
+            about three fifths of its machine learning energy went to inference
+            and two fifths to training<a href="#src-1">[1]</a>. Since then,
+            reasoning models and agents have pushed the ratio further toward
+            inference, because they generate many more tokens per request: the
+            ML.ENERGY benchmark found that its Problem Solving (reasoning on)
+            task produced on average about 10x more output tokens than its Text
+            Conversation task (mean 6,988 vs. 717)<a href="#src-2">[2]</a>.
+          </p>
+
+          <h3 id="two-phases-prefill-and-decode">
+            Two Phases: Prefill and Decode
+          </h3>
+
+          <p>
+            A decoder-only LLM serves a request in two phases<a href="#src-3"
+              >[3]</a
+            ><a href="#src-4">[4]</a>:
+          </p>
+          <ul>
+            <li>
+              <strong>Prefill.</strong> The whole prompt is processed in one
+              forward pass. All prompt tokens are known, so the work is large
+              matrix-matrix multiplies that keep the tensor cores busy. Prefill
+              is <em>compute bound</em>. It produces the first output token and
+              fills the KV cache for the prompt.
+            </li>
+            <li>
+              <strong>Decode.</strong> Output tokens are generated one at a
+              time. Each step processes one new token per sequence, but it has
+              to read every model weight and the sequence's entire KV cache from
+              HBM to do it. Decode is <em>memory-bandwidth bound</em> at small
+              batch sizes.
+            </li>
+          </ul>
+
+          <p>
+            A rough roofline makes the point. A dense transformer does roughly 2
+            FLOPs per parameter per token. In BF16 each parameter is 2 bytes, so
+            a single-sequence decode step does about 1 FLOP per byte of weights
+            read. An H100 SXM is listed at 3.35 TB/s of HBM bandwidth and 1,979
+            TFLOPS of BF16 tensor throughput, the latter quoted with sparsity<a
+              href="#src-5"
+              >[5]</a
+            >. Dividing the two gives about 590 FLOPs per byte at the quoted
+            sparse peak; the dense rate is lower, but still far above the
+            roughly 1 FLOP per byte that single-sequence decode needs. At batch
+            size 1, the tensor cores sit mostly idle waiting on memory.
+          </p>
+
+          <p>
+            So every decode step must stream the weights at least once. For a
+            70.6 GB FP8 copy of a 70B model on one H200 (4.8 TB/s<a
+              href="#src-6"
+              >[6]</a
+            >), 70.6 GB / 4.8 TB/s = 14.7 ms per step, so no more than about 68
+            tokens per second for a single sequence, before counting KV cache
+            reads. The only ways past that floor are fewer bytes (quantization),
+            more bandwidth (newer GPUs, tensor parallelism) or more work per
+            byte read (batching, speculative decoding). Most of this chapter is
+            one of those three.
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> When a user asks "why is my 8-GPU
+              node only at 30% utilization while serving?", the answer is
+              usually that decode is waiting on HBM, not that something is
+              broken. GPU "utilization" in nvidia-smi measures whether a kernel
+              is running, not whether the tensor cores are saturated. Look at
+              tokens per second and memory bandwidth counters instead (see
+              <a href="observability.html"
+                >Observability, Performance and Efficiency</a
+              >).
+            </p>
+          </blockquote>
+
+          <h2 id="metrics-and-slos">
+            Metrics That Matter: TTFT, ITL, Throughput and Goodput
+          </h2>
+
+          <p>
+            Inference has two audiences with different needs: a person watching
+            tokens stream, and an operator paying for GPUs. The standard metrics
+            map onto the two phases:
+          </p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Metric</th>
+                <th>What it measures</th>
+                <th>Driven by</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>TTFT (time to first token)</td>
+                <td>
+                  Request arrival to first output token, including queueing
+                </td>
+                <td>Prefill cost, prompt length, queue depth</td>
+              </tr>
+              <tr>
+                <td>TPOT / ITL (time per output token, inter-token latency)</td>
+                <td>Gap between successive output tokens</td>
+                <td>Decode step time, batch size, prefill interference</td>
+              </tr>
+              <tr>
+                <td>E2E latency</td>
+                <td>Arrival to last token</td>
+                <td>TTFT + output length x TPOT</td>
+              </tr>
+              <tr>
+                <td>Throughput</td>
+                <td>Output (or total) tokens per second across all users</td>
+                <td>Batch size, KV cache capacity</td>
+              </tr>
+              <tr>
+                <td>Goodput</td>
+                <td>
+                  Requests per second completed <em>within</em> the latency SLOs
+                </td>
+                <td>All of the above</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <p>
+            Throughput and latency pull against each other. Bigger batches raise
+            tokens per second per GPU but make each step slower.
+            <strong>Goodput</strong>, introduced by the DistServe paper,
+            resolves this by counting only the requests that meet both a TTFT
+            and a TPOT target<a href="#src-7">[7]</a>. It is the right number
+            for capacity planning. vLLM's benchmark accepts SLOs directly, for
+            example <code>--goodput ttft:2000 tpot:50</code> (milliseconds)<a
+              href="#src-8"
+              >[8]</a
+            >.
+          </p>
+
+          <p>
+            Set targets per use case: chat cares about TTFT and a TPOT faster
+            than reading speed, a coding agent making chained calls cares about
+            end-to-end latency, and an overnight batch job has no latency SLO at
+            all. Write the SLOs down; they decide batch sizes, parallelism and
+            whether you need disaggregation.
+          </p>
+
+          <h2 id="the-kv-cache">The KV Cache and Memory Management</h2>
+
+          <h3 id="kv-cache-basics">The Number That Sizes Everything</h3>
+          <p>
+            During attention, each token's key and value vectors for every layer
+            are needed by every later token. Recomputing them each step would
+            make decode quadratic, so engines keep them in HBM: the KV cache.
+            Its size per token is:
+          </p>
+
+          <pre><code class="language-plaintext">KV bytes per token = 2 (K and V) x num_layers x num_kv_heads x head_dim x bytes_per_element
+KV bytes per sequence = KV bytes per token x sequence_length (prompt + generated)</code></pre>
+
+          <h3 id="kv-worked-example">Worked Example: Llama 3.3 70B</h3>
+
+          <p>
+            The published config for Llama 3.3 70B (shown here from Red Hat's
+            FP8 checkpoint, which keeps the original architecture) lists 80
+            hidden layers, 64 attention heads, 8 key-value heads and a head
+            dimension of 128<a href="#src-9">[9]</a>. With a BF16 cache (2 bytes
+            per element):
+          </p>
+
+          <pre><code class="language-plaintext">2 x 80 layers x 8 kv_heads x 128 head_dim x 2 bytes = 327,680 bytes = 320 KiB per token
+
+  8,192-token sequence  : 320 KiB x   8,192 =  2.5 GiB
+ 32,768-token sequence  : 320 KiB x  32,768 = 10.0 GiB
+131,072-token sequence  : 320 KiB x 131,072 = 40.0 GiB</code></pre>
+
+          <p>
+            One full-length 128K-token conversation needs 40 GiB, half an 80 GB
+            H100 on its own; an FP8 cache halves every number. This is why the
+            KV cache, not the weights, usually limits concurrency, and why
+            long-context and agentic workloads cost so much more than short
+            chat.
+          </p>
+
+          <h3 id="gqa-mqa-mla">GQA, MQA and MLA</h3>
+
+          <p>
+            Architecture choices change the <code>num_kv_heads</code> term, and
+            that is the biggest lever on KV size:
+          </p>
+          <ul>
+            <li>
+              <strong>Multi-head attention (MHA)</strong> gives every query head
+              its own K and V. If Llama 3.3 70B used MHA with 64 KV heads, the
+              128K sequence above would need 320 GiB.
+            </li>
+            <li>
+              <strong>Multi-query attention (MQA)</strong> shares one K/V head
+              across all query heads, cutting KV size and memory bandwidth
+              during incremental decoding, with some quality cost<a
+                href="#src-10"
+                >[10]</a
+              >. At one KV head the same sequence would be 5 GiB.
+            </li>
+            <li>
+              <strong>Grouped-query attention (GQA)</strong> uses an
+              intermediate number of KV heads; its authors report quality close
+              to MHA at speed comparable to MQA<a href="#src-11">[11]</a>. Llama
+              3.3 70B's 8 KV heads for 64 query heads is GQA, and it is why the
+              real number is 40 GiB instead of 320.
+            </li>
+            <li>
+              <strong>Multi-head latent attention (MLA)</strong>, introduced
+              with DeepSeek-V2, compresses keys and values into a shared latent
+              vector. DeepSeek reported a 93.3% smaller KV cache than DeepSeek
+              67B and 5.76x higher maximum generation throughput<a
+                href="#src-12"
+                >[12]</a
+              >. The per-token formula above does not apply directly to MLA
+              models; read the model's config and the engine's startup log
+              instead.
+            </li>
+          </ul>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Do not guess KV capacity; let the
+              engine tell you. At startup vLLM logs a line like "GPU KV cache
+              size: N tokens" and "Maximum concurrency for M tokens per request:
+              Xx"<a href="#src-13">[13]</a>. If maximum concurrency at your
+              chosen <code>--max-model-len</code> is in the single digits, lower
+              the context limit, quantize the cache, or add GPUs before users
+              find out for you.
+            </p>
+          </blockquote>
+
+          <h3 id="batching-and-pagedattention">
+            Continuous Batching, PagedAttention and Prefix Caching
+          </h3>
+
+          <h4>Continuous Batching</h4>
+          <p>
+            Static batching runs a batch until its longest request finishes, so
+            short requests sit idle. The Orca system (OSDI 2022) introduced
+            <em>iteration-level scheduling</em>: the scheduler makes decisions
+            at every decode step, so finished sequences leave and new ones join
+            the running batch immediately. Orca reported a 36.9x throughput
+            improvement over NVIDIA FasterTransformer at the same latency on
+            GPT-3 175B<a href="#src-14">[14]</a>. Every serious engine now does
+            this; NVIDIA calls it in-flight batching<a href="#src-15">[15]</a>.
+          </p>
+
+          <h4>PagedAttention</h4>
+          <p>
+            Earlier systems reserved a contiguous KV region sized for each
+            request's maximum length, which wasted most of it. The vLLM paper
+            (SOSP 2023) measured that only 20.4% to 38.2% of KV cache memory
+            held actual token state in existing systems<a href="#src-16">[16]</a
+            >. <strong>PagedAttention</strong> borrows virtual memory from
+            operating systems: the KV cache is split into fixed-size blocks
+            allocated on demand and tracked by a block table, so blocks need not
+            be contiguous. That removes external fragmentation, limits internal
+            fragmentation to the last block, and lets requests share blocks. The
+            authors reported 2-4x throughput over FasterTransformer and Orca at
+            the same latency<a href="#src-16">[16]</a>.
+          </p>
+
+          <h4>Chunked Prefill</h4>
+          <p>
+            A long prompt arriving mid-stream can stall every decoding user
+            while it prefills. Sarathi-Serve (OSDI 2024) splits prefills into
+            chunks and mixes them with ongoing decodes in "stall-free" batches,
+            reporting 2.6x higher serving capacity than vLLM for Mistral-7B on
+            one A100 under tail-latency constraints<a href="#src-4">[4]</a>.
+            Chunked prefill is now a standard scheduler feature in vLLM
+            (<code>--enable-chunked-prefill</code>, with
+            <code>--max-num-batched-tokens</code> as the per-step token
+            budget)<a href="#src-17">[17]</a>.
+          </p>
+
+          <h4>Prefix Caching</h4>
+          <p>
+            Many requests share a prefix: a system prompt, the same RAG
+            documents, a growing agent history. Prefix caching reuses those KV
+            blocks instead of recomputing prefill. SGLang's RadixAttention
+            organizes cached prefixes as a radix tree and reported up to 6.4x
+            higher throughput on workloads such as agents, few-shot prompts and
+            multi-turn chat<a href="#src-18">[18]</a>. In vLLM, automatic prefix
+            caching is on by default<a href="#src-19">[19]</a>. For agent
+            workloads it is the most effective single optimization, which is why
+            "KV-aware" routers send a conversation back to the same replica.
+          </p>
+
+          <h2 id="serving-engines">Serving Engines in 2026</h2>
+
+          <p>
+            For LLMs on a research cluster, start with vLLM or SGLang; use
+            TensorRT-LLM when you are all-NVIDIA and want the last increment of
+            performance; add Dynamo or Ray Serve when one engine instance is no
+            longer enough; use llama.cpp or Ollama on workstations.
+          </p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Engine</th>
+                <th>Role</th>
+                <th>Notes (September 2026)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>vLLM</td>
+                <td>General-purpose LLM server and offline engine</td>
+                <td>
+                  PagedAttention origin; OpenAI-compatible server; NVIDIA, AMD
+                  ROCm and Intel XPU wheels<a href="#src-20">[20]</a>; latest
+                  release v0.30.0 (September 2026)<a href="#src-21">[21]</a>
+                </td>
+              </tr>
+              <tr>
+                <td>SGLang</td>
+                <td>High-throughput server with RadixAttention</td>
+                <td>
+                  NVIDIA, AMD, Intel Xeon, Google TPU, Ascend and others; latest
+                  release v0.5.20 (September 2026)<a href="#src-22">[22]</a
+                  ><a href="#src-23">[23]</a>
+                </td>
+              </tr>
+              <tr>
+                <td>TensorRT-LLM</td>
+                <td>NVIDIA-optimized library</td>
+                <td>
+                  PyTorch-based LLM API; FP8 on H100 and later, FP4 on
+                  Blackwell; in-flight batching and paged KV<a href="#src-15"
+                    >[15]</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>Triton Inference Server</td>
+                <td>Multi-framework model server</td>
+                <td>
+                  TensorRT, PyTorch, ONNX, OpenVINO and more; release 2.72.0 =
+                  NGC 26.08<a href="#src-24">[24]</a>
+                </td>
+              </tr>
+              <tr>
+                <td>NVIDIA Dynamo</td>
+                <td>Orchestration above engines</td>
+                <td>
+                  Disaggregated serving, KV-aware routing, KV offload; backs
+                  onto vLLM, SGLang, TensorRT-LLM; latest release v1.5.0<a
+                    href="#src-25"
+                    >[25]</a
+                  ><a href="#src-26">[26]</a>
+                </td>
+              </tr>
+              <tr>
+                <td>Ray Serve LLM</td>
+                <td>Python-native multi-model serving</td>
+                <td>
+                  OpenAI-compatible; autoscaling; vLLM or SGLang backends<a
+                    href="#src-27"
+                    >[27]</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>Hugging Face TGI</td>
+                <td>Legacy</td>
+                <td>
+                  In maintenance mode; repository archived; HF recommends vLLM
+                  or SGLang<a href="#src-28">[28]</a><a href="#src-29">[29]</a>
+                </td>
+              </tr>
+              <tr>
+                <td>llama.cpp / Ollama</td>
+                <td>Small scale, CPU and workstation</td>
+                <td>
+                  GGUF models; OpenAI-compatible endpoints<a href="#src-30"
+                    >[30]</a
+                  ><a href="#src-31">[31]</a>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3 id="vllm">vLLM</h3>
+          <p>
+            vLLM is the default for most research groups: broad model coverage,
+            an OpenAI-compatible server (<code>vllm serve</code>), an offline
+            Python API<a href="#src-32">[32]</a>, and tensor, pipeline, data and
+            expert parallelism. It moves fast: the v0.29.0 release alone had 594
+            commits from 277 contributors and made a new model runner the
+            default<a href="#src-20">[20]</a>. Pin a version per service and
+            re-test before upgrading, because flags and defaults change between
+            minor releases.
+          </p>
+
+          <h3 id="sglang">SGLang</h3>
+          <p>
+            SGLang grew out of the same Berkeley/LMSYS ecosystem, with
+            RadixAttention prefix sharing and fast constrained (structured)
+            decoding as its signature features<a href="#src-18">[18]</a>. The
+            project states it runs on more than 400,000 GPUs in production<a
+              href="#src-23"
+              >[23]</a
+            >. It is a strong choice for agentic and multi-turn workloads with
+            heavy prefix reuse.
+          </p>
+
+          <h3 id="tensorrt-llm-triton-dynamo">
+            TensorRT-LLM, Triton and Dynamo
+          </h3>
+          <p>
+            NVIDIA's stack has three layers that are easy to confuse.
+            <strong>TensorRT-LLM</strong> is the engine: optimized kernels,
+            quantization (FP8, FP4) and a PyTorch-native LLM API<a
+              href="#src-15"
+              >[15]</a
+            >. <strong>Triton Inference Server</strong> is a general model
+            server for any framework, with dynamic batching, ensembles and the
+            KServe v2 protocol; it remains the right tool for non-LLM models
+            such as vision, recommendation or tabular models<a href="#src-24"
+              >[24]</a
+            >. <strong>Dynamo</strong> is the datacenter-scale orchestration
+            layer that sits above vLLM, SGLang or TensorRT-LLM and adds
+            disaggregated prefill/decode, KV-aware routing, multi-tier KV
+            caching (GPU to CPU to SSD to remote storage) and an SLA-driven
+            autoscaler<a href="#src-25">[25]</a>. Its v1.5.0 release (September
+            2026) deprecates the KV Block Manager (KVBM) component, with removal
+            targeted for v1.6.0, while extending KV indexing to Mooncake and
+            disk tiers<a href="#src-26">[26]</a>; check current docs before
+            building on a specific KV-tiering component. Dynamo's own README is
+            candid: if you are running a single model on a single GPU, the
+            engine alone is probably enough<a href="#src-25">[25]</a>.
+          </p>
+
+          <h3 id="tgi-status">Hugging Face TGI</h3>
+          <p>
+            Hugging Face has put Text Generation Inference in maintenance mode,
+            accepting only minor fixes, and recommends vLLM, SGLang, llama.cpp
+            or MLX going forward; the GitHub repository is now archived<a
+              href="#src-28"
+              >[28]</a
+            ><a href="#src-29">[29]</a>. If you have TGI deployments, plan a
+            migration; both vLLM and SGLang speak the same OpenAI-style API most
+            clients use.
+          </p>
+
+          <h3 id="small-scale-llamacpp-ollama">
+            Small Scale: llama.cpp and Ollama
+          </h3>
+          <p>
+            For a single workstation, a laptop, or CPU-only nodes, llama.cpp
+            runs GGUF-format models with partial GPU offload (<code>-ngl</code>
+            / <code>--n-gpu-layers</code>) and its
+            <code>llama-server</code> exposes OpenAI-compatible chat, responses
+            and embeddings routes<a href="#src-30">[30]</a>. Ollama wraps a
+            similar experience with model management and also offers
+            OpenAI-compatible <code>/v1/chat/completions</code
+            ><a href="#src-31">[31]</a>. They are excellent for teaching,
+            prototyping and single-user work, not for dozens of concurrent users
+            on a shared node.
+          </p>
+
+          <h3 id="ray-serve">Ray Serve</h3>
+          <p>
+            Ray Serve LLM builds multi-node, multi-model deployments on Ray,
+            with autoscaling, prefix-aware routing, multi-LoRA serving,
+            prefill-decode disaggregation and vLLM or SGLang as the engine<a
+              href="#src-27"
+              >[27]</a
+            >. Its sibling, Ray Data LLM, is useful for offline batch inference
+            over datasets larger than cluster memory<a href="#src-32">[32]</a>.
+          </p>
+
+          <h2 id="advanced-serving-techniques">
+            Advanced Serving: Disaggregation, KV Offload and Speculation
+          </h2>
+
+          <h3 id="disaggregation-and-kv-transfer">
+            Disaggregated Prefill/Decode and KV Cache Offload
+          </h3>
+
+          <p>
+            Colocated prefill and decode interfere: a burst of long prompts
+            inflates everyone's inter-token latency.
+            <strong>Disaggregated serving</strong> runs them in separate pools;
+            the prefill worker computes the KV cache and transfers it to a
+            decode worker, which streams the response. DistServe reported up to
+            7.4x more requests or 12.6x tighter SLOs within latency constraints
+            compared with colocated systems<a href="#src-7">[7]</a>. Moonshot
+            AI's Mooncake, the serving platform for Kimi, separates prefill and
+            decode clusters and pools spare CPU DRAM and SSD across the GPU
+            cluster as a distributed KV cache; under real workloads it let Kimi
+            handle 75% more requests<a href="#src-33">[33]</a>.
+          </p>
+
+          <p>
+            Disaggregation is not free: the KV cache must move over NVLink or
+            RDMA (see <a href="interconnects.html">Interconnects</a>). Dynamo's
+            documentation states it plainly: for small models, short prompts,
+            low concurrency or clusters without a fast KV-transfer fabric, an
+            aggregated deployment is simpler and often faster<a href="#src-34"
+              >[34]</a
+            >. vLLM labels its disaggregated prefill feature experimental and
+            notes that it does not improve throughput; its benefit is separate
+            tuning of TTFT and ITL and control of tail ITL<a href="#src-35"
+              >[35]</a
+            >.
+          </p>
+
+          <h4>KV Cache Offload and Tiering</h4>
+          <p>
+            KV cache can also be tiered: when HBM fills, blocks move to host
+            DRAM, NVMe or remote storage and come back on a prefix hit, far
+            cheaper than recomputing a long prefill. In vLLM,
+            <code>--kv-offloading-size</code> sets a CPU offload buffer in GiB
+            with a <code>native</code> or <code>lmcache</code> backend, and the
+            <code>--kv-transfer-config</code> JSON selects connectors such as
+            NixlConnector, MooncakeConnector, LMCacheConnectorV1 and
+            OffloadingConnector<a href="#src-19">[19]</a
+            ><a href="#src-35">[35]</a>. Dynamo supports storage-tier KV offload
+            including S3 and Azure blob<a href="#src-25">[25]</a>, though its
+            component layout is changing quickly<a href="#src-26">[26]</a>. See
+            <a href="memory-storage.html">Memory and Storage</a>.
+          </p>
+
+          <h3 id="speculative-decoding">Speculative Decoding</h3>
+
+          <p>
+            Speculative decoding gets more than one token per pass over the
+            weights. A cheap drafter proposes several tokens; the large model
+            verifies them in one compute-dense pass and accepts the longest
+            correct prefix. With the right acceptance rule the output
+            distribution is identical to the large model alone; Leviathan et al.
+            reported 2-3x acceleration on T5-XXL with identical outputs<a
+              href="#src-36"
+              >[36]</a
+            >.
+          </p>
+
+          <p>
+            Drafters include a small model from the same family, heads trained
+            on the target's hidden states (EAGLE and EAGLE-3<a href="#src-37"
+              >[37]</a
+            ><a href="#src-38">[38]</a>), built-in multi-token prediction (MTP)
+            layers, or model-free n-gram and suffix matching. vLLM configures
+            all of these through one JSON flag,
+            <code>--speculative-config</code>, with keys such as
+            <code>method</code>, <code>model</code> and
+            <code>num_speculative_tokens</code><a href="#src-39">[39]</a>.
+          </p>
+
+          <p>
+            Speculation spends compute to save bandwidth, so it helps most at
+            low to medium load; vLLM's documentation frames it as a way to
+            reduce inter-token latency for medium-to-low QPS, memory-bound
+            workloads<a href="#src-39">[39]</a>. MLPerf Inference v6.1 now
+            permits speculative decoding in the interactive scenario for some
+            benchmarks, a sign it has become standard practice<a href="#src-40"
+              >[40]</a
+            >.
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Measure acceptance rate on
+              <em>your</em> traffic before enabling speculation on a shared
+              service; recent vLLM releases report per-request acceptance
+              statistics<a href="#src-20">[20]</a>.
+            </p>
+          </blockquote>
+
+          <h2 id="quantization">Quantization for Inference</h2>
+
+          <p>
+            Quantization cuts bytes per parameter, shrinking memory and raising
+            the decode ceiling. Two styles: <strong>weight-only</strong> (for
+            example W4A16: 4-bit weights, 16-bit activations), which helps
+            bandwidth-bound decode most, and
+            <strong>weight-and-activation</strong> (W8A8 in INT8 or FP8, or
+            FP4), which also speeds up compute-bound prefill if the hardware has
+            matching tensor-core formats.
+          </p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Format</th>
+                <th>Bits per weight</th>
+                <th>Hardware notes</th>
+                <th>Typical tools</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>BF16 / FP16</td>
+                <td>16</td>
+                <td>Baseline everywhere</td>
+                <td>Native checkpoints</td>
+              </tr>
+              <tr>
+                <td>INT8 W8A8</td>
+                <td>8</td>
+                <td>Turing through Hopper in vLLM<a href="#src-41">[41]</a></td>
+                <td>LLM Compressor</td>
+              </tr>
+              <tr>
+                <td>FP8 W8A8</td>
+                <td>8</td>
+                <td>
+                  Compute capability 8.9 and above (Ada, Hopper, Blackwell); AMD
+                  MI300-class<a href="#src-42">[42]</a
+                  ><a href="#src-43">[43]</a>
+                </td>
+                <td>LLM Compressor, Model Optimizer</td>
+              </tr>
+              <tr>
+                <td>INT4 AWQ / GPTQ (W4A16)</td>
+                <td>4 plus group scales</td>
+                <td>
+                  Broad GPU support via Marlin kernels<a href="#src-41">[41]</a>
+                </td>
+                <td>AutoAWQ, GPTQModel, LLM Compressor</td>
+              </tr>
+              <tr>
+                <td>NVFP4</td>
+                <td>4.5 effective</td>
+                <td>NVIDIA Blackwell tensor cores<a href="#src-43">[43]</a></td>
+                <td>Model Optimizer, LLM Compressor</td>
+              </tr>
+              <tr>
+                <td>MXFP4</td>
+                <td>4 plus 1 scale per 32</td>
+                <td>
+                  Blackwell<a href="#src-43">[43]</a>; AMD MI355X<a
+                    href="#src-44"
+                    >[44]</a
+                  >
+                </td>
+                <td>Vendor toolchains</td>
+              </tr>
+              <tr>
+                <td>GGUF k-quants (e.g. Q4_K_M)</td>
+                <td>4.89 for Q4_K_M; 8.50 for Q8_0</td>
+                <td>CPU, Apple, consumer and datacenter GPUs</td>
+                <td>
+                  llama.cpp <code>llama-quantize</code
+                  ><a href="#src-45">[45]</a>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3 id="int8-fp8">INT8 and FP8</h3>
+          <p>
+            FP8 is the safe default on Hopper, Blackwell and MI300-class
+            hardware<a href="#src-43">[43]</a><a href="#src-42">[42]</a>. vLLM's
+            documentation describes FP8 W8A8 as a 2x reduction in model memory
+            with up to 1.6x higher throughput and minimal accuracy impact; a
+            simple round-to-nearest scheme with per-channel weights and dynamic
+            per-token activations needs no calibration data<a href="#src-42"
+              >[42]</a
+            >. Published FP8 checkpoints make the accuracy check easy to read:
+            Red Hat's FP8-dynamic Llama 3.3 70B reports average recovery of
+            99.8% to 100.6% of the BF16 scores on its evaluation suites<a
+              href="#src-46"
+              >[46]</a
+            >. The KV cache can also be stored in FP8 (<code
+              >--kv-cache-dtype fp8</code
+            >) independently of the weights<a href="#src-19">[19]</a>.
+          </p>
+
+          <h3 id="int4-awq-gptq">INT4: AWQ and GPTQ</h3>
+          <p>
+            GPTQ quantizes weights one layer at a time using approximate
+            second-order information, reaching 3-4 bits per weight with small
+            accuracy loss and quantizing 175B-parameter models in about four GPU
+            hours<a href="#src-47">[47]</a>. AWQ observes that protecting about
+            1% of salient weight channels, identified from activation
+            statistics, greatly reduces quantization error, and it does so
+            without backpropagation<a href="#src-48">[48]</a>. Both yield
+            weight-only 4-bit checkpoints that run on Ampere and even Turing
+            GPUs, which lack FP8 tensor cores.
+          </p>
+
+          <h3 id="fp4-nvfp4">FP4 and NVFP4</h3>
+          <p>
+            Blackwell adds 4-bit floating point in hardware. NVFP4 stores E2M1
+            values with one FP8 (E4M3) scale per 16-value block plus a
+            per-tensor FP32 scale, which works out to 4.5 bits per value and
+            about 3.5x less memory than FP16 and 1.8x less than FP8<a
+              href="#src-43"
+              >[43]</a
+            >. MXFP4 uses a power-of-two scale per 32 values. NVIDIA reports 1%
+            or less accuracy degradation versus FP8 for DeepSeek-R1-0528 across
+            its evaluations when quantized to NVFP4 with post-training
+            quantization<a href="#src-43">[43]</a>. That is a vendor result for
+            one very large model; validate smaller models yourself.
+          </p>
+
+          <h3 id="gguf">GGUF</h3>
+          <p>
+            GGUF is llama.cpp's file format and a family of block-quantization
+            schemes. The llama.cpp documentation lists bits per weight from
+            about 2.0 (IQ1_S) to 8.5 (Q8_0), and gives a 70B model as 280.9 GB
+            at its original size versus 43.1 GB at Q4_K_M<a href="#src-45"
+              >[45]</a
+            >. Importance-matrix (<code>--imatrix</code>) calibration improves
+            low-bit quality. For GPU servers, prefer formats with native vLLM or
+            SGLang kernels.
+          </p>
+
+          <h3 id="accuracy-tradeoffs">Accuracy Tradeoffs</h3>
+          <p>
+            In practice, 8-bit is close to lossless for most modern LLMs; 4-bit
+            weight-only is usually fine for chat and summarization but degrades
+            first on math, code and long reasoning; below 4 bits quality drops
+            quickly. Evaluate on a task that resembles the research use, not
+            only a generic leaderboard.
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> For reproducible research, record the
+              model repository <em>and revision hash</em>, the quantization
+              method, the engine version and the sampling parameters. "We used
+              Llama 70B" is not a method; a quantized checkpoint served by a
+              different engine version can give measurably different outputs.
+            </p>
+          </blockquote>
+
+          <h2 id="multi-gpu-inference">Multi-GPU Inference and Sizing</h2>
+
+          <h3 id="parallelism-for-inference">Parallelism for Inference</h3>
+
+          <p>
+            When a model or its KV cache does not fit on one GPU, or one GPU is
+            too slow for your latency target, split the work. The parallelism
+            types match training (see
+            <a href="training.html">Training at Scale</a>), but the tradeoffs
+            differ.
+          </p>
+
+          <ul>
+            <li>
+              <strong>Tensor parallelism (TP)</strong> splits each layer's
+              matrices across GPUs, with an all-reduce after each block. It cuts
+              per-GPU weight reads, so it lowers decode latency, but it needs
+              fast links. vLLM's guidance: use TP across the GPUs within a
+              node<a href="#src-13">[13]</a>.
+            </li>
+            <li>
+              <strong>Pipeline parallelism (PP)</strong> assigns contiguous
+              layers to different GPUs. It communicates less, tolerates slower
+              links and uneven splits, and suits multi-node deployments: vLLM
+              suggests TP equal to GPUs per node and PP equal to the number of
+              nodes, and recommends PP over TP on GPUs without NVLink, such as
+              the L40S<a href="#src-13">[13]</a>.
+            </li>
+            <li>
+              <strong>Data parallelism (DP)</strong> runs independent replicas:
+              more throughput, not more capacity per request. Several small
+              replicas often beat one TP=8 instance.
+            </li>
+            <li>
+              <strong>Expert parallelism (EP)</strong> places different experts
+              of a mixture-of-experts (MoE) model on different GPUs, with
+              all-to-all communication to route tokens.
+            </li>
+          </ul>
+
+          <h3 id="serving-moe">Serving MoE Models</h3>
+          <p>
+            MoE models activate only a fraction of their parameters per token
+            (DeepSeek-V2: 236B total, 21B active<a href="#src-12">[12]</a>), so
+            compute per token is low but <em>all</em> weights must still be
+            resident. They need the memory of a large model and the bandwidth
+            profile of a small one, which favors big aggregate HBM and fast
+            scale-up domains. vLLM's recommended pattern for large MoE models,
+            especially MLA models such as DeepSeek, is data parallel attention
+            combined with expert (or tensor) parallel MoE layers, enabled with
+            <code>--data-parallel-size</code> and
+            <code>--enable-expert-parallel</code><a href="#src-49">[49]</a>. The
+            largest deployments span rack-scale NVLink domains; NVIDIA's GB300
+            NVL72 offers a 40 TB combined HBM and Grace memory budget per rack<a
+              href="#src-43"
+              >[43]</a
+            >. See <a href="accelerators.html">Accelerators</a> and
+            <a href="interconnects.html">Interconnects</a> for the hardware.
+          </p>
+
+          <h3 id="sizing">Sizing: A 70B Model in BF16, FP8 and INT4</h3>
+
+          <p>
+            Size weights first, then KV cache for target concurrency and
+            context, then headroom for activations and CUDA graphs. vLLM claims
+            92% of GPU memory by default (<code
+              >--gpu-memory-utilization 0.92</code
+            >) and fills what remains after weights and activations with KV
+            cache<a href="#src-19">[19]</a>.
+          </p>
+
+          <h4>Step 1: Weights</h4>
+          <p>
+            Llama 3.3 70B has 70,553,706,496 parameters according to its Hugging
+            Face metadata<a href="#src-50">[50]</a>. Weight memory is parameters
+            times bytes per parameter:
+          </p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Precision</th>
+                <th>Bytes/param</th>
+                <th>Weights</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>BF16</td>
+                <td>2</td>
+                <td>141.1 GB</td>
+              </tr>
+              <tr>
+                <td>FP8</td>
+                <td>1</td>
+                <td>70.6 GB</td>
+              </tr>
+              <tr>
+                <td>NVFP4 (4.5 bits effective<a href="#src-43">[43]</a>)</td>
+                <td>0.5625</td>
+                <td>39.7 GB</td>
+              </tr>
+              <tr>
+                <td>INT4 W4A16</td>
+                <td>0.5 plus group scales</td>
+                <td>35.3 GB plus scales</td>
+              </tr>
+              <tr>
+                <td>
+                  GGUF Q4_K_M (70B, from llama.cpp docs<a href="#src-45">[45]</a
+                  >)
+                </td>
+                <td>-</td>
+                <td>43.1 GB</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Computed values in this table are parameter count<a href="#src-50"
+              >[50]</a
+            >
+            x bytes per parameter; the GGUF row is quoted directly.
+          </p>
+
+          <h4>Step 2: Which GPU Configurations Fit</h4>
+          <p>
+            Per-GPU memory from vendor pages: H100 SXM 80 GB<a href="#src-5"
+              >[5]</a
+            >, H200 141 GB<a href="#src-6">[6]</a>, B200 180 GB (DGX B200: 1,440
+            GB across 8 GPUs)<a href="#src-51">[51]</a>, AMD MI355X 288 GB<a
+              href="#src-44"
+              >[44]</a
+            >, L40S 48 GB<a href="#src-52">[52]</a>. "Usable" below is 0.92 x
+            total GPU memory minus weights; activations and CUDA graphs come out
+            of that before KV cache.
+          </p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Configuration</th>
+                <th>BF16 (141.1 GB)</th>
+                <th>FP8 (70.6 GB)</th>
+                <th>INT4 (35.3 GB + scales)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>1x L40S (48 GB)</td>
+                <td>No</td>
+                <td>No</td>
+                <td>Barely: about 9 GB left; short contexts only</td>
+              </tr>
+              <tr>
+                <td>1x H100 (80 GB)</td>
+                <td>No</td>
+                <td>Loads, but only about 3 GB left: not practical</td>
+                <td>Yes: about 38 GB left</td>
+              </tr>
+              <tr>
+                <td>2x H100, TP=2 (160 GB)</td>
+                <td>No</td>
+                <td>Yes: about 77 GB left</td>
+                <td>Yes, but TP=2 mostly buys latency</td>
+              </tr>
+              <tr>
+                <td>4x H100, TP=4 (320 GB)</td>
+                <td>Yes: about 153 GB left</td>
+                <td>Yes: plenty of KV</td>
+                <td>Overkill</td>
+              </tr>
+              <tr>
+                <td>1x H200 (141 GB)</td>
+                <td>No</td>
+                <td>Yes: about 59 GB left</td>
+                <td>Yes</td>
+              </tr>
+              <tr>
+                <td>2x H200, TP=2 (282 GB)</td>
+                <td>Yes: about 118 GB left</td>
+                <td>Yes</td>
+                <td>Overkill</td>
+              </tr>
+              <tr>
+                <td>1x B200 (180 GB)</td>
+                <td>Tight: about 25 GB left</td>
+                <td>Yes: about 95 GB left</td>
+                <td>Yes</td>
+              </tr>
+              <tr>
+                <td>1x MI355X (288 GB)</td>
+                <td>Yes: about 124 GB left</td>
+                <td>Yes: about 194 GB left</td>
+                <td>Yes</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Memory figures from the vendor sources cited above; "left" values
+            are arithmetic from those figures and the weight sizes in Step 1.
+          </p>
+
+          <h4>Step 3: Turn Leftover Memory into Users</h4>
+          <p>
+            Take the single H200 with FP8 weights: about 59 GB remain. At 320
+            KiB per token with a BF16 cache, that is roughly 180,000 tokens of
+            KV cache before activations are subtracted: about 20 concurrent
+            8K-token conversations, or one 128K-token one. An FP8 cache doubles
+            that to roughly 360,000 tokens. If your SLO calls for 50 concurrent
+            8K conversations (about 410,000 tokens), even the FP8 cache falls
+            short, so plan on a second replica or TP=2. Then check speed: one
+            H200 with FP8 weights tops out near 68 tokens/s per user (above);
+            TP=2 roughly halves the per-GPU weight read.
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> The most common sizing mistake is
+              setting <code>--max-model-len</code> to the model's full
+              advertised context (often 128K) "just in case". It rarely causes a
+              crash, but it lets a few users with huge prompts consume the whole
+              cache while everyone else queues. Set the context limit to what
+              your users actually need, and offer a separate long-context
+              endpoint if some projects require it.
+            </p>
+          </blockquote>
+
+          <h2 id="embeddings-and-rag">Embeddings, RAG and Vector Databases</h2>
+
+          <p>
+            Retrieval-augmented generation (RAG) indexes a corpus (papers, lab
+            notebooks, policies, code), retrieves relevant passages per query
+            and has the LLM answer from them. MLPerf Inference v6.1 added an
+            end-to-end RAG benchmark that captures the full pipeline: an
+            embedding model turns the query into a vector, a retriever pulls
+            candidates from a vector database, a re-ranker refines them, and one
+            or more LLMs produce the answer<a href="#src-40">[40]</a>.
+          </p>
+
+          <h3 id="embedding-serving">Embedding and Re-ranking Models</h3>
+          <p>
+            Embedding models are encoders: they do one prefill-like pass per
+            input and no decode, so they are compute bound and batch extremely
+            well. vLLM serves them as "pooling" models through
+            <code>LLM.embed</code> and <code>LLM.score</code> offline and
+            through OpenAI-compatible embedding endpoints online<a
+              href="#src-32"
+              >[32]</a
+            >; llama.cpp's server also offers an embeddings route<a
+              href="#src-30"
+              >[30]</a
+            >. Corpus ingestion is a batch job; the query path is a small
+            service that can often share a GPU (see
+            <a href="scheduling.html">Scheduling and Orchestration</a>).
+          </p>
+
+          <h3 id="vector-databases">Vector Databases</h3>
+          <p>You do not always need a dedicated vector database:</p>
+          <ul>
+            <li>
+              <strong>Faiss</strong> is a library, not a server: a toolkit of
+              indexing methods for vector similarity search, clustering and
+              compression, with GPU support<a href="#src-53">[53]</a>. Ideal for
+              research code and offline experiments.
+            </li>
+            <li>
+              <strong>pgvector</strong> adds vector columns and indexes (HNSW
+              and IVFFlat) to PostgreSQL. HNSW gives a better speed-recall
+              tradeoff than IVFFlat at the cost of slower builds and more
+              memory<a href="#src-54">[54]</a>. If your group already runs
+              Postgres, start here.
+            </li>
+            <li>
+              <strong>Milvus</strong> is a dedicated open-source vector database
+              under the LF AI and Data Foundation, with deployment modes from a
+              laptop to Kubernetes clusters handling billions of vectors<a
+                href="#src-55"
+                >[55]</a
+              >.
+            </li>
+          </ul>
+          <p>
+            Access control is the part people forget: a RAG index over
+            restricted documents exposes them to anyone who can query it. Mirror
+            source permissions in retrieval, and treat indexes of regulated data
+            as regulated systems (see
+            <a href="operations.html">Research Computing Operations</a>).
+          </p>
+
+          <h2 id="batch-vs-interactive">
+            Offline Batch Inference vs. Interactive Serving
+          </h2>
+
+          <p>
+            Labeling a corpus, generating synthetic data or scoring evaluation
+            outputs are batch jobs with no latency SLO. Treat them as HPC jobs:
+          </p>
+          <ul>
+            <li>
+              <strong>Use the offline API, not an HTTP server.</strong> vLLM's
+              <code>LLM</code> class takes a whole list of prompts and schedules
+              them with continuous batching internally<a href="#src-32">[32]</a
+              >. No ports, no API keys, no idle GPU between requests.
+            </li>
+            <li>
+              <strong>Tune for throughput.</strong> Large
+              <code>max_num_seqs</code>, prefix caching on for shared
+              instructions, and no speculative decoding at high batch sizes.
+            </li>
+            <li>
+              <strong>Shard the data, not the model.</strong> Ten single-GPU
+              array tasks each processing one tenth of the input are simpler and
+              more robust than one ten-GPU job, provided the model fits on one
+              GPU.
+            </li>
+            <li>
+              <strong>Checkpoint output.</strong> Write results incrementally so
+              a preempted job resumes instead of restarting.
+            </li>
+          </ul>
+          <p>
+            Interactive serving is long-running, multi-tenant and networked; it
+            needs authentication, monitoring and an owner. A pragmatic split is
+            a small pool of dedicated inference nodes (or a Kubernetes
+            partition) for services, and ordinary batch partitions for offline
+            work.
+          </p>
+
+          <h3 id="slurm-batch-example">Example: Slurm Batch Inference Job</h3>
+          <p>
+            This job runs an FP8 70B model with TP=2 over a JSONL file of
+            prompts. Partition, module and path names are site-specific
+            examples; the Slurm options are standard<a href="#src-56">[56]</a>
+            and the vLLM calls use the documented offline API<a href="#src-32"
+              >[32]</a
+            >.
+          </p>
+
+          <pre><code class="language-bash">#!/bin/bash
+#SBATCH --job-name=llm-batch
+#SBATCH --partition=gpu          # example partition name
+#SBATCH --nodes=1
+#SBATCH --gpus-per-node=2        # e.g. 2x H100 80GB for FP8 70B at TP=2
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=256G
+#SBATCH --time=08:00:00
+#SBATCH --array=0-9              # 10 shards of the input
+#SBATCH --output=logs/%x_%A_%a.out
+
+set -euo pipefail
+module load cuda                 # site-specific; or use a container
+source "$HOME/venvs/vllm/bin/activate"
+
+export HF_HOME=/scratch/$USER/hf_cache   # keep model downloads off $HOME
+export OMP_NUM_THREADS=8
+
+python batch_infer.py \
+  --model RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic \
+  --input  data/prompts.jsonl \
+  --output results/out_${SLURM_ARRAY_TASK_ID}.jsonl \
+  --shard  "${SLURM_ARRAY_TASK_ID}" \
+  --num-shards 10 \
+  --tp 2</code></pre>
+
+          <pre><code class="language-python"># batch_infer.py - offline batch inference with vLLM (example)
+import argparse, json
+from vllm import LLM, SamplingParams
+
+p = argparse.ArgumentParser()
+p.add_argument("--model", required=True)
+p.add_argument("--input", required=True)
+p.add_argument("--output", required=True)
+p.add_argument("--shard", type=int, default=0)
+p.add_argument("--num-shards", type=int, default=1)
+p.add_argument("--tp", type=int, default=1)
+args = p.parse_args()
+
+with open(args.input) as f:
+    rows = [json.loads(line) for i, line in enumerate(f)
+            if i % args.num_shards == args.shard]
+
+llm = LLM(model=args.model,
+          tensor_parallel_size=args.tp,
+          max_model_len=8192,            # size to your prompts, not the model max
+          gpu_memory_utilization=0.92)
+
+params = SamplingParams(temperature=0.0, max_tokens=512)
+conversations = [[{"role": "user", "content": r["prompt"]}] for r in rows]
+
+outputs = llm.chat(conversations, params)
+
+with open(args.output, "w") as out:
+    for r, o in zip(rows, outputs):
+        out.write(json.dumps({"id": r["id"], "response": o.outputs[0].text}) + "\n")</code></pre>
+
+          <h2 id="apis-and-gateways">
+            OpenAI-Compatible APIs and Campus AI Gateways
+          </h2>
+
+          <p>
+            The OpenAI chat-completions API is the de facto LLM wire protocol.
+            vLLM, SGLang, llama.cpp, Ollama and Ray Serve LLM all expose it<a
+              href="#src-57"
+              >[57]</a
+            ><a href="#src-58">[58]</a><a href="#src-30">[30]</a
+            ><a href="#src-31">[31]</a><a href="#src-27">[27]</a>, so scripts
+            switch between local, campus and commercial models by changing a
+            base URL and key.
+          </p>
+
+          <h3 id="vllm-launch">Example: Launching a vLLM Server</h3>
+          <p>
+            All flags below exist in current vLLM<a href="#src-17">[17]</a
+            ><a href="#src-57">[57]</a>; values are examples for one H200
+            serving the FP8 70B model from the sizing section.
+          </p>
+
+          <pre><code class="language-bash"># Example: FP8 Llama 3.3 70B on a single H200 (141 GB)
+export HF_HOME=/scratch/models/hf_cache
+
+vllm serve RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic \
+  --served-model-name llama-3.3-70b \
+  --tensor-parallel-size 1 \
+  --max-model-len 16384 \
+  --gpu-memory-utilization 0.92 \
+  --kv-cache-dtype fp8 \
+  --max-num-seqs 64 \
+  --enable-prefix-caching \
+  --host 0.0.0.0 --port 8000 \
+  --api-key "$(cat /etc/vllm/api_key)"
+
+# Smoke test
+curl -s http://localhost:8000/v1/chat/completions \
+  -H "Authorization: Bearer $(cat /etc/vllm/api_key)" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "llama-3.3-70b",
+       "messages": [{"role": "user", "content": "Say hello in five words."}]}'</code></pre>
+
+          <p>
+            Prefix caching is already on by default, so that flag documents
+            intent<a href="#src-19">[19]</a>. Check the startup KV cache and
+            concurrency lines before opening the service.
+          </p>
+
+          <h3 id="campus-gateways">Campus AI Gateways</h3>
+          <p>
+            Once you have more than one model or backend, put a gateway in
+            front. LiteLLM's proxy presents one OpenAI-compatible endpoint in
+            front of 100+ LLMs, including self-hosted OpenAI-compatible servers
+            such as vLLM, with per-key budgets, rate limits and spend tracking<a
+              href="#src-59"
+              >[59]</a
+            >. A minimal config routes a public model name to the vLLM server
+            above:
+          </p>
+
+          <pre><code class="language-yaml"># litellm config.yaml (example)
+model_list:
+  - model_name: llama-3.3-70b            # name clients request
+    litellm_params:
+      model: openai/llama-3.3-70b        # "openai/" = OpenAI-compatible backend
+      api_base: http://gpu-node17:8000/v1
+      api_key: "os.environ/VLLM_API_KEY"
+      rpm: 600                           # example per-deployment rate limit
+  - model_name: llama-3.3-70b            # second replica, load-balanced
+    litellm_params:
+      model: openai/llama-3.3-70b
+      api_base: http://gpu-node18:8000/v1
+      api_key: "os.environ/VLLM_API_KEY"
+
+general_settings:
+  master_key: sk-change-me               # example only; keep real keys in a secret store</code></pre>
+          <p>
+            Start it with <code>litellm --config config.yaml</code
+            ><a href="#src-60">[60]</a>. A gateway is one place to issue per-lab
+            keys tied to campus identity, enforce quotas, log usage for
+            allocation reports, route between on-prem and commercial models, and
+            apply data-classification rules. See
+            <a href="operations.html">Research Computing Operations</a> and
+            <a href="cloud.html">Cloud and Hybrid AI/HPC</a>.
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Never expose a raw engine port to the
+              campus network. Put a gateway or reverse proxy in front that
+              handles TLS, authentication and logging, and bind the engine to
+              localhost or a private VLAN. Engine API keys are a single shared
+              secret, not a user management system.
+            </p>
+          </blockquote>
+
+          <h2 id="benchmarking-cost-energy">Benchmarking, Cost and Energy</h2>
+
+          <h3 id="cost-and-energy">Cost and Energy per Token</h3>
+
+          <p>
+            Budget in cost or energy per token at your SLO, not per GPU-hour.
+            Published data points:
+          </p>
+          <ul>
+            <li>
+              Google measured the median Gemini Apps text prompt at 0.24 Wh of
+              energy, counting accelerators, host systems, idle capacity and
+              data-center overhead, and reported that software efficiency
+              efforts and clean energy procurement drove a 33x reduction in
+              energy per median prompt over one year<a href="#src-61">[61]</a>.
+            </li>
+            <li>
+              The ML.ENERGY benchmark measured Qwen 3 32B on one B200 at 0.151 J
+              per token for text conversation at its maximum batch size, versus
+              0.209 J at batch 128. Reasoning traffic cost 0.312 J per token
+              because longer outputs consumed KV memory and capped the batch at
+              128. Per response, the gap was 95 J versus 2,192 J (23x)<a
+                href="#src-2"
+                >[2]</a
+              >.
+            </li>
+            <li>
+              NVIDIA claims up to 25x (Blackwell) and 50x (Blackwell Ultra)
+              better energy efficiency per token than H100 with FP4; treat it as
+              a vendor peak comparison<a href="#src-43">[43]</a>.
+            </li>
+          </ul>
+
+          <p>
+            The lessons: energy per token falls sharply with batch size, so a
+            lightly loaded dedicated GPU is the least efficient way to serve;
+            reasoning and agent workloads cost far more per request than chat.
+            For your own numbers, measure node power (not just GPU board power)
+            during a benchmark and divide by tokens generated. For the facility
+            side, see
+            <a href="facilities.html">Power, Cooling and Facilities</a>.
+          </p>
+
+          <h3 id="benchmarking">Benchmarking: MLPerf and Engine Tools</h3>
+
+          <h4>MLPerf Inference</h4>
+          <p>
+            MLPerf Inference is the peer-reviewed, architecture-neutral
+            benchmark for inference systems. The v6.1 round, published September
+            16, 2026, drew a record 30 submitting organizations, added the
+            end-to-end RAG and Edge Agentic Inference tests, allowed speculative
+            decoding in the interactive scenario, and included the largest
+            system yet submitted (512 accelerators). New hardware included AMD
+            Instinct MI350P, AMD Ryzen AI Max+ 395 and Intel Arc Pro B70 as
+            available products, and NVIDIA Rubin and Vera Rubin NVL72 in
+            preview. The best per-accelerator DeepSeek-R1 server result improved
+            5.7x over v5.1 a year earlier<a href="#src-40">[40]</a>. The v6.1
+            datacenter suite includes Llama 2 70B, Llama 3.1 8B, DeepSeek-R1,
+            GPT-OSS 120B, a Qwen3-VL vision-language model, Whisper, and the new
+            RAG test<a href="#src-62">[62]</a>. MLCommons has announced that an
+            API-centric suite, MLPerf Endpoints, will replace MLPerf Inference
+            for the datacenter<a href="#src-40">[40]</a>.
+          </p>
+
+          <p>
+            Use MLPerf to compare systems for procurement, noting "available"
+            versus "preview" status; it does not replace testing your own model
+            and traffic.
+          </p>
+
+          <h4>Engine Benchmark Tools</h4>
+          <p>
+            For your own measurements, drive the real endpoint with realistic
+            load:
+          </p>
+          <ul>
+            <li>
+              <strong><code>vllm bench serve</code></strong> works against any
+              OpenAI-compatible server (not only vLLM), with synthetic or
+              dataset-based prompts, request-rate or concurrency control,
+              percentile reporting and goodput SLOs<a href="#src-8">[8]</a>.
+            </li>
+            <li>
+              <strong>AIPerf</strong> is NVIDIA's current tool; its predecessor
+              GenAI-Perf is being phased out<a href="#src-63">[63]</a>.
+            </li>
+          </ul>
+
+          <pre><code class="language-bash"># Example: 500 requests, 2K-token prompts, 256-token outputs, 64 concurrent users,
+# goodput counted against TTFT &lt;= 2 s and TPOT &lt;= 50 ms
+vllm bench serve \
+  --backend openai-chat \
+  --base-url http://localhost:8000 \
+  --endpoint /v1/chat/completions \
+  --model RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic \
+  --served-model-name llama-3.3-70b \
+  --dataset-name random \
+  --random-input-len 2048 --random-output-len 256 \
+  --num-prompts 500 \
+  --max-concurrency 64 \
+  --percentile-metrics ttft,tpot,itl,e2el \
+  --goodput ttft:2000 tpot:50 \
+  --save-result</code></pre>
+
+          <p>
+            Sweep concurrency (1, 8, 32, 64, 128) and plot throughput against
+            p99 TTFT and TPOT; the knee of that curve is your practical capacity
+            per replica.
+          </p>
+
+          <h2 id="key-takeaways">Key Takeaways</h2>
+          <ul>
+            <li>
+              Inference is a recurring cost that now dominates AI compute;
+              decode is bound by memory bandwidth, so bytes moved per token, not
+              FLOPS, set single-user speed.
+            </li>
+            <li>
+              Track TTFT, TPOT/ITL and goodput against written SLOs; raw
+              throughput numbers without latency targets are misleading.
+            </li>
+            <li>
+              The KV cache (2 x layers x kv_heads x head_dim x seq x bytes)
+              limits concurrency; GQA, MLA, FP8 KV cache and sensible context
+              limits are the main levers.
+            </li>
+            <li>
+              Start with vLLM or SGLang; add Dynamo, Ray Serve or disaggregation
+              only when a measured bottleneck justifies it. Migrate off TGI,
+              which is archived.
+            </li>
+            <li>
+              FP8 is the near-lossless default on Hopper-class and newer GPUs;
+              INT4 AWQ/GPTQ opens older GPUs; NVFP4 is the Blackwell path.
+              Evaluate on your own tasks.
+            </li>
+            <li>
+              Size in three steps: weights, KV cache for target concurrency, and
+              headroom. A 70B model is one H200 in FP8, two H100s in FP8, or one
+              H100 in INT4.
+            </li>
+            <li>
+              Run research batch inference as ordinary Slurm jobs with the
+              offline API; run interactive services behind an authenticated
+              OpenAI-compatible gateway such as LiteLLM.
+            </li>
+            <li>
+              Benchmark your own model and traffic with
+              <code>vllm bench serve</code> or AIPerf, and use MLPerf results
+              for cross-vendor comparison, not as a sizing answer.
+            </li>
+          </ul>
+
+          <h2 id="sources">Sources</h2>
+          <ol class="sources">
+            <li id="src-1">
+              <a
+                href="https://arxiv.org/abs/2204.05149"
+                target="_blank"
+                rel="noopener"
+                >Patterson et al., The Carbon Footprint of Machine Learning
+                Training Will Plateau, Then Shrink (arXiv, 2022)</a
+              >
+            </li>
+            <li id="src-2">
+              <a
+                href="https://ml.energy/blog/measurement/energy/diagnosing-inference-energy-consumption-with-the-mlenergy-leaderboard-v30/"
+                target="_blank"
+                rel="noopener"
+                >Diagnosing Inference Energy Consumption with the ML.ENERGY
+                Leaderboard v3.0 (ML.ENERGY Initiative, 2026)</a
+              >
+            </li>
+            <li id="src-3">
+              <a
+                href="https://developer.nvidia.com/blog/mastering-llm-techniques-inference-optimization"
+                target="_blank"
+                rel="noopener"
+                >Mastering LLM Techniques: Inference Optimization (NVIDIA
+                Technical Blog, 2023)</a
+              >
+            </li>
+            <li id="src-4">
+              <a
+                href="https://arxiv.org/abs/2403.02310"
+                target="_blank"
+                rel="noopener"
+                >Agrawal et al., Taming Throughput-Latency Tradeoff in LLM
+                Inference with Sarathi-Serve (OSDI 2024, arXiv)</a
+              >
+            </li>
+            <li id="src-5">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/h100/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA H100 Tensor Core GPU product page and specifications
+                (NVIDIA)</a
+              >
+            </li>
+            <li id="src-6">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/h200/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA H200 GPU product page and specifications (NVIDIA)</a
+              >
+            </li>
+            <li id="src-7">
+              <a
+                href="https://arxiv.org/abs/2401.09670"
+                target="_blank"
+                rel="noopener"
+                >Zhong et al., DistServe: Disaggregating Prefill and Decoding
+                for Goodput-optimized LLM Serving (OSDI 2024, arXiv)</a
+              >
+            </li>
+            <li id="src-8">
+              <a
+                href="https://docs.vllm.ai/en/latest/cli/bench/serve/"
+                target="_blank"
+                rel="noopener"
+                >vllm bench serve CLI reference (vLLM documentation, 2026)</a
+              >
+            </li>
+            <li id="src-9">
+              <a
+                href="https://huggingface.co/RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic/blob/main/config.json"
+                target="_blank"
+                rel="noopener"
+                >Llama-3.3-70B-Instruct-FP8-dynamic config.json (Red Hat AI on
+                Hugging Face)</a
+              >
+            </li>
+            <li id="src-10">
+              <a
+                href="https://arxiv.org/abs/1911.02150"
+                target="_blank"
+                rel="noopener"
+                >Shazeer, Fast Transformer Decoding: One Write-Head is All You
+                Need (arXiv, 2019)</a
+              >
+            </li>
+            <li id="src-11">
+              <a
+                href="https://arxiv.org/abs/2305.13245"
+                target="_blank"
+                rel="noopener"
+                >Ainslie et al., GQA: Training Generalized Multi-Query
+                Transformer Models from Multi-Head Checkpoints (EMNLP 2023,
+                arXiv)</a
+              >
+            </li>
+            <li id="src-12">
+              <a
+                href="https://arxiv.org/abs/2405.04434"
+                target="_blank"
+                rel="noopener"
+                >DeepSeek-AI, DeepSeek-V2: A Strong, Economical, and Efficient
+                Mixture-of-Experts Language Model (arXiv, 2024)</a
+              >
+            </li>
+            <li id="src-13">
+              <a
+                href="https://docs.vllm.ai/en/stable/serving/parallelism_scaling/"
+                target="_blank"
+                rel="noopener"
+                >Parallelism and Scaling (vLLM documentation, 2026)</a
+              >
+            </li>
+            <li id="src-14">
+              <a
+                href="https://www.usenix.org/system/files/osdi22-yu.pdf"
+                target="_blank"
+                rel="noopener"
+                >Yu et al., Orca: A Distributed Serving System for
+                Transformer-Based Generative Models (USENIX OSDI, 2022)</a
+              >
+            </li>
+            <li id="src-15">
+              <a
+                href="https://nvidia.github.io/TensorRT-LLM/overview.html"
+                target="_blank"
+                rel="noopener"
+                >TensorRT LLM Overview (NVIDIA documentation, 2026)</a
+              >
+            </li>
+            <li id="src-16">
+              <a
+                href="https://arxiv.org/abs/2309.06180"
+                target="_blank"
+                rel="noopener"
+                >Kwon et al., Efficient Memory Management for Large Language
+                Model Serving with PagedAttention (SOSP 2023, arXiv)</a
+              >
+            </li>
+            <li id="src-17">
+              <a
+                href="https://github.com/vllm-project/vllm/blob/main/vllm/engine/arg_utils.py"
+                target="_blank"
+                rel="noopener"
+                >vLLM engine argument definitions, vllm/engine/arg_utils.py
+                (vLLM GitHub, 2026)</a
+              >
+            </li>
+            <li id="src-18">
+              <a
+                href="https://arxiv.org/abs/2312.07104"
+                target="_blank"
+                rel="noopener"
+                >Zheng et al., SGLang: Efficient Execution of Structured
+                Language Model Programs (arXiv, 2023)</a
+              >
+            </li>
+            <li id="src-19">
+              <a
+                href="https://github.com/vllm-project/vllm/blob/main/vllm/config/cache.py"
+                target="_blank"
+                rel="noopener"
+                >vLLM CacheConfig definitions, vllm/config/cache.py (vLLM
+                GitHub, 2026)</a
+              >
+            </li>
+            <li id="src-20">
+              <a
+                href="https://github.com/vllm-project/vllm/releases"
+                target="_blank"
+                rel="noopener"
+                >vLLM releases, including v0.29.0 release notes (vLLM GitHub,
+                2026)</a
+              >
+            </li>
+            <li id="src-21">
+              <a
+                href="https://github.com/vllm-project/vllm/releases/tag/v0.30.0"
+                target="_blank"
+                rel="noopener"
+                >vLLM v0.30.0 release (vLLM GitHub, September 2026)</a
+              >
+            </li>
+            <li id="src-22">
+              <a
+                href="https://github.com/sgl-project/sglang/releases/tag/v0.5.20"
+                target="_blank"
+                rel="noopener"
+                >SGLang v0.5.20 release (SGLang GitHub, September 2026)</a
+              >
+            </li>
+            <li id="src-23">
+              <a href="https://docs.sglang.io/" target="_blank" rel="noopener"
+                >SGLang documentation home (LMSYS, 2026)</a
+              >
+            </li>
+            <li id="src-24">
+              <a
+                href="https://github.com/triton-inference-server/server"
+                target="_blank"
+                rel="noopener"
+                >Triton Inference Server README (NVIDIA GitHub, 2026)</a
+              >
+            </li>
+            <li id="src-25">
+              <a
+                href="https://github.com/ai-dynamo/dynamo"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA Dynamo README (ai-dynamo GitHub, 2026)</a
+              >
+            </li>
+            <li id="src-26">
+              <a
+                href="https://github.com/ai-dynamo/dynamo/releases/tag/v1.5.0"
+                target="_blank"
+                rel="noopener"
+                >Dynamo v1.5.0 release notes (ai-dynamo GitHub, September
+                2026)</a
+              >
+            </li>
+            <li id="src-27">
+              <a
+                href="https://docs.ray.io/en/latest/serve/llm/index.html"
+                target="_blank"
+                rel="noopener"
+                >Serving LLMs with Ray Serve LLM (Ray documentation, 2026)</a
+              >
+            </li>
+            <li id="src-28">
+              <a
+                href="https://github.com/huggingface/text-generation-inference"
+                target="_blank"
+                rel="noopener"
+                >Text Generation Inference README, maintenance-mode notice
+                (Hugging Face GitHub)</a
+              >
+            </li>
+            <li id="src-29">
+              <a
+                href="https://api.github.com/repos/huggingface/text-generation-inference"
+                target="_blank"
+                rel="noopener"
+                >GitHub API repository metadata for
+                huggingface/text-generation-inference, archived flag (GitHub,
+                2026)</a
+              >
+            </li>
+            <li id="src-30">
+              <a
+                href="https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md"
+                target="_blank"
+                rel="noopener"
+                >llama.cpp server README (ggml-org GitHub, 2026)</a
+              >
+            </li>
+            <li id="src-31">
+              <a
+                href="https://docs.ollama.com/api/openai-compatibility"
+                target="_blank"
+                rel="noopener"
+                >OpenAI compatibility (Ollama documentation, 2026)</a
+              >
+            </li>
+            <li id="src-32">
+              <a
+                href="https://docs.vllm.ai/en/stable/serving/offline_inference/"
+                target="_blank"
+                rel="noopener"
+                >Offline Inference (vLLM documentation, 2026)</a
+              >
+            </li>
+            <li id="src-33">
+              <a
+                href="https://arxiv.org/abs/2407.00079"
+                target="_blank"
+                rel="noopener"
+                >Qin et al., Mooncake: A KVCache-centric Disaggregated
+                Architecture for LLM Serving (arXiv, 2024)</a
+              >
+            </li>
+            <li id="src-34">
+              <a
+                href="https://docs.dynamo.nvidia.com/dynamo/user-guides/disaggregated-serving"
+                target="_blank"
+                rel="noopener"
+                >Disaggregated Serving (NVIDIA Dynamo documentation, 2026)</a
+              >
+            </li>
+            <li id="src-35">
+              <a
+                href="https://docs.vllm.ai/en/stable/features/disagg_prefill/"
+                target="_blank"
+                rel="noopener"
+                >Disaggregated Prefilling (experimental) (vLLM documentation,
+                2026)</a
+              >
+            </li>
+            <li id="src-36">
+              <a
+                href="https://arxiv.org/abs/2211.17192"
+                target="_blank"
+                rel="noopener"
+                >Leviathan, Kalman and Matias, Fast Inference from Transformers
+                via Speculative Decoding (ICML 2023, arXiv)</a
+              >
+            </li>
+            <li id="src-37">
+              <a
+                href="https://arxiv.org/abs/2401.15077"
+                target="_blank"
+                rel="noopener"
+                >Li et al., EAGLE: Speculative Sampling Requires Rethinking
+                Feature Uncertainty (arXiv, 2024)</a
+              >
+            </li>
+            <li id="src-38">
+              <a
+                href="https://arxiv.org/abs/2503.01840"
+                target="_blank"
+                rel="noopener"
+                >Li et al., EAGLE-3: Scaling up Inference Acceleration of Large
+                Language Models via Training-Time Test (arXiv, 2025)</a
+              >
+            </li>
+            <li id="src-39">
+              <a
+                href="https://docs.vllm.ai/en/latest/features/speculative_decoding/"
+                target="_blank"
+                rel="noopener"
+                >Speculative Decoding (vLLM documentation, 2026)</a
+              >
+            </li>
+            <li id="src-40">
+              <a
+                href="https://mlcommons.org/2026/09/mlperf-inference-v6-1-results/"
+                target="_blank"
+                rel="noopener"
+                >MLCommons Sets Participation Record with New MLPerf Inference
+                v6.1 Benchmark Results (MLCommons, September 2026)</a
+              >
+            </li>
+            <li id="src-41">
+              <a
+                href="https://docs.vllm.ai/en/stable/features/quantization/"
+                target="_blank"
+                rel="noopener"
+                >Quantization (vLLM documentation, 2026)</a
+              >
+            </li>
+            <li id="src-42">
+              <a
+                href="https://docs.vllm.ai/en/stable/features/quantization/fp8/"
+                target="_blank"
+                rel="noopener"
+                >FP8 W8A8 (vLLM documentation, 2026)</a
+              >
+            </li>
+            <li id="src-43">
+              <a
+                href="https://developer.nvidia.com/blog/introducing-nvfp4-for-efficient-and-accurate-low-precision-inference"
+                target="_blank"
+                rel="noopener"
+                >Introducing NVFP4 for Efficient and Accurate Low-Precision
+                Inference (NVIDIA Technical Blog, 2025)</a
+              >
+            </li>
+            <li id="src-44">
+              <a
+                href="https://www.amd.com/en/products/accelerators/instinct/mi350/mi355x.html"
+                target="_blank"
+                rel="noopener"
+                >AMD Instinct MI355X GPU specifications (AMD)</a
+              >
+            </li>
+            <li id="src-45">
+              <a
+                href="https://github.com/ggml-org/llama.cpp/blob/master/tools/quantize/README.md"
+                target="_blank"
+                rel="noopener"
+                >llama.cpp quantize README (ggml-org GitHub, 2026)</a
+              >
+            </li>
+            <li id="src-46">
+              <a
+                href="https://huggingface.co/RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic"
+                target="_blank"
+                rel="noopener"
+                >Llama-3.3-70B-Instruct-FP8-dynamic model card (Red Hat AI on
+                Hugging Face, 2024)</a
+              >
+            </li>
+            <li id="src-47">
+              <a
+                href="https://arxiv.org/abs/2210.17323"
+                target="_blank"
+                rel="noopener"
+                >Frantar et al., GPTQ: Accurate Post-Training Quantization for
+                Generative Pre-trained Transformers (arXiv, 2022)</a
+              >
+            </li>
+            <li id="src-48">
+              <a
+                href="https://arxiv.org/abs/2306.00978"
+                target="_blank"
+                rel="noopener"
+                >Lin et al., AWQ: Activation-aware Weight Quantization for LLM
+                Compression and Acceleration (arXiv, 2023)</a
+              >
+            </li>
+            <li id="src-49">
+              <a
+                href="https://docs.vllm.ai/en/stable/serving/data_parallel_deployment/"
+                target="_blank"
+                rel="noopener"
+                >Data Parallel Deployment (vLLM documentation, 2026)</a
+              >
+            </li>
+            <li id="src-50">
+              <a
+                href="https://huggingface.co/api/models/meta-llama/Llama-3.3-70B-Instruct"
+                target="_blank"
+                rel="noopener"
+                >Hugging Face model API metadata for
+                meta-llama/Llama-3.3-70B-Instruct, safetensors parameter total
+                (Hugging Face)</a
+              >
+            </li>
+            <li id="src-51">
+              <a
+                href="https://docs.nvidia.com/dgx/dgxb200-user-guide/introduction-to-dgxb200.html"
+                target="_blank"
+                rel="noopener"
+                >Introduction to NVIDIA DGX B200 Systems (NVIDIA DGX B200 User
+                Guide)</a
+              >
+            </li>
+            <li id="src-52">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/l40s/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA L40S GPU product page and specifications (NVIDIA)</a
+              >
+            </li>
+            <li id="src-53">
+              <a
+                href="https://arxiv.org/abs/2401.08281"
+                target="_blank"
+                rel="noopener"
+                >Douze et al., The Faiss library (arXiv, 2024)</a
+              >
+            </li>
+            <li id="src-54">
+              <a
+                href="https://github.com/pgvector/pgvector"
+                target="_blank"
+                rel="noopener"
+                >pgvector README (pgvector GitHub, 2026)</a
+              >
+            </li>
+            <li id="src-55">
+              <a
+                href="https://milvus.io/docs/overview.md"
+                target="_blank"
+                rel="noopener"
+                >What is Milvus? (Milvus documentation, 2026)</a
+              >
+            </li>
+            <li id="src-56">
+              <a
+                href="https://slurm.schedmd.com/sbatch.html"
+                target="_blank"
+                rel="noopener"
+                >sbatch manual page (SchedMD)</a
+              >
+            </li>
+            <li id="src-57">
+              <a
+                href="https://docs.vllm.ai/en/stable/cli/serve/"
+                target="_blank"
+                rel="noopener"
+                >vllm serve CLI reference (vLLM documentation, 2026)</a
+              >
+            </li>
+            <li id="src-58">
+              <a
+                href="https://docs.sglang.io/basic_usage/send_request.html"
+                target="_blank"
+                rel="noopener"
+                >Tutorial: Sending a request (SGLang documentation, 2026)</a
+              >
+            </li>
+            <li id="src-59">
+              <a
+                href="https://docs.litellm.ai/docs/simple_proxy"
+                target="_blank"
+                rel="noopener"
+                >LiteLLM AI Gateway (LLM Proxy) (LiteLLM documentation, 2026)</a
+              >
+            </li>
+            <li id="src-60">
+              <a
+                href="https://docs.litellm.ai/docs/proxy/configs"
+                target="_blank"
+                rel="noopener"
+                >LiteLLM proxy config.yaml reference (LiteLLM documentation,
+                2026)</a
+              >
+            </li>
+            <li id="src-61">
+              <a
+                href="https://arxiv.org/abs/2508.15734"
+                target="_blank"
+                rel="noopener"
+                >Elsworth et al., Measuring the environmental impact of
+                delivering AI at Google Scale (arXiv, 2025)</a
+              >
+            </li>
+            <li id="src-62">
+              <a
+                href="https://docs.mlcommons.org/inference/index_gh/"
+                target="_blank"
+                rel="noopener"
+                >MLPerf Inference Benchmark Suite, v6.1 model list (MLCommons
+                documentation, 2026)</a
+              >
+            </li>
+            <li id="src-63">
+              <a
+                href="https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/perf_analyzer/genai-perf/README.html"
+                target="_blank"
+                rel="noopener"
+                >GenAI-Perf README, phase-out notice pointing to AIPerf (NVIDIA
+                documentation, 2026)</a
+              >
+            </li>
+          </ol>
+          <nav class="doc-pager" aria-label="Chapter navigation">
+            <a class="pager-prev" href="training.html"
+              ><span>Previous</span>Training at Scale</a
+            ><a class="pager-next" href="scientific-computing.html"
+              ><span>Next</span>Scientific Computing in the AI Era</a
+            >
+          </nav>
+        </article>
+      </div>
+    </main>
+
+    <footer class="section-dark">
+      <div class="container text-center">
+        <p class="footer-note">
+          2026 edition |
+          <a href="index.html" class="subtle-link">Field Manual</a> |
+          <a href="../index.html" class="subtle-link"
+            >charles-forsyth.github.io</a
+          >
+        </p>
+      </div>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+      document.querySelectorAll('pre code').forEach(function (el) {
+        if (el.className === 'c++') el.className = 'language-cpp';
+        else if (el.className && el.className.indexOf('language-') !== 0)
+          el.className = 'language-' + el.className;
+        hljs.highlightElement(el);
+      });
+    </script>
+  </body>
+</html>

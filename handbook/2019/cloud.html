@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HPC in the Cloud (2019) | Field Manual</title>
+    <meta
+      name="description"
+      content="HPC in the Cloud (2019) from the 2019 HPC Field Manual"
+    />
+    <link
+      rel="canonical"
+      href="https://charles-forsyth.github.io/handbook/2019/cloud.html"
+    />
+    <link rel="stylesheet" href="../../style.css" />
+    <link rel="stylesheet" href="../handbook.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
+    />
+  </head>
+  <body>
+    <header class="hero doc-hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="doc-kicker">
+            <i class="fas fa-archive"></i> 2019 Edition Archive
+          </p>
+          <h1>HPC in the Cloud (2019)</h1>
+          <h2>From the 2019 edition, preserved as written</h2>
+          <div class="cta-buttons">
+            <a href="../index.html" class="btn btn-secondary"
+              ><i class="fas fa-book-open"></i> Field Manual</a
+            >
+            <a href="../../index.html" class="btn btn-secondary"
+              ><i class="fas fa-arrow-left"></i> Main Site</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+    <nav class="doc-nav" aria-label="Field manual chapters">
+      <div class="container">
+        <a href="hardware.html">HPC Hardware</a
+        ><a href="provisioning.html">Provisioning</a
+        ><a href="software.html">HPC Software</a><a href="code.html">Code</a
+        ><a href="cloud.html" class="active" aria-current="page"
+          >HPC in the Cloud</a
+        ><a href="slurm.html">Slurm Submission Scripts</a
+        ><a href="presentations.html">Talks and Presentations</a>
+      </div>
+    </nav>
+    <main class="section-light">
+      <div class="container doc-layout doc-layout-single">
+        <article class="doc-content">
+          <h2 id="aws">AWS</h2>
+          <p>High Performance Computing in the Cloud with AWS.</p>
+          <ul>
+            <li>
+              This is work I have done at the High Performance Computing Center
+              at the University of California, Riverside.
+            </li>
+          </ul>
+          <h3 id="introduction">Introduction</h3>
+          <p>
+            Getting started using HPCC and Amazon Web Service (AWS) to quickly
+            create an on-demand cluster private to you.
+          </p>
+          <h3 id="aws-cluster-benefits">AWS Cluster benefits.</h3>
+          <ul>
+            <li>Build a private cluster in 10 min.</li>
+            <li>
+              Any number of nodes, auto scaling (up and down), limit 20 to start
+            </li>
+            <li>
+              Any type of compute nodes
+              <ul>
+                <li>High memory</li>
+                <li>High CPU single/multi node</li>
+                <li>GPUs</li>
+              </ul>
+            </li>
+            <li>For only as long as you need it - delete when done</li>
+            <li>Familiar interface and job scheduler</li>
+            <li>
+              Build as many of these clusters as you need (even at the same
+              time)
+            </li>
+            <li>Pay for only the time you use it - per/min billing</li>
+          </ul>
+          <h4 id="example-cast">Example Cast</h4>
+          <p>This is an simple example of a full HPC workflow using AWS.</p>
+          <p class="embed-missing">
+            <i class="fas fa-archive"></i> The original asciinema recording is
+            no longer hosted at its source.
+          </p>
+
+          <h4 id="presentation-on-hpcc-aws-cluster">
+            Presentation on HPCC AWS Cluster
+          </h4>
+          <div class="embed">
+            <iframe
+              src="https://docs.google.com/presentation/d/e/2PACX-1vRSC8sz2w5nLCE1pUJgLU37HDnA9Hgxgy_LHI2zqugFoNNn9BtD6nqiVfEVYKYXoiHRK8h37MrsOpN7/embed?start=false&loop=false&delayms=3000"
+              title="Google Slides presentation"
+              loading="lazy"
+              allowfullscreen
+            ></iframe>
+          </div>
+        </article>
+      </div>
+    </main>
+
+    <footer class="section-dark">
+      <div class="container text-center">
+        <p class="footer-note">
+          2019 edition, preserved in full |
+          <a href="../index.html" class="subtle-link">Field Manual</a> |
+          <a href="../../index.html" class="subtle-link"
+            >charles-forsyth.github.io</a
+          >
+        </p>
+      </div>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+      document.querySelectorAll('pre code').forEach(function (el) {
+        if (el.className === 'c++') el.className = 'language-cpp';
+        else if (el.className && el.className.indexOf('language-') !== 0)
+          el.className = 'language-' + el.className;
+        hljs.highlightElement(el);
+      });
+    </script>
+  </body>
+</html>

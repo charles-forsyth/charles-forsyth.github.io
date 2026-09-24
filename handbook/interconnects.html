@@ -1,0 +1,2036 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Interconnects: Scale-Up and Scale-Out | Field Manual</title>
+    <meta
+      name="description"
+      content="NVLink, UALink, PCIe, InfiniBand, Ethernet for AI and Slingshot explained for practitioners, with collectives, congestion control, testing commands and design guidance for 8, 64 and 512+ GPU clusters."
+    />
+    <link
+      rel="canonical"
+      href="https://charles-forsyth.github.io/handbook/interconnects.html"
+    />
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="handbook.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
+    />
+  </head>
+  <body>
+    <header class="hero doc-hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="doc-kicker">
+            <i class="fas fa-network-wired"></i> AI + HPC Field Manual
+          </p>
+          <h1>Interconnects: Scale-Up and Scale-Out</h1>
+          <h2>Why the network is the computer for distributed AI and HPC</h2>
+          <div class="cta-buttons">
+            <a href="index.html" class="btn btn-secondary"
+              ><i class="fas fa-book-open"></i> Field Manual</a
+            >
+            <a href="../index.html" class="btn btn-secondary"
+              ><i class="fas fa-arrow-left"></i> Main Site</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+    <nav class="doc-nav" aria-label="Field manual chapters">
+      <div class="container">
+        <a href="convergence.html">Convergence</a
+        ><a href="accelerators.html">Accelerators</a
+        ><a href="memory-storage.html">Memory &amp; Storage</a
+        ><a href="interconnects.html" class="active" aria-current="page"
+          >Interconnects</a
+        ><a href="facilities.html">Facilities</a
+        ><a href="systems-software.html">Systems Software</a
+        ><a href="scheduling.html">Scheduling</a
+        ><a href="observability.html">Observability</a
+        ><a href="operations.html">Operations</a
+        ><a href="training.html">Training</a
+        ><a href="inference.html">Inference</a
+        ><a href="scientific-computing.html">Scientific Computing</a
+        ><a href="cloud.html">Cloud</a><a href="linux.html">Linux</a
+        ><a href="glossary.html">Glossary</a>
+      </div>
+    </nav>
+    <main class="section-light">
+      <div class="container doc-layout">
+        <aside class="doc-toc">
+          <h4><i class="fas fa-list"></i> On this page</h4>
+          <ul>
+            <li>
+              <a href="#why-the-network-is-the-computer"
+                >Why the Network Is the Computer</a
+              >
+            </li>
+            <li><a href="#scale-up-fabrics">Scale-Up Fabrics</a></li>
+            <li><a href="#scale-out-fabrics">Scale-Out Fabrics</a></li>
+            <li><a href="#rdma-and-gpudirect">RDMA, GPUDirect and DPUs</a></li>
+            <li>
+              <a href="#topologies-and-oversubscription"
+                >Topologies and Oversubscription</a
+              >
+            </li>
+            <li>
+              <a href="#congestion-and-routing"
+                >Congestion Control, Adaptive Routing and Lossless Ethernet</a
+              >
+            </li>
+            <li>
+              <a href="#collectives-and-libraries"
+                >Collectives and Communication Libraries</a
+              >
+            </li>
+            <li>
+              <a href="#physical-layer"
+                >Optics, Copper and the Physical Layer</a
+              >
+            </li>
+            <li>
+              <a href="#network-planes"
+                >Front-End, Back-End and Storage Networks</a
+              >
+            </li>
+            <li><a href="#practical-testing">Practical Testing</a></li>
+            <li>
+              <a href="#design-guidance"
+                >Design Guidance for Research Clusters</a
+              >
+            </li>
+            <li><a href="#key-takeaways">Key Takeaways</a></li>
+          </ul>
+        </aside>
+        <article class="doc-content">
+          <p>
+            In the 2018 Field Manual this chapter was about choosing between FDR
+            and EDR InfiniBand for an MPI cluster. In 2026 the question is
+            bigger. A single training job can span thousands of accelerators,
+            and every step of that job ends in a collective operation that
+            stalls every GPU until the slowest link finishes. The interconnect
+            is no longer plumbing between computers; for distributed training
+            and large-model inference it is part of the computer. This chapter
+            walks the whole stack: the scale-up fabrics inside a node or rack
+            (PCIe, NVLink, Infinity Fabric, UALink, TPU ICI), the scale-out
+            fabrics between racks (InfiniBand, Ethernet with RoCE, Ultra
+            Ethernet, Slingshot), the RDMA and collective software that rides on
+            them, and the practical work of testing and designing a fabric for a
+            research cluster. For the accelerators themselves see
+            <a href="accelerators.html">Accelerators</a>; for how parallelism
+            strategies map onto these fabrics see
+            <a href="training.html">Training at Scale</a>.
+          </p>
+
+          <h2 id="why-the-network-is-the-computer">
+            Why the Network Is the Computer
+          </h2>
+
+          <p>
+            Classic HPC taught us that tightly coupled MPI codes live or die on
+            network latency. Modern AI training adds a second pressure:
+            enormous, synchronized bursts of bandwidth. Data parallel training
+            exchanges gradients every step. Tensor parallelism exchanges
+            activations inside every layer. Mixture-of-experts (MoE) models
+            shuffle tokens between experts with all-to-all traffic. Each of
+            these is a collective, and a collective finishes only when the last
+            participant finishes. One slow link, one congested switch port or
+            one misconfigured NIC sets the pace for the whole job.
+          </p>
+
+          <h3 id="bandwidth-bound-vs-latency-bound">
+            Bandwidth-Bound vs Latency-Bound Collectives
+          </h3>
+
+          <p>
+            A useful mental model is the alpha-beta model: the time to move a
+            message of size S is roughly a fixed startup cost (alpha, the
+            latency of software, NIC, switches and wire) plus S divided by
+            bandwidth B. Small messages are dominated by alpha; large messages
+            are dominated by S/B.
+          </p>
+
+          <p>
+            NVIDIA's nccl-tests documentation makes the bandwidth term concrete
+            for all-reduce. With n ranks each having bandwidth B, a ring or tree
+            all-reduce of S bytes needs 2(n-1) transfers per element, so the
+            best achievable time is t = (S/B) x (2(n-1)/n). That is why
+            nccl-tests reports a "bus bandwidth" (busbw = algbw x 2(n-1)/n) that
+            you can compare directly to the hardware link rate. Reduce-scatter
+            and all-gather each do half the work, with busbw = algbw x
+            (n-1)/n.<a href="#src-1">[1]</a> Two consequences follow:
+          </p>
+          <ul>
+            <li>
+              <strong>Large gradient all-reduces are bandwidth-bound.</strong>
+              Once messages reach tens or hundreds of megabytes, per-GPU
+              injection bandwidth and fabric bisection bandwidth decide step
+              time.
+            </li>
+            <li>
+              <strong>Small messages are latency-bound.</strong> The alpha term
+              is paid on every step of a ring, so it grows with the number of
+              ranks. Tensor parallel activations, MoE token dispatch at small
+              batch sizes, inference decode traffic, and classic MPI halo
+              exchanges and <code>MPI_Allreduce</code> of a few doubles all live
+              here.
+            </li>
+          </ul>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> When someone says "the network is
+              fast enough," ask "for what message size?" A fabric that delivers
+              line rate at 1 GiB can still be the bottleneck for an 8 KiB tensor
+              parallel exchange or a latency-sensitive CFD code. Always sweep
+              message sizes when you benchmark (the nccl-tests
+              <code>-b</code>/<code>-e</code>/<code>-f</code> flags exist for
+              exactly this).<a href="#src-2">[2]</a>
+            </p>
+          </blockquote>
+
+          <h3 id="scale-up-vs-scale-out">Scale-Up vs Scale-Out</h3>
+
+          <p>
+            Vendors now split the interconnect into two tiers, and the
+            distinction drives most design decisions:
+          </p>
+          <ul>
+            <li>
+              <strong>Scale-up</strong> fabrics connect accelerators inside a
+              node or rack with memory-semantic (load/store) access, very high
+              bandwidth per GPU and low latency. Examples: NVLink and NVLink
+              Switch, AMD Infinity Fabric and UALink, Google ICI.
+            </li>
+            <li>
+              <strong>Scale-out</strong> fabrics connect nodes or racks with
+              message-based RDMA over NICs and switches. Examples: InfiniBand,
+              Ethernet with RoCEv2 or Ultra Ethernet transport, HPE Slingshot.
+            </li>
+          </ul>
+          <p>
+            The per-GPU bandwidth gap between the tiers is large. A
+            fifth-generation NVLink GPU has 1,800 GB/s of NVLink bandwidth,<a
+              href="#src-8"
+              >[8]</a
+            >
+            while a GB300 NVL72 gives each GPU 800 Gb/s (100 GB/s) of scale-out
+            network connectivity through ConnectX-8.<a href="#src-9">[9]</a>
+            Parallelism strategies are arranged so the chattiest traffic (tensor
+            and expert parallelism) stays inside the scale-up domain and the
+            least chatty (data and pipeline parallelism) crosses the scale-out
+            network.
+          </p>
+
+          <h2 id="scale-up-fabrics">Scale-Up Fabrics</h2>
+
+          <h3 id="pcie-generations">PCIe Generations</h3>
+
+          <p>
+            PCIe is still the universal attach point: host CPU to GPU, GPU to
+            NIC, NIC to NVMe. It sets the ceiling on how fast a NIC can feed a
+            GPU, and in PCIe-only servers it is also the GPU-to-GPU path.
+            PCI-SIG doubles the per-lane rate each generation.
+          </p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Generation</th>
+                <th>Raw rate per lane</th>
+                <th>x16 bandwidth (PCI-SIG)</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>PCIe 4.0</td>
+                <td>16.0 GT/s</td>
+                <td>32 GB/s per direction (computed)</td>
+                <td>Shipping<a href="#src-3">[3]</a></td>
+              </tr>
+              <tr>
+                <td>PCIe 5.0</td>
+                <td>32.0 GT/s</td>
+                <td>64 GB/s per direction (computed)</td>
+                <td>Shipping<a href="#src-3">[3]</a></td>
+              </tr>
+              <tr>
+                <td>PCIe 6.0</td>
+                <td>64.0 GT/s, PAM4</td>
+                <td>256 GB/s</td>
+                <td>
+                  Spec released; shipping in current NICs and GPUs<a
+                    href="#src-4"
+                    >[4]</a
+                  ><a href="#src-24">[24]</a>
+                </td>
+              </tr>
+              <tr>
+                <td>PCIe 7.0</td>
+                <td>128.0 GT/s, PAM4</td>
+                <td>512 GB/s bidirectional</td>
+                <td>
+                  Spec released to members at DevCon 2025<a href="#src-5">[5]</a
+                  ><a href="#src-6">[6]</a>
+                </td>
+              </tr>
+              <tr>
+                <td>PCIe 8.0</td>
+                <td>256.0 GT/s</td>
+                <td>1.0 TB/s bidirectional</td>
+                <td>
+                  Draft 0.5 available to members; full release targeted by
+                  2028<a href="#src-7">[7]</a>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Note: PCI-SIG publishes per-lane raw rates for Gen4 and Gen5 and
+            states that a Gen5 x32 link provides 128 GB/s in each direction.<a
+              href="#src-3"
+              >[3]</a
+            >
+            The Gen4 and Gen5 x16 figures above are that arithmetic (16 lanes x
+            rate / 8 bits, per direction, raw). Gen6, Gen7 and Gen8 x16 figures
+            are as PCI-SIG states them.
+          </p>
+
+          <p>
+            In practice: ConnectX-8 SuperNICs use a PCIe Gen6 x16 host interface
+            (Gen5 compatible),<a href="#src-24">[24]</a> and NVIDIA lists 256
+            GB/s bidirectional PCIe Gen6 for both Blackwell and Rubin GPUs.<a
+              href="#src-10"
+              >[10]</a
+            >
+            An 800 Gb/s NIC is 100 GB/s per direction, which a Gen5 x16 slot
+            cannot carry at full rate. That is the reason 800G NICs and Gen6
+            platforms arrived together.
+          </p>
+
+          <h3 id="nvlink-and-nvswitch">NVLink and NVSwitch</h3>
+
+          <p>
+            NVLink is NVIDIA's direct GPU-to-GPU link; NVLink Switch (NVSwitch)
+            chips connect many links so every GPU can talk to every other GPU at
+            full NVLink speed. NVIDIA's current specification table:<a
+              href="#src-8"
+              >[8]</a
+            >
+          </p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>NVLink generation</th>
+                <th>Architecture</th>
+                <th>Bandwidth per GPU</th>
+                <th>Links per GPU</th>
+                <th>Switch domain / aggregate</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Fourth</td>
+                <td>Hopper</td>
+                <td>900 GB/s</td>
+                <td>18</td>
+                <td>8 GPUs / 7.2 TB/s</td>
+              </tr>
+              <tr>
+                <td>Fifth</td>
+                <td>Blackwell</td>
+                <td>1,800 GB/s</td>
+                <td>18</td>
+                <td>8 or 72 GPUs / 130 TB/s (NVL72)</td>
+              </tr>
+              <tr>
+                <td>Sixth</td>
+                <td>Rubin</td>
+                <td>3,600 GB/s</td>
+                <td>36</td>
+                <td>8 or 72 GPUs / 216-260 TB/s (NVL72, preliminary)</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Note: all figures from NVIDIA's NVLink page, which labels them
+            preliminary and subject to change.<a href="#src-8">[8]</a> NVIDIA
+            describes the per-GPU figure as bidirectional.<a href="#src-8"
+              >[8]</a
+            ><a href="#src-10">[10]</a>
+          </p>
+
+          <p>
+            Inside an eight-GPU HGX or DGX board, NVSwitch chips give an
+            all-to-all NVLink domain. The DGX B200, for example, has two
+            fifth-generation NVLink switches providing 14.4 TB/s of aggregate
+            bandwidth.<a href="#src-12">[12]</a> NVIDIA says sixth-generation
+            NVLink delivers over 14x the bandwidth of PCIe Gen6.<a href="#src-8"
+              >[8]</a
+            >
+          </p>
+
+          <h3 id="rack-scale-nvl72-domains">Rack-Scale NVL72 Domains</h3>
+
+          <p>
+            The biggest architectural change since the last edition is the
+            rack-scale NVLink domain. A GB300 NVL72 rack (listed by NVIDIA as
+            available now) connects 72 Blackwell Ultra GPUs and 36 Grace CPUs
+            through NVLink Switch trays, with 130 TB/s of NVLink bandwidth in
+            the rack. Each GPU also gets 800 Gb/s of scale-out networking from
+            ConnectX-8.<a href="#src-9">[9]</a> At launch NVIDIA announced the
+            Vera Rubin NVL72 at 260 TB/s of NVLink bandwidth with 3.6 TB/s per
+            GPU; the current product page lists 216 TB/s and 3 TB/s per GPU, so
+            treat these preliminary figures with care<a href="#src-60">[60]</a
+            >.<a href="#src-8">[8]</a><a href="#src-10">[10]</a> NVIDIA stated
+            in January 2026 that Rubin was in full production with partner
+            products available in the second half of 2026.<a href="#src-11"
+              >[11]</a
+            >
+          </p>
+
+          <p>
+            Why it matters: 72 GPUs that can load and store each other's HBM at
+            NVLink speed means tensor and expert parallel groups can be far
+            larger than eight before touching the slower scale-out network. The
+            trade-off is that the NVL72 is a liquid-cooled, very high-density
+            rack that dictates facility design (see
+            <a href="facilities.html">Power, Cooling and Facilities</a>) and is
+            managed as one system, not 18 independent servers.
+          </p>
+
+          <h3 id="amd-infinity-fabric-and-ualink">
+            AMD Infinity Fabric, xGMI and UALink
+          </h3>
+
+          <p>
+            AMD's GPU-to-GPU fabric is Infinity Fabric (the link layer is often
+            called xGMI in software and tools; RCCL documentation describes RCCL
+            as using "PCIe and xGMI high-speed interconnects").<a href="#src-44"
+              >[44]</a
+            >
+            On an eight-GPU MI355X platform each OAM module has 7 Infinity
+            Fabric links at 153 GB/s peak each, plus a PCIe 5.0 x16 host
+            interface.<a href="#src-13">[13]</a> Unlike an NVSwitch board there
+            is no switch chip in this per-link bandwidth figure, so check how
+            your baseboard wires the links: a GPU that talks to only one peer
+            gets the bandwidth of the link(s) to that peer, not the aggregate.
+            Collectives that spread traffic across all peers make the best use
+            of it.
+          </p>
+
+          <p>
+            <strong>UALink</strong> is the open, multi-vendor answer to NVLink
+            Switch. Status per the UALink Consortium:
+          </p>
+          <ul>
+            <li>
+              The UALink 200G 1.0 specification was released in April 2025. It
+              defines 200G-per-lane scale-up connections for up to 1,024
+              accelerators in a pod, using a load/store protocol that the
+              consortium describes as having "the same raw speed as Ethernet
+              with the latency of PCIe switches."<a href="#src-16">[16]</a>
+            </li>
+            <li>
+              In April 2026 the consortium ratified the Common Specification 2.0
+              (adding In-Network Compute), a Chiplet Specification 1.0 (UCIe 3.0
+              compliant) and a Manageability Specification 1.0. All specs are
+              publicly downloadable.<a href="#src-17">[17]</a
+              ><a href="#src-18">[18]</a>
+            </li>
+          </ul>
+          <p>
+            The first large deployment vehicle is AMD's Helios rack, launched in
+            July 2026. It connects 72 MI455X GPUs using UALink over Ethernet
+            (UALoE), with up to 260 TB/s of aggregate scale-up bandwidth; each
+            GPU connects through 18 independent UALoE stations spread across
+            switch trays for resilience.<a href="#src-14">[14]</a> AMD lists 43
+            TB/s of scale-out bandwidth per Helios rack,<a href="#src-15"
+              >[15]</a
+            >
+            using standards-based Ethernet aligned with the Ultra Ethernet
+            Consortium for scale-out.<a href="#src-58">[58]</a>
+          </p>
+
+          <h3 id="google-ici-and-ocs">
+            Google ICI and Optical Circuit Switching
+          </h3>
+
+          <p>
+            Google's TPUs take a different path. Every TPU has a built-in router
+            and Inter-Chip Interconnect (ICI) links to its neighbors in a torus,
+            with no external packet switch. Starting with TPU v4, Google groups
+            chips into 4x4x4 cubes wired electrically and connects the cube
+            faces through optical circuit switches (OCS) built on MEMS mirrors.
+            The TPU v4 paper describes 48 OCSes (136x136 ports each) joining 64
+            cubes into a 4,096-chip machine, and reports that the OCS layer
+            costs under 5% of system capital cost and under 3% of power. Because
+            the OCS is effectively a programmable patch panel, it can route
+            around failed hosts, carve isolated slices for different users, and
+            build "twisted" tori that improve all-to-all bandwidth.<a
+              href="#src-20"
+              >[20]</a
+            >
+          </p>
+
+          <p>
+            For the current generation, Google's documentation lists TPU7x
+            (Ironwood) at 9,216 chips per pod in a 3D torus, 1,200 GBps of
+            bidirectional ICI bandwidth per chip (200 GBps per axis), and 100
+            Gbps of data center network (DCN) bandwidth per chip for traffic
+            between pods.<a href="#src-19">[19]</a> Note that ratio: the
+            scale-up (ICI) tier has far more bandwidth than the scale-out (DCN)
+            tier, the same pattern as NVLink vs InfiniBand. See
+            <a href="cloud.html">Cloud and Hybrid</a> for how TPU slices are
+            requested.
+          </p>
+
+          <h2 id="scale-out-fabrics">Scale-Out Fabrics</h2>
+
+          <h3 id="infiniband-generations">InfiniBand Generations</h3>
+
+          <p>
+            InfiniBand is a purpose-built, lossless, credit-flow-controlled
+            fabric with a hardware transport and a central subnet manager. It
+            remains the most common interconnect on the TOP500: the IBTA reports
+            InfiniBand in 293 systems (59%) on the June 2026 list, with Ethernet
+            RoCE in another 83.<a href="#src-22">[22]</a> A standard "4x"
+            InfiniBand port bundles four lanes. Per-lane rates, as listed in the
+            ConnectX-8 manual's IBTA auto-negotiation table:<a href="#src-24"
+              >[24]</a
+            >
+          </p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Rate</th>
+                <th>Per lane</th>
+                <th>4x port</th>
+                <th>Example NVIDIA platform</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>EDR</td>
+                <td>25 Gb/s</td>
+                <td>100 Gb/s</td>
+                <td>Legacy</td>
+              </tr>
+              <tr>
+                <td>HDR</td>
+                <td>50 Gb/s</td>
+                <td>200 Gb/s</td>
+                <td>Quantum (HDR)</td>
+              </tr>
+              <tr>
+                <td>NDR</td>
+                <td>100 Gb/s</td>
+                <td>400 Gb/s</td>
+                <td>
+                  Quantum-2: 64 x 400 Gb/s or 128 x 200 Gb/s per switch<a
+                    href="#src-25"
+                    >[25]</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>XDR</td>
+                <td>200 Gb/s</td>
+                <td>800 Gb/s</td>
+                <td>
+                  Quantum-X800: 144 x 800 Gb/s per switch<a href="#src-26"
+                    >[26]</a
+                  >
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Note: 4x port speeds are the lane count times the per-lane rate in
+            [24]; NDR and XDR 4x speeds are also stated directly by NVIDIA and
+            the IBTA.<a href="#src-21">[21]</a><a href="#src-25">[25]</a
+            ><a href="#src-26">[26]</a> Split ports (HDR100, NDR200) use two
+            lanes.
+          </p>
+
+          <p>
+            The IBTA published Volume 1 and 2 Release 2.0 on July 31, 2025,
+            adding XDR at 200 Gb/s per lane for 800 Gb/s (QSFP) and 1.6 Tb/s
+            (OSFP and QSFP-DD) links.<a href="#src-21">[21]</a> Release 2.1,
+            published July 31, 2026, finalizes XDR, adds management support for
+            very high-radix switches, and adds the Multipath Reliable Connection
+            (MRC) specification discussed below.<a href="#src-22">[22]</a
+            ><a href="#src-23">[23]</a>
+          </p>
+
+          <h3 id="ethernet-for-ai">Ethernet for AI: RoCEv2, 400G and 800G</h3>
+
+          <p>
+            Ethernet's advantages are familiar: multi-vendor supply, standard
+            tooling, one skill set for front-end and back-end, and a very large
+            switch silicon market. Its historic weakness for HPC was transport:
+            TCP is too CPU-heavy and too slow to recover for tightly
+            synchronized collectives. RDMA over Converged Ethernet version 2
+            (RoCEv2) puts the InfiniBand transport inside routable UDP/IP
+            packets, so NICs can do zero-copy RDMA over a standard IP fabric.
+            The catch, covered in the congestion section, is that classic RoCEv2
+            expects a lossless network.<a href="#src-38">[38]</a>
+          </p>
+
+          <p>
+            Switch silicon has moved quickly. NVIDIA's Spectrum-4 based SN5600
+            provides 64 ports of 800 GbE and 51.2 Tb/s of switching capacity.<a
+              href="#src-27"
+              >[27]</a
+            >
+            Broadcom announced Tomahawk 6 shipping in June 2025 at 102.4 Tb/s
+            with co-packaged optics support,<a href="#src-51">[51]</a> and
+            NVIDIA's Spectrum-6 also doubles per-chip bandwidth to 102.4 Tb/s
+            (128 x 800 Gb/s) using 200G PAM4 SerDes.<a href="#src-10">[10]</a>
+          </p>
+
+          <p>
+            <strong>Spectrum-X</strong> is NVIDIA's name for a tightly coupled
+            Ethernet switch plus SuperNIC platform with adaptive routing,
+            congestion control and telemetry tuned for AI; NVIDIA also describes
+            a "multiplane" option that splits each SuperNIC across two or more
+            independent network planes to scale a two-tier topology.<a
+              href="#src-28"
+              >[28]</a
+            >
+            NVIDIA's DGX SuperPOD B300 reference architecture states that
+            Spectrum-X "provides the same 800Gbps connectivity with comparable
+            latency characteristics when compared with XDR InfiniBand."<a
+              href="#src-37"
+              >[37]</a
+            >
+            That is a vendor claim, but it reflects the broader trend: large AI
+            buyers now treat tuned Ethernet as a peer of InfiniBand for back-end
+            fabrics.
+          </p>
+
+          <h3 id="ultra-ethernet">Ultra Ethernet Consortium: Spec Status</h3>
+
+          <p>
+            The Ultra Ethernet Consortium (UEC) released Specification 1.0 on
+            June 11, 2025.<a href="#src-29">[29]</a> Point releases followed:
+            1.0.1 (September 2025), 1.0.2 (January 2026, correcting congestion
+            control algorithms), and 1.0.3 (July 16, 2026), which UEC lists as
+            the current published version.<a href="#src-30">[30]</a> UEC defines
+            a new RDMA transport, Ultra Ethernet Transport (UET), plus link and
+            physical layer enhancements. Its headline features are multipath
+            packet spraying, sender-based congestion control designed for
+            microsecond-scale latency, optional receiver-side credit allocation
+            for incast, and a libfabric-based software interface.<a
+              href="#src-31"
+              >[31]</a
+            >
+          </p>
+
+          <p>
+            Adoption is early but real. AMD markets its Pensando Pollara 400 NIC
+            as the first UEC-ready AI NIC at 400 Gbps,<a href="#src-52">[52]</a>
+            HPE states it will start introducing UEC compliance in the Slingshot
+            800 generation,<a href="#src-33">[33]</a> and Slingshot 400 already
+            implements some UEC features such as link-level retry and
+            credit-based flow control on fabric links.<a href="#src-32">[32]</a>
+            Separately, the IBTA's new Multipath Reliable Connection (MRC),
+            contributed jointly by AMD, Broadcom, Intel, Microsoft, NVIDIA and
+            OpenAI, extends the RoCEv2 reliable connection model with multipath,
+            congestion control and failure recovery over standard best-effort
+            Ethernet using existing software interfaces.<a href="#src-22"
+              >[22]</a
+            >
+            Expect both paths to coexist for several years.
+          </p>
+
+          <h3 id="hpe-slingshot">HPE Slingshot</h3>
+
+          <p>
+            Slingshot is the fabric in HPE Cray EX systems, including the US
+            exascale machines. It is Ethernet-compliant on the wire but adds
+            HPC-specific extensions.<a href="#src-34">[34]</a> Slingshot 400
+            pairs a 64-port switch (51.2 Tbps, 64 ports of 400 Gbps) with a 400
+            Gbps PCIe Gen5 NIC.<a href="#src-32">[32]</a> Its distinguishing
+            features are hardware flow-based congestion management that
+            identifies and throttles the specific flows causing congestion
+            rather than pausing whole ports, and packet-by-packet adaptive
+            routing.<a href="#src-32">[32]</a><a href="#src-33">[33]</a> HPE
+            describes dragonfly and fat-tree networks with over 250,000
+            endpoints.<a href="#src-33">[33]</a> Software accesses it through
+            the libfabric CXI provider.<a href="#src-34">[34]</a>
+          </p>
+
+          <h2 id="rdma-and-gpudirect">RDMA, GPUDirect and DPUs</h2>
+
+          <h3 id="rdma-basics">RDMA Basics</h3>
+
+          <p>
+            Remote Direct Memory Access lets a NIC read or write another host's
+            registered memory without involving the remote CPU or kernel. The
+            application registers memory, creates queue pairs, and posts work
+            requests to the NIC; completions show up in completion queues.
+            Benefits are low latency, near-zero CPU overhead and line-rate
+            throughput. The InfiniBand verbs API is the common low-level
+            interface for both InfiniBand and RoCE; the Microsoft DCQCN paper
+            reports RDMA latencies well below the TCP stack's on the same
+            hardware and notes that the InfiniBand link layer uses hop-by-hop
+            credit-based flow control to stay lossless.<a href="#src-38"
+              >[38]</a
+            >
+          </p>
+
+          <h3 id="gpudirect-rdma">GPUDirect RDMA</h3>
+
+          <p>
+            GPUDirect RDMA gives a NIC a direct PCIe path into GPU memory, so
+            network data does not bounce through host RAM. It exposes GPU memory
+            through PCIe BAR windows that a third-party device can read and
+            write like system memory.<a href="#src-35">[35]</a> Practical
+            requirements from NVIDIA's documentation:
+          </p>
+          <ul>
+            <li>
+              The GPU and NIC should share an upstream PCIe root complex; best
+              performance comes when only PCIe switches sit between them, and
+              paths that cross the CPU socket interconnect can perform badly.<a
+                href="#src-35"
+                >[35]</a
+              >
+            </li>
+            <li>
+              IOMMU translation must be disabled or set to pass-through for
+              GPUDirect RDMA to work.<a href="#src-35">[35]</a>
+            </li>
+            <li>
+              The <code>nvidia-peermem</code> kernel module (added in CUDA 11.4,
+              replacing the out-of-tree <code>nv_peer_mem</code>) provides the
+              peer memory path for NVIDIA networking HCAs; load it with
+              <code>modprobe nvidia-peermem</code>.<a href="#src-35">[35]</a>
+            </li>
+          </ul>
+          <p>
+            NCCL exposes the policy through <code>NCCL_NET_GDR_LEVEL</code>,
+            which sets the maximum PCIe distance at which GPUDirect RDMA is
+            used.<a href="#src-42">[42]</a> This is why server topology matters:
+            modern AI servers pair each GPU with its own NIC under the same PCIe
+            switch. NCCL 2.27 added "Direct NIC" support on Grace Blackwell
+            platforms, attaching CX8 NICs directly to GPUs over PCIe Gen6 x16 to
+            bypass CPU bottlenecks.<a href="#src-41">[41]</a>
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Run
+              <code>nvidia-smi topo -m</code> on every new server model before
+              you accept it. If a GPU and its paired NIC show a path that
+              crosses the CPU interconnect instead of a PCIe switch, your
+              GPUDirect bandwidth will suffer no matter how fast the switches
+              are. Fix it in the BIOS, the riser layout or the NIC-to-GPU
+              mapping, not in NCCL.
+            </p>
+          </blockquote>
+
+          <h3 id="dpus-and-supernics">DPUs and SuperNICs</h3>
+
+          <p>NVIDIA now splits its NICs into two roles:</p>
+          <ul>
+            <li>
+              <strong>SuperNICs</strong> (ConnectX-8, ConnectX-9) are built for
+              the east-west GPU fabric. ConnectX-8 supports XDR 800 Gb/s
+              InfiniBand on its single-port OSFP models and 400 GbE, with a PCIe
+              Gen6 x16 host interface.<a href="#src-24">[24]</a> ConnectX-9,
+              part of the Rubin platform, is listed at 1,600 Gb/s per GPU.<a
+                href="#src-10"
+                >[10]</a
+              >
+            </li>
+            <li>
+              <strong>DPUs</strong> (BlueField-3, BlueField-4) are for
+              infrastructure: storage, security, tenant isolation and
+              north-south traffic. BlueField-3 offers up to 400 Gb/s Ethernet or
+              NDR InfiniBand, up to 16 Arm A78 cores, 16 GB of DDR5 and 32 lanes
+              of PCIe Gen5.<a href="#src-48">[48]</a> BlueField-4 combines a
+              64-core Grace CPU with ConnectX-9.<a href="#src-10">[10]</a>
+            </li>
+          </ul>
+          <p>
+            A DGX B200 shows the split: eight single-port ConnectX-7 cards (400
+            Gb/s InfiniBand each) for the compute fabric, and two dual-port
+            BlueField-3 cards for storage and in-band management.<a
+              href="#src-12"
+              >[12]</a
+            >
+            For research clusters, DPUs are most useful for multi-tenant
+            isolation and offloaded storage; most sites do not need them to run
+            MPI or NCCL well.
+          </p>
+
+          <h2 id="topologies-and-oversubscription">
+            Topologies and Oversubscription
+          </h2>
+
+          <h3 id="fat-tree-clos">Fat Tree and Clos</h3>
+
+          <p>
+            The workhorse topology is the folded Clos, usually called a fat tree
+            or leaf-spine. Hosts connect to leaf switches; every leaf connects
+            to every spine. With equal uplink and downlink bandwidth at each
+            leaf the network is <strong>non-blocking</strong> (1:1): any half of
+            the hosts can talk to the other half at full rate. Switch radix
+            determines scale. A 64-port leaf in a two-tier non-blocking tree
+            uses 32 ports down and 32 up, and 64-port spines can connect 64
+            leaves, so a two-tier fabric of 64-port switches tops out at 64 x 32
+            = 2,048 host ports; a third tier multiplies that again. Higher-radix
+            switches (144 ports on Quantum-X800,<a href="#src-26">[26]</a> 128 x
+            800G on Spectrum-6<a href="#src-10">[10]</a>) flatten the tree,
+            reducing hops, optics and cost.
+          </p>
+
+          <h3 id="rail-optimized">Rail-Optimized Designs</h3>
+
+          <p>
+            AI clusters add a twist. In an eight-GPU server, GPU 0 on every node
+            connects to "rail 0," GPU 1 to rail 1, and so on, each rail having
+            its own leaf switch. NCCL arranges collectives so most inter-node
+            traffic flows between same-index GPUs, keeping it one switch hop
+            away; traffic that must change rails can hop over NVLink inside the
+            node first. NVIDIA's DGX SuperPOD B300 reference architecture builds
+            scalable units (SUs) of 64 nodes that are rail-aligned, with traffic
+            per rail "always one hop away from the other 64 nodes in a SU," and
+            a rail-optimized, non-blocking, twin-plane fat tree for the compute
+            fabric.<a href="#src-36">[36]</a><a href="#src-37">[37]</a> The
+            twin-plane design means a plane failure lets a job continue at half
+            bandwidth instead of aborting.<a href="#src-36">[36]</a>
+          </p>
+
+          <h3 id="dragonfly-and-torus">Dragonfly and Torus</h3>
+
+          <p>
+            <strong>Dragonfly</strong> groups switches into fully connected
+            groups, then connects every group to every other group with global
+            links. It minimizes long optical cables and hop count, but needs
+            good adaptive routing because minimal paths between two groups share
+            few global links. HPE Cray EX systems use dragonfly throughout.<a
+              href="#src-32"
+              >[32]</a
+            ><a href="#src-33">[33]</a> NVIDIA also cites DragonFly+ for
+            Quantum-2, claiming over one million 400 Gb/s nodes in a three-hop
+            network.<a href="#src-25">[25]</a>
+          </p>
+
+          <p>
+            <strong>Torus</strong> networks (2D or 3D mesh with wraparound)
+            connect each node to neighbors without a central switch. They are
+            cheap and map well onto nearest-neighbor physics and all-reduce, but
+            bisection bandwidth grows slower than node count, which hurts
+            all-to-all. The TPU v4 paper notes that 2D tori scale bisection
+            bandwidth as N^(1/2) and 3D tori as N^(2/3), and that all-to-all
+            patterns "strain bisection bandwidth."<a href="#src-20">[20]</a>
+          </p>
+
+          <h3 id="oversubscription">Oversubscription</h3>
+
+          <p>
+            Oversubscription is the ratio of downlink to uplink bandwidth at a
+            switch tier. A 2:1 leaf halves worst-case cross-leaf bandwidth. For
+            GPU back-end fabrics running synchronous collectives, the practical
+            answer is: do not oversubscribe. For storage and front-end networks,
+            modest oversubscription is normal; the SuperPOD B300 design connects
+            storage devices at 1:1 but runs the DGX storage connections slightly
+            oversubscribed at roughly 4:3.<a href="#src-36">[36]</a>
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Oversubscribing the GPU compute
+              fabric is the most common false economy in research cluster
+              builds. It looks fine in single-job acceptance tests and then
+              collapses when two large jobs share spine links. If budget forces
+              a compromise, buy fewer nodes with a non-blocking fabric and add
+              nodes later; the SuperPOD guidance is to build the fabric for the
+              full scalable unit and leave ports empty.<a href="#src-36"
+                >[36]</a
+              >
+            </p>
+          </blockquote>
+
+          <h2 id="congestion-and-routing">
+            Congestion Control, Adaptive Routing and Lossless Ethernet
+          </h2>
+
+          <h3 id="lossless-vs-lossy">Lossless vs Lossy</h3>
+
+          <p>
+            InfiniBand is lossless by design: a sender transmits only when the
+            receiver has advertised buffer credits.<a href="#src-38">[38]</a>
+            Classic RoCEv2 uses a simpler go-back-N recovery that performs badly
+            under loss, so it relies on Priority Flow Control (PFC) to pause an
+            upstream port before buffers overflow. PFC works per port and
+            priority, not per flow, and the DCQCN paper documents what goes
+            wrong: head-of-line blocking, unfairness and congestion spreading,
+            where one hot receiver pauses traffic for innocent flows across the
+            fabric.<a href="#src-38">[38]</a>
+          </p>
+
+          <h3 id="dcqcn-and-beyond">DCQCN and What Came After</h3>
+
+          <p>
+            DCQCN (Microsoft, SIGCOMM 2015) combines switch ECN marking with NIC
+            rate control so that flows slow down before PFC triggers. It became
+            the default RoCE congestion control. Meta's SIGCOMM 2024 paper on
+            its RoCE training clusters is the best public account of running
+            this at scale: Meta found DCQCN hard to tune for training
+            collectives, ran its 400G deployments with PFC only and no
+            transport-level congestion control, and instead added
+            receiver-driven admission control in its collective library, backed
+            by deep-buffer spine switches.<a href="#src-39">[39]</a> The UEC
+            transport and IBTA MRC both take a different approach, designing for
+            multipath and loss tolerance so that the network can run best-effort
+            or near-lossless without fabric-wide PFC.<a href="#src-22">[22]</a
+            ><a href="#src-31">[31]</a>
+          </p>
+
+          <h3 id="adaptive-routing">Load Balancing and Adaptive Routing</h3>
+
+          <p>
+            Standard Ethernet ECMP hashes each flow onto one path using packet
+            header fields. AI training produces few, very large, long-lived
+            flows, so hash collisions leave some links saturated and others
+            idle. Meta reported poor ECMP performance from this low entropy and
+            moved to an enhanced ECMP that also hashes on the RoCE queue pair
+            number, plus centralized traffic engineering, while evaluating
+            flowlet switching.<a href="#src-39">[39]</a> InfiniBand, Spectrum-X
+            and Slingshot use switch-level adaptive routing that picks egress
+            ports per packet or per flowlet based on queue depth; Slingshot
+            applies packet-by-packet adaptive routing to unordered RDMA traffic
+            and flow-level rerouting for ordered traffic.<a href="#src-33"
+              >[33]</a
+            >
+            The general lesson: AI traffic needs either adaptive routing in the
+            fabric, multipath in the transport, or careful traffic engineering.
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> If you build a RoCE fabric, decide
+              the lossless design on day one and document it: which traffic
+              class is lossless, PFC and ECN thresholds, the DSCP mapping, and
+              the NIC congestion control settings. Then make sure the NIC
+              firmware, switch OS and NCCL (<code>NCCL_IB_GID_INDEX</code>,
+              <code>NCCL_IB_TC</code>) all agree.<a href="#src-42">[42]</a> Most
+              "RoCE is slow" tickets are a single misconfigured switch or a host
+              sending on the wrong priority.
+            </p>
+          </blockquote>
+
+          <h2 id="collectives-and-libraries">
+            Collectives and Communication Libraries
+          </h2>
+
+          <h3 id="collective-patterns">The Collective Patterns That Matter</h3>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Collective</th>
+                <th>What it does</th>
+                <th>Where you see it</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>All-reduce</td>
+                <td>
+                  Sum (or other op) across ranks; everyone gets the result
+                </td>
+                <td>Data parallel gradients; MPI global sums</td>
+              </tr>
+              <tr>
+                <td>Reduce-scatter</td>
+                <td>Reduce, then each rank keeps one shard</td>
+                <td>Sharded data parallel (ZeRO, FSDP) gradients</td>
+              </tr>
+              <tr>
+                <td>All-gather</td>
+                <td>Every rank collects every shard</td>
+                <td>FSDP parameter gathering; tensor parallel</td>
+              </tr>
+              <tr>
+                <td>All-to-all</td>
+                <td>Every rank sends distinct data to every other rank</td>
+                <td>MoE expert dispatch and combine; FFTs; transposes</td>
+              </tr>
+              <tr>
+                <td>Broadcast</td>
+                <td>One rank sends to all</td>
+                <td>Weight initialization; checkpoint restore</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <p>
+            NCCL provides AllReduce, Broadcast, Reduce, AllGather,
+            ReduceScatter, AlltoAll, Gather and Scatter, plus point-to-point
+            send and receive.<a href="#src-43">[43]</a> All-to-all can also be
+            built as a grouped loop of <code>ncclSend</code>/<code
+              >ncclRecv</code
+            >
+            calls between <code>ncclGroupStart()</code> and
+            <code>ncclGroupEnd()</code>.<a href="#src-57">[57]</a> All-to-all is
+            the hardest pattern on a fabric because it stresses bisection
+            bandwidth rather than neighbor links; Meta's production traffic data
+            showed AlltoAll using far more queue pairs per GPU and more leaf
+            switch buffer than all-reduce.<a href="#src-39">[39]</a> This is a
+            large part of why MoE models push toward bigger scale-up domains
+            like NVL72 and Helios.
+          </p>
+
+          <h3 id="libraries">NCCL, RCCL, MPI, UCX and libfabric</h3>
+
+          <ul>
+            <li>
+              <strong>NCCL</strong> is NVIDIA's topology-aware collective
+              library for GPUs, supporting PCIe, NVLink, InfiniBand verbs and IP
+              sockets.<a href="#src-43">[43]</a> It is configured by environment
+              variables (or <code>/etc/nccl.conf</code>); NVIDIA cautions that
+              debug and tuning variables should be removed once an issue is
+              fixed, since leaving them set can cause sub-optimal behavior or
+              hangs.<a href="#src-42">[42]</a>
+            </li>
+            <li>
+              <strong>RCCL</strong> is AMD's equivalent for Instinct GPUs,
+              providing the same collective primitives over PCIe and xGMI and
+              across nodes.<a href="#src-44">[44]</a>
+            </li>
+            <li>
+              <strong>MPI</strong> remains the standard for scientific codes.
+              MPI 5.0 was approved by the MPI Forum on June 5, 2025,<a
+                href="#src-45"
+                >[45]</a
+              >
+              and its headline addition is a standard ABI,<a href="#src-59"
+                >[59]</a
+              >
+              which should eventually make containers portable across MPI
+              builds. See
+              <a href="scientific-computing.html">Scientific Computing</a>.
+            </li>
+            <li>
+              <strong>UCX</strong> is the transport layer beneath Open MPI and
+              HPC-X on InfiniBand and RoCE. <code>UCX_TLS</code> selects
+              transports (for example <code>rc</code>, <code>ud</code>,
+              <code>dc</code>, <code>sm</code>, <code>cuda_ipc</code>,
+              <code>rocm_ipc</code>) and <code>UCX_NET_DEVICES</code> selects
+              the HCA port.<a href="#src-46">[46]</a>
+            </li>
+            <li>
+              <strong>libfabric (OFI)</strong> is the portable fabric API used
+              by MPICH, Cray MPICH and others, with providers for verbs, TCP,
+              AWS EFA and Slingshot (CXI).<a href="#src-47">[47]</a
+              ><a href="#src-34">[34]</a> UEC's software interface is also built
+              on libfabric.<a href="#src-31">[31]</a>
+            </li>
+          </ul>
+
+          <h3 id="in-network-computing-sharp">In-Network Computing: SHARP</h3>
+
+          <p>
+            An all-reduce moves each byte through the network at least twice.
+            SHARP (Scalable Hierarchical Aggregation and Reduction Protocol)
+            lets the switches perform the reduction as data flows up an
+            aggregation tree, so data crosses the network fewer times and GPUs
+            and CPUs do less work.<a href="#src-40">[40]</a> Quantum-2
+            implements SHARPv3, which supports multiple aggregation trees so
+            many jobs can use it at once.<a href="#src-25">[25]</a
+            ><a href="#src-40">[40]</a> Quantum-X800 supports SHARP v4.<a
+              href="#src-26"
+              >[26]</a
+            >
+            The same idea inside the NVLink domain is NVLink SHARP (NVLS), where
+            the NVLink Switch performs reductions; NCCL enables it through
+            <code>NCCL_NVLS_ENABLE</code>.<a href="#src-42">[42]</a> NCCL 2.27
+            extended NVLink and InfiniBand SHARP to AllGather and ReduceScatter,
+            cutting the GPU SMs used for communication from 16 or more to 6 or
+            fewer, according to NVIDIA.<a href="#src-41">[41]</a> UALink 2.0
+            adds its own In-Network Compute definition.<a href="#src-17"
+              >[17]</a
+            >
+          </p>
+
+          <h2 id="physical-layer">Optics, Copper and the Physical Layer</h2>
+
+          <h3 id="copper-vs-optics">Copper vs Optics and Reach</h3>
+
+          <p>
+            At 100G and 200G per lane, passive copper reach is now measured in a
+            couple of meters. HPE's Slingshot 400 QuickSpecs are a clear
+            example: 400GBASE-CR4 runs up to 1.6 m on passive copper and 5 m on
+            active copper, while 400GBASE-SR4 reaches 100 m on OM4/OM5 multimode
+            fiber.<a href="#src-32">[32]</a> NVIDIA's Spectrum-X800 datasheet
+            lists DAC, linear active copper and optical transceivers, with 800
+            Gb/s optical links reaching up to 2 km.<a href="#src-27">[27]</a>
+            The practical rule: copper inside the rack (which is why NVL72 and
+            Helios keep the scale-up domain in one rack), active copper or
+            active optical cables to the adjacent rack, and transceivers over
+            fiber for everything else.
+          </p>
+
+          <h3 id="optics-power-and-cpo">Optics Power and Co-Packaged Optics</h3>
+
+          <p>
+            Pluggable transceivers are a large and growing share of network
+            power and a leading cause of link flaps. NVIDIA's co-packaged optics
+            (CPO) blog cites pluggable interfaces "often" drawing 30 W, versus
+            as low as 9 W when the optical engine sits beside the switch ASIC,
+            and claims 3.5x better power efficiency and 10x better resiliency
+            from fewer discrete components.<a href="#src-50">[50]</a> Treat
+            those as vendor claims. Product status: NVIDIA announced Quantum-X
+            Photonics InfiniBand switches (144 ports of 800 Gb/s, 115 Tb/s,
+            liquid-cooled) and Spectrum-X Photonics Ethernet switches (SN6810 at
+            128 x 800 Gb/s and SN6800 at 512 x 800 Gb/s), with stated commercial
+            availability of early 2026 for Quantum-X and the second half of 2026
+            for Spectrum-X.<a href="#src-49">[49]</a
+            ><a href="#src-50">[50]</a> Broadcom's Tomahawk 6 also supports
+            CPO.<a href="#src-51">[51]</a> CPO changes serviceability: a failed
+            optical engine is a switch repair, not a transceiver swap, so
+            understand the vendor's field replacement model before buying.
+          </p>
+
+          <p>
+            Budget optics as a first-class line item. In a non-blocking two-tier
+            fabric, every host link and every leaf-to-spine link needs a
+            transceiver at each end (or an AOC). On 800G builds the optics can
+            rival the switches in cost and, per link, in power. Keep a spares
+            pool of about the size of your largest rack's worth of transceivers
+            and log every link flap; in our experience flapping optics are a
+            leading source of mysterious NCCL slowdowns.
+          </p>
+
+          <h2 id="network-planes">Front-End, Back-End and Storage Networks</h2>
+
+          <p>
+            A modern AI/HPC cluster runs several physically or logically
+            separate networks, and mixing them up is a classic design error.
+            Meta describes the split as a front-end (FE) network for storage and
+            data ingestion and a separate non-blocking back-end (BE) RDMA fabric
+            connecting all GPU NICs.<a href="#src-39">[39]</a> NVIDIA's DGX
+            SuperPOD B300 reference architecture uses four fabrics:<a
+              href="#src-36"
+              >[36]</a
+            ><a href="#src-37">[37]</a>
+          </p>
+          <ul>
+            <li>
+              <strong>Compute (back-end) fabric:</strong> the GPU-to-GPU RDMA
+              network, rail-optimized and non-blocking, 800 Gb/s XDR InfiniBand
+              or Spectrum-X Ethernet in the B300 design.
+            </li>
+            <li>
+              <strong>Storage fabric:</strong> RDMA (InfiniBand or RoCE) to the
+              parallel file system, independent of the compute fabric so
+              checkpoint writes do not collide with collectives.
+            </li>
+            <li>
+              <strong>In-band management (front-end):</strong> Ethernet for
+              provisioning, Slurm and Kubernetes services, user logins, home
+              directories over NFS and internet access. Compute nodes connect at
+              200 Gbps, bonded, in that design; user storage needs at least 100
+              Gb/s.
+            </li>
+            <li>
+              <strong>Out-of-band management:</strong> 1 GbE for BMCs, PDUs and
+              switch management, isolated from users.
+            </li>
+          </ul>
+          <p>
+            Smaller research clusters often merge the storage and compute
+            fabrics onto one InfiniBand network, which is reasonable if the
+            fabric is non-blocking and storage traffic is separated with
+            InfiniBand partitions or service levels. Do not merge the back-end
+            GPU fabric with the general-purpose campus-facing Ethernet. See
+            <a href="memory-storage.html">Memory and Storage</a> for file system
+            sizing.
+          </p>
+
+          <h2 id="practical-testing">Practical Testing</h2>
+
+          <p>
+            Test from the bottom up: link state, then raw RDMA per NIC, then
+            MPI, then NCCL collectives inside one node, then across nodes.
+            Record baselines at acceptance so you have something to compare
+            against later (see <a href="observability.html">Observability</a>).
+          </p>
+
+          <h3 id="link-and-topology-checks">Link and Topology Checks</h3>
+
+          <pre><code class="language-bash"># Link state, rate and firmware for each HCA port
+ibstat
+ibv_devinfo
+
+# GPU-to-GPU and GPU-to-NIC topology (look for PIX/PXB between each GPU and its NIC)
+nvidia-smi topo -m
+
+# Confirm the GPUDirect RDMA peer memory module is loaded
+lsmod | grep nvidia_peermem || sudo modprobe nvidia-peermem</code></pre>
+
+          <h3 id="perftest-ib-write-bw">Raw RDMA Bandwidth with perftest</h3>
+
+          <p>
+            The linux-rdma perftest suite (<code>ib_write_bw</code>,
+            <code>ib_read_bw</code>, <code>ib_send_bw</code>, and the matching
+            <code>_lat</code> tests) measures what one NIC can do with no MPI or
+            NCCL in the way. Build it with CUDA support to test GPUDirect RDMA
+            using <code>--use_cuda</code>.<a href="#src-53">[53]</a> The flags
+            below are documented in perftest's README and vendor guides:
+            <code>-d</code> device, <code>-x</code> GID index (needed for RoCE),
+            <code>-F</code> suppress CPU frequency warnings,
+            <code>--report_gbits</code>, <code>-a</code> sweep all message
+            sizes, <code>--use_cuda</code> GPU index.<a href="#src-54">[54]</a>
+          </p>
+
+          <pre><code class="language-bash"># Build with CUDA support (example paths)
+git clone https://github.com/linux-rdma/perftest.git
+cd perftest
+./autogen.sh
+./configure CUDA_H_PATH=/usr/local/cuda/include/cuda.h
+make -j
+
+# Server (node A): host memory, then GPU 0 memory
+./ib_write_bw -d mlx5_0 -F --report_gbits -a
+./ib_write_bw -d mlx5_0 -F --report_gbits -a --use_cuda=0
+
+# Client (node B): same flags plus the server's hostname
+./ib_write_bw -d mlx5_0 -F --report_gbits -a --use_cuda=0 nodeA
+
+# RoCE: add the GID index for RoCEv2 (example value; check with show_gids)
+./ib_write_bw -d mlx5_0 -x 3 -F --report_gbits -a nodeA</code></pre>
+
+          <p>
+            Large-message results should approach the port rate. If host-memory
+            results are good but <code>--use_cuda</code> results are poor,
+            suspect PCIe topology, IOMMU settings or a missing peer memory
+            module.<a href="#src-35">[35]</a>
+          </p>
+
+          <h3 id="osu-micro-benchmarks">MPI with the OSU Micro-Benchmarks</h3>
+
+          <p>
+            The OSU Micro-Benchmarks (OMB) from Ohio State cover point-to-point
+            latency and bandwidth plus blocking and non-blocking collectives;
+            OMB 7.5.2 is the current release with 8.0rc available.<a
+              href="#src-55"
+              >[55]</a
+            >
+            Built with <code>--enable-cuda</code>, the
+            <code>D D</code> arguments place send and receive buffers in GPU
+            memory.<a href="#src-56">[56]</a>
+          </p>
+
+          <pre><code class="language-bash"># Two nodes, one rank each, Open MPI over UCX, GPU buffers on both sides
+mpirun -np 2 -npernode 1 -H nodeA,nodeB \
+  -mca pml ucx \
+  -x UCX_NET_DEVICES=mlx5_0:1 \
+  -x CUDA_VISIBLE_DEVICES=0 \
+  ./osu_bw D D
+
+# Small-message latency, host buffers (classic MPI health check)
+mpirun -np 2 -npernode 1 -H nodeA,nodeB -mca pml ucx ./osu_latency
+
+# Collective latency across all ranks
+mpirun -np 64 -npernode 8 -mca pml ucx ./osu_allreduce</code></pre>
+
+          <h3 id="nccl-tests">Collectives with nccl-tests</h3>
+
+          <p>
+            nccl-tests is the standard acceptance test for GPU fabrics. Build
+            with <code>MPI=1</code> for multi-node runs. The README's own
+            examples: a single node with 8 GPUs, and 64 ranks across 8 nodes.<a
+              href="#src-2"
+              >[2]</a
+            >
+          </p>
+
+          <pre><code class="language-bash">make MPI=1 MPI_HOME=/path/to/mpi CUDA_HOME=/path/to/cuda NCCL_HOME=/path/to/nccl
+
+# One node, 8 GPUs: tests NVLink/NVSwitch (or xGMI with rccl-tests)
+./build/all_reduce_perf -b 8 -e 128M -f 2 -g 8
+
+# 8 nodes x 8 GPUs = 64 ranks: tests the scale-out fabric
+mpirun -np 64 -N 8 ./build/all_reduce_perf -b 8 -e 8G -f 2 -g 1</code></pre>
+
+          <p>
+            A Slurm version for a two-node smoke test (illustrative values;
+            adjust partition, modules and HCA names to your site):
+          </p>
+
+          <pre><code class="language-bash">#!/bin/bash
+#SBATCH --job-name=nccl-allreduce
+#SBATCH --nodes=2
+#SBATCH --ntasks-per-node=8
+#SBATCH --gpus-per-node=8
+#SBATCH --time=00:20:00
+
+export NCCL_DEBUG=INFO
+export NCCL_DEBUG_SUBSYS=INIT,NET
+export NCCL_IB_HCA=mlx5          # example: restrict NCCL to mlx5 RDMA devices
+export NCCL_SOCKET_IFNAME=ib0    # example: interface for NCCL bootstrap traffic
+
+srun --mpi=pmix ./build/all_reduce_perf -b 8 -e 8G -f 2 -g 1
+srun --mpi=pmix ./build/alltoall_perf   -b 8 -e 1G -f 2 -g 1</code></pre>
+
+          <p>
+            Read the <code>busbw</code> column, not <code>algbw</code>. For
+            large messages across nodes, busbw should approach the per-GPU NIC
+            bandwidth; inside an NVLink domain it should approach the NVLink
+            figure.<a href="#src-1">[1]</a> <code>NCCL_DEBUG=INFO</code> prints
+            which transports and NICs NCCL chose; check that every rank reports
+            the RDMA NET transport and GPUDirect RDMA where expected.
+            <code>NCCL_TOPO_DUMP_FILE</code> writes the detected topology to a
+            file for inspection.<a href="#src-42">[42]</a>
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Run nccl-tests on every node pair or
+              rack pair after any hardware change, not just at acceptance. A
+              single degraded link (a port that negotiated down, a dirty fiber,
+              a NIC with an old firmware) will show up as one node pair with low
+              busbw, and it will slow every job that lands on that node.
+              Automate it as a scheduled health check (see
+              <a href="operations.html">Operations</a>).
+            </p>
+          </blockquote>
+
+          <h2 id="design-guidance">Design Guidance for Research Clusters</h2>
+
+          <p>
+            These are starting points, not prescriptions. The right design
+            depends on workload mix, budget, power and staff skills. Product
+            examples are illustrative, not endorsements.
+          </p>
+
+          <h3 id="design-8-gpus">8 GPUs: One Node</h3>
+          <ul>
+            <li>
+              Buy a server with an NVLink/NVSwitch (HGX) or Infinity Fabric
+              baseboard rather than PCIe-only GPUs if you expect multi-GPU
+              training. The scale-up domain is the whole machine, so it is the
+              only interconnect that matters for GPU-to-GPU traffic.<a
+                href="#src-8"
+                >[8]</a
+              ><a href="#src-13">[13]</a>
+            </li>
+            <li>
+              The external network is for storage and users. One or two 100-400
+              Gb/s ports to the storage and campus network are usually enough.
+              Skip the back-end GPU fabric entirely.
+            </li>
+            <li>
+              Validate with single-node <code>all_reduce_perf -g 8</code> and
+              <code>nvidia-smi topo -m</code>.<a href="#src-2">[2]</a>
+            </li>
+          </ul>
+
+          <h3 id="design-64-gpus">64 GPUs: Eight Nodes</h3>
+          <ul>
+            <li>
+              This is the point where a dedicated back-end RDMA fabric pays for
+              itself. Give each GPU its own NIC (eight per node), as in
+              DGX-class designs.<a href="#src-12">[12]</a>
+            </li>
+            <li>
+              Eight nodes x eight NICs is 64 ports, which fits on a single
+              64-port NDR switch (Quantum-2 class)<a href="#src-25">[25]</a> or
+              a single 800G Ethernet switch (SN5600 class)<a href="#src-27"
+                >[27]</a
+              >
+              with no oversubscription and one hop between any two GPUs. A
+              single high-radix switch is simpler than a rail-optimized
+              multi-switch design at this size and leaves room for storage ports
+              on a separate switch.
+            </li>
+            <li>
+              InfiniBand vs Ethernet: InfiniBand is still the lower-effort path
+              for a small team (subnet manager, lossless by default, SHARP,
+              mature MPI stack). Choose Ethernet if your staff already runs
+              RoCE, your vendor provides a validated AI Ethernet configuration,
+              or you must converge with existing Ethernet tooling.
+            </li>
+            <li>
+              Keep storage on a separate network or partition so checkpoints do
+              not collide with collectives.
+            </li>
+          </ul>
+
+          <h3 id="design-512-gpus">512+ GPUs: Tens of Nodes and Beyond</h3>
+          <ul>
+            <li>
+              Use a rail-optimized, non-blocking two-tier fat tree built in
+              scalable units. NVIDIA's reference design uses 64-node SUs (512
+              GPUs) with rails one hop apart inside the SU.<a href="#src-36"
+                >[36]</a
+              >
+              Design the spine for the final size on day one.
+            </li>
+            <li>
+              Consider multi-plane designs (twin-plane InfiniBand, Spectrum-X
+              multiplane, multiplane Ethernet with packet-spraying NICs) for
+              resilience and to stay at two tiers as you grow.<a href="#src-28"
+                >[28]</a
+              ><a href="#src-36">[36]</a>
+            </li>
+            <li>
+              Decide congestion control and load balancing early: InfiniBand
+              adaptive routing and SHARP, or an Ethernet platform with adaptive
+              routing or multipath transport. Plain ECMP with default RoCE
+              settings is not adequate for large collectives.<a href="#src-39"
+                >[39]</a
+              >
+            </li>
+            <li>
+              If your workloads are MoE training or large-model inference,
+              evaluate rack-scale NVLink (NVL72) or UALink (Helios) domains.
+              They move all-to-all traffic off the scale-out fabric.<a
+                href="#src-9"
+                >[9]</a
+              ><a href="#src-14">[14]</a> The facility cost is high: liquid
+              cooling and very high rack power.
+            </li>
+            <li>
+              Staff for it. A fabric this size needs a subnet manager or fabric
+              manager strategy, telemetry, automated link health checks and
+              optics spares. Integrate topology into the scheduler so jobs land
+              on nearby nodes (see <a href="scheduling.html">Scheduling</a>).
+            </li>
+          </ul>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Scale</th>
+                <th>Scale-up</th>
+                <th>Scale-out (GPU)</th>
+                <th>Storage / front-end</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>8 GPUs</td>
+                <td>NVLink/NVSwitch or Infinity Fabric in one node</td>
+                <td>None needed</td>
+                <td>1-2 x 100-400 Gb/s Ethernet or InfiniBand</td>
+              </tr>
+              <tr>
+                <td>64 GPUs</td>
+                <td>Per-node NVLink or Infinity Fabric</td>
+                <td>1 NIC per GPU, single non-blocking 64-port switch</td>
+                <td>Separate switch or partition</td>
+              </tr>
+              <tr>
+                <td>512+ GPUs</td>
+                <td>Per-node, or rack-scale NVL72 / Helios</td>
+                <td>
+                  Rail-optimized, non-blocking, multi-plane fat tree in SUs
+                </td>
+                <td>Dedicated storage fabric; bonded in-band Ethernet</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h2 id="key-takeaways">Key Takeaways</h2>
+          <ul>
+            <li>
+              Collectives finish only when the slowest link finishes; the
+              interconnect sets the pace of distributed training and tightly
+              coupled simulation. Benchmark across message sizes, because small
+              messages are latency-bound and large ones are bandwidth-bound.
+            </li>
+            <li>
+              Scale-up fabrics (NVLink, Infinity Fabric, UALink, TPU ICI) carry
+              an order of magnitude more bandwidth per accelerator than
+              scale-out NICs. Put tensor and expert parallelism inside the
+              scale-up domain.
+            </li>
+            <li>
+              Rack-scale domains (GB300 and Vera Rubin NVL72, AMD Helios with
+              UALink over Ethernet) are the big change since the last edition,
+              driven by MoE all-to-all traffic.
+            </li>
+            <li>
+              InfiniBand XDR (800 Gb/s per port) and 800G Ethernet are the
+              current scale-out generation; UEC 1.0.3 and IBTA MRC are bringing
+              multipath, loss-tolerant RDMA to standard Ethernet.
+            </li>
+            <li>
+              GPUDirect RDMA depends on PCIe topology: pair each GPU with its
+              own NIC under a common PCIe switch and verify with
+              <code>nvidia-smi topo -m</code>.
+            </li>
+            <li>
+              Do not oversubscribe the GPU back-end fabric. Keep compute,
+              storage, in-band and out-of-band networks distinct.
+            </li>
+            <li>
+              Test bottom up (ibstat, ib_write_bw, OSU, nccl-tests), record
+              baselines at acceptance, and rerun them as automated health
+              checks.
+            </li>
+          </ul>
+
+          <h2 id="sources">Sources</h2>
+          <ol class="sources">
+            <li id="src-1">
+              <a
+                href="https://github.com/NVIDIA/nccl-tests/blob/master/doc/PERFORMANCE.md"
+                target="_blank"
+                rel="noopener"
+                >nccl-tests Performance documentation: algbw and busbw (NVIDIA,
+                GitHub, 2026)</a
+              >
+            </li>
+            <li id="src-2">
+              <a
+                href="https://github.com/NVIDIA/nccl-tests/blob/master/README.md"
+                target="_blank"
+                rel="noopener"
+                >nccl-tests README (NVIDIA, GitHub, 2026)</a
+              >
+            </li>
+            <li id="src-3">
+              <a
+                href="https://pcisig.com/what-bit-rates-does-pcie-50-specification-support-and-how-does-it-compare-prior-pcie-generations"
+                target="_blank"
+                rel="noopener"
+                >What bit rates does the PCIe 5.0 specification support?
+                (PCI-SIG FAQ)</a
+              >
+            </li>
+            <li id="src-4">
+              <a
+                href="https://pcisig.com/pci-express-6.0-specification"
+                target="_blank"
+                rel="noopener"
+                >PCI Express 6.0 Specification (PCI-SIG)</a
+              >
+            </li>
+            <li id="src-5">
+              <a
+                href="https://pcisig.com/specifications/pcie-70-specification-version-03-now-available-members"
+                target="_blank"
+                rel="noopener"
+                >The PCIe 7.0 Specification, Version 1.0 is Now Available to
+                Members (PCI-SIG, 2025)</a
+              >
+            </li>
+            <li id="src-6">
+              <a
+                href="https://pcisig.com/blog/pcie%C2%AE-70-specification-version-05-now-available-full-draft-available-members"
+                target="_blank"
+                rel="noopener"
+                >PCIe 7.0 Specification, Version 0.5 Now Available (PCI-SIG,
+                2024)</a
+              >
+            </li>
+            <li id="src-7">
+              <a
+                href="https://pcisig.com/blog/pcier-80-specification-draft-05-now-available-track-2560-gts-transfer-speeds-2028"
+                target="_blank"
+                rel="noopener"
+                >PCIe 8.0 Specification, Draft 0.5 Now Available (PCI-SIG,
+                2026)</a
+              >
+            </li>
+            <li id="src-8">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/nvlink/"
+                target="_blank"
+                rel="noopener"
+                >NVLink and NVLink Switch (NVIDIA, 2026)</a
+              >
+            </li>
+            <li id="src-9">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/gb300-nvl72/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA GB300 NVL72 (NVIDIA, 2026)</a
+              >
+            </li>
+            <li id="src-10">
+              <a
+                href="https://developer.nvidia.com/blog/inside-the-nvidia-rubin-platform-six-new-chips-one-ai-supercomputer"
+                target="_blank"
+                rel="noopener"
+                >Inside the NVIDIA Vera Rubin Platform: Six New Chips, One AI
+                Supercomputer (NVIDIA Technical Blog, 2026)</a
+              >
+            </li>
+            <li id="src-11">
+              <a
+                href="https://nvidianews.nvidia.com/news/rubin-platform-ai-supercomputer"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA Kicks Off the Next Generation of AI With Rubin (NVIDIA
+                Newsroom, January 2026)</a
+              >
+            </li>
+            <li id="src-12">
+              <a
+                href="https://docs.nvidia.com/dgx/dgxb200-user-guide/introduction-to-dgxb200.html"
+                target="_blank"
+                rel="noopener"
+                >Introduction to NVIDIA DGX B200 Systems (NVIDIA DGX B200 User
+                Guide, 2026)</a
+              >
+            </li>
+            <li id="src-13">
+              <a
+                href="https://www.amd.com/en/products/accelerators/instinct/mi350/mi355x.html"
+                target="_blank"
+                rel="noopener"
+                >AMD Instinct MI355X GPUs specifications (AMD)</a
+              >
+            </li>
+            <li id="src-14">
+              <a
+                href="https://www.amd.com/en/blogs/2026/amd-helios-resilient-scale-up-networking-for-ai.html"
+                target="_blank"
+                rel="noopener"
+                >AMD Helios: Resilient Scale-Up Networking for AI (AMD, 2026)</a
+              >
+            </li>
+            <li id="src-15">
+              <a
+                href="https://www.amd.com/en/blogs/2026/amd-launches-helios-the-highest-performing-rackscale-ai-infrastructure-solution.html"
+                target="_blank"
+                rel="noopener"
+                >AMD Launches Helios rackscale AI infrastructure (AMD, July
+                2026)</a
+              >
+            </li>
+            <li id="src-16">
+              <a
+                href="https://ualinkconsortium.org/wp-content/uploads/2025/04/UALink-1.0-Specification-PR_FINAL.pdf"
+                target="_blank"
+                rel="noopener"
+                >UALink Consortium Releases the Ultra Accelerator Link 200G 1.0
+                Specification (UALink Consortium, April 2025)</a
+              >
+            </li>
+            <li id="src-17">
+              <a
+                href="https://ualinkconsortium.org/wp-content/uploads/2026/04/UALink-2.0-Specification-PR_FINAL.pdf"
+                target="_blank"
+                rel="noopener"
+                >UALink Consortium Publishes Four Specifications Defining
+                In-Network Compute, Chiplets, Manageability and 200G Performance
+                (UALink Consortium, April 2026)</a
+              >
+            </li>
+            <li id="src-18">
+              <a
+                href="https://ualinkconsortium.org/specification/"
+                target="_blank"
+                rel="noopener"
+                >UALink Specifications (UALink Consortium, 2026)</a
+              >
+            </li>
+            <li id="src-19">
+              <a
+                href="https://docs.cloud.google.com/tpu/docs/tpu7x"
+                target="_blank"
+                rel="noopener"
+                >TPU7x (Ironwood) documentation (Google Cloud, 2026)</a
+              >
+            </li>
+            <li id="src-20">
+              <a
+                href="https://arxiv.org/pdf/2304.01433.pdf"
+                target="_blank"
+                rel="noopener"
+                >Jouppi et al., TPU v4: An Optically Reconfigurable
+                Supercomputer for Machine Learning (ISCA 2023, arXiv)</a
+              >
+            </li>
+            <li id="src-21">
+              <a
+                href="https://infinibandta.org/infiniband-trade-association-advances-high-performance-networking-with-new-specification-updates-and-record-plugfest-participation/"
+                target="_blank"
+                rel="noopener"
+                >IBTA Advances High-Performance Networking with New
+                Specification Updates, Release 2.0 (IBTA, 2025)</a
+              >
+            </li>
+            <li id="src-22">
+              <a
+                href="https://infinibandta.org/rdma-networking-powers-the-june-2026-top500-while-ibta-advances-new-specifications"
+                target="_blank"
+                rel="noopener"
+                >RDMA Networking Powers the June 2026 TOP500 while IBTA Advances
+                New Specifications (IBTA, 2026)</a
+              >
+            </li>
+            <li id="src-23">
+              <a
+                href="https://infinibandta.org/wp-content/uploads/2026/08/Whats-New-in-Vol.-1-and-2-Release-2.1-2026-07-31.pdf"
+                target="_blank"
+                rel="noopener"
+                >What's New in InfiniBand Volume 1 and 2 Release 2.1 (IBTA, July
+                2026)</a
+              >
+            </li>
+            <li id="src-24">
+              <a
+                href="https://docs.nvidia.com/networking/display/connectx8supernic/specifications"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA ConnectX-8 SuperNIC User Manual: Specifications (NVIDIA,
+                2026)</a
+              >
+            </li>
+            <li id="src-25">
+              <a
+                href="https://www.nvidia.com/en-us/networking/quantum2/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA Quantum-2 InfiniBand Platform (NVIDIA)</a
+              >
+            </li>
+            <li id="src-26">
+              <a
+                href="https://www.nvidia.com/en-us/networking/products/infiniband/quantum-x800/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA Quantum-X800 InfiniBand Platform (NVIDIA)</a
+              >
+            </li>
+            <li id="src-27">
+              <a
+                href="https://4719eaee91034be722d8-c86a406a93c55de2464febd03debd4f0.ssl.cf1.rackcdn.com/sb_ethernet-spectrum-x800.pdf"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA Spectrum-X800 Ethernet Platform Datasheet (NVIDIA)</a
+              >
+            </li>
+            <li id="src-28">
+              <a
+                href="https://www.nvidia.com/en-us/networking/spectrumx/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA Spectrum-X Ethernet Networking Platform (NVIDIA,
+                2026)</a
+              >
+            </li>
+            <li id="src-29">
+              <a
+                href="https://ultraethernet.org/ultra-ethernet-consortium-uec-launches-specification-1-0-transforming-ethernet-for-ai-and-hpc-at-scale/"
+                target="_blank"
+                rel="noopener"
+                >Ultra Ethernet Consortium Launches Specification 1.0 (UEC, June
+                2025)</a
+              >
+            </li>
+            <li id="src-30">
+              <a
+                href="https://ultraethernet.org/specification-history/"
+                target="_blank"
+                rel="noopener"
+                >Ultra Ethernet Specification History (UEC, 2026)</a
+              >
+            </li>
+            <li id="src-31">
+              <a
+                href="https://ultraethernet.org/wp-content/uploads/sites/20/2025/06/UEC1.0Whitepaper.pdf"
+                target="_blank"
+                rel="noopener"
+                >UEC 1.0 white paper (Intersect360 Research for UEC, 2025)</a
+              >
+            </li>
+            <li id="src-32">
+              <a
+                href="https://www.hpe.com/us/en/collaterals/collateral.a50002547enw.html"
+                target="_blank"
+                rel="noopener"
+                >HPE Slingshot interconnect 400 QuickSpecs (HPE)</a
+              >
+            </li>
+            <li id="src-33">
+              <a
+                href="https://cug.org/proceedings/cug2025_proceedings/includes/files/pap109s2-file1.pdf"
+                target="_blank"
+                rel="noopener"
+                >The HPE Slingshot 400 Expedition (Cray User Group, May 2025)</a
+              >
+            </li>
+            <li id="src-34">
+              <a
+                href="https://ofiwg.github.io/libfabric/main/man/fi_cxi.7.html"
+                target="_blank"
+                rel="noopener"
+                >fi_cxi(7): The CXI Fabric Provider (libfabric)</a
+              >
+            </li>
+            <li id="src-35">
+              <a
+                href="https://docs.nvidia.com/cuda/gpudirect-rdma/index.html"
+                target="_blank"
+                rel="noopener"
+                >GPUDirect RDMA documentation (NVIDIA CUDA 13.4)</a
+              >
+            </li>
+            <li id="src-36">
+              <a
+                href="https://docs.nvidia.com/dgx-superpod/reference-architecture/scalable-infrastructure-b300/latest/network-fabrics.html"
+                target="_blank"
+                rel="noopener"
+                >DGX SuperPOD B300 Reference Architecture: Network Fabrics
+                (NVIDIA, 2026)</a
+              >
+            </li>
+            <li id="src-37">
+              <a
+                href="https://docs.nvidia.com/dgx-superpod/reference-architecture/scalable-infrastructure-b300/latest/dgx-superpod-components.html"
+                target="_blank"
+                rel="noopener"
+                >DGX SuperPOD B300 Reference Architecture: Key Components
+                (NVIDIA, 2026)</a
+              >
+            </li>
+            <li id="src-38">
+              <a
+                href="https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/lossless.pdf"
+                target="_blank"
+                rel="noopener"
+                >Zhu et al., Congestion Control for Large-Scale RDMA Deployments
+                (SIGCOMM 2015)</a
+              >
+            </li>
+            <li id="src-39">
+              <a
+                href="https://engineering.fb.com/wp-content/uploads/2024/08/sigcomm24-final246.pdf"
+                target="_blank"
+                rel="noopener"
+                >Gangidi et al., RDMA over Ethernet for Distributed AI Training
+                at Meta Scale (SIGCOMM 2024)</a
+              >
+            </li>
+            <li id="src-40">
+              <a
+                href="https://networking-docs.nvidia.com/sharpum/3.16.0/introduction"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA SHARP Rev 3.16.0: Introduction (NVIDIA)</a
+              >
+            </li>
+            <li id="src-41">
+              <a
+                href="https://developer.nvidia.com/blog/enabling-fast-inference-and-resilient-training-with-nccl-2-27/"
+                target="_blank"
+                rel="noopener"
+                >Enabling Fast Inference and Resilient Training with NCCL 2.27
+                (NVIDIA Technical Blog, 2025)</a
+              >
+            </li>
+            <li id="src-42">
+              <a
+                href="https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/env.html"
+                target="_blank"
+                rel="noopener"
+                >NCCL Environment Variables (NVIDIA NCCL documentation)</a
+              >
+            </li>
+            <li id="src-43">
+              <a
+                href="https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/overview.html"
+                target="_blank"
+                rel="noopener"
+                >Overview of NCCL (NVIDIA NCCL documentation)</a
+              >
+            </li>
+            <li id="src-44">
+              <a
+                href="https://rocm.docs.amd.com/projects/rccl/en/docs-7.14.1/index.html"
+                target="_blank"
+                rel="noopener"
+                >RCCL documentation (AMD ROCm)</a
+              >
+            </li>
+            <li id="src-45">
+              <a
+                href="https://www.mpi-forum.org/docs/"
+                target="_blank"
+                rel="noopener"
+                >MPI Documents: MPI 5.0 (MPI Forum)</a
+              >
+            </li>
+            <li id="src-46">
+              <a
+                href="https://github.com/openucx/ucx/wiki/UCX-environment-parameters"
+                target="_blank"
+                rel="noopener"
+                >UCX environment parameters (OpenUCX wiki)</a
+              >
+            </li>
+            <li id="src-47">
+              <a
+                href="https://ofiwg.github.io/libfabric/"
+                target="_blank"
+                rel="noopener"
+                >Libfabric (OpenFabrics Interfaces Working Group)</a
+              >
+            </li>
+            <li id="src-48">
+              <a
+                href="https://www.nvidia.com/content/dam/en-zz/Solutions/Data-Center/documents/datasheet-nvidia-bluefield-3-dpu.pdf"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA BlueField-3 DPU Datasheet (NVIDIA)</a
+              >
+            </li>
+            <li id="src-49">
+              <a
+                href="https://nvidianews.nvidia.com/news/nvidia-spectrum-x-co-packaged-optics-networking-switches-ai-factories"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA Announces Spectrum-X Photonics, Co-Packaged Optics
+                Networking Switches (NVIDIA Newsroom, 2025)</a
+              >
+            </li>
+            <li id="src-50">
+              <a
+                href="https://developer.nvidia.com/blog/scaling-ai-factories-with-co-packaged-optics-for-better-power-efficiency/"
+                target="_blank"
+                rel="noopener"
+                >Scaling AI Factories with Co-Packaged Optics for Better Power
+                Efficiency (NVIDIA Technical Blog, August 2025)</a
+              >
+            </li>
+            <li id="src-51">
+              <a
+                href="https://www.broadcom.com/company/news/product-releases/63146"
+                target="_blank"
+                rel="noopener"
+                >Broadcom Ships Tomahawk 6: World's First 102.4 Tbps Switch
+                (Broadcom, June 2025)</a
+              >
+            </li>
+            <li id="src-52">
+              <a
+                href="https://www.amd.com/en/products/network-interface-cards/pensando.html"
+                target="_blank"
+                rel="noopener"
+                >AMD Pensando Pollara 400 AI NIC (AMD)</a
+              >
+            </li>
+            <li id="src-53">
+              <a
+                href="https://github.com/linux-rdma/perftest/blob/master/README"
+                target="_blank"
+                rel="noopener"
+                >perftest README (linux-rdma, GitHub)</a
+              >
+            </li>
+            <li id="src-54">
+              <a
+                href="https://techdocs.broadcom.com/us/en/storage-and-ethernet-connectivity/ethernet-nic-controllers/bcm957xxx/adapters/Configuration-adapter/configuring-nccl-and-gpudirect-with-bcm5750x-network-adapters/rdma-testing--perftest-.html"
+                target="_blank"
+                rel="noopener"
+                >Testing RDMA (perftest) (Broadcom TechDocs)</a
+              >
+            </li>
+            <li id="src-55">
+              <a
+                href="https://mvapich.cse.ohio-state.edu/benchmarks/"
+                target="_blank"
+                rel="noopener"
+                >OSU Micro-Benchmarks (MVAPICH, Ohio State University, 2026)</a
+              >
+            </li>
+            <li id="src-56">
+              <a
+                href="https://networking-docs.nvidia.com/gpudirectrdma/benchmark-tests"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA GPUDirect RDMA User Manual: Benchmark Tests (NVIDIA)</a
+              >
+            </li>
+            <li id="src-57">
+              <a
+                href="https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/usage/p2p.html"
+                target="_blank"
+                rel="noopener"
+                >NCCL Point-to-point communication (NVIDIA NCCL
+                documentation)</a
+              >
+            </li>
+            <li id="src-58">
+              <a
+                href="https://newsroom.amd.com/news/aai-2026-helios-update/"
+                target="_blank"
+                rel="noopener"
+                >AAI 2026: AMD Launches AMD Helios Rackscale Solution for
+                Frontier AI (AMD Newsroom, July 2026)</a
+              >
+            </li>
+            <li id="src-59">
+              <a
+                href="https://www.mpi-forum.org/bofs/2025-06-MPI-BOF-ISC25.pdf"
+                target="_blank"
+                rel="noopener"
+                >The New MPI 5.0 - Now with ABI Included! BoF at ISC25 (MPI
+                Forum, June 2025)</a
+              >
+            </li>
+            <li id="src-60">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/vera-rubin-nvl72/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA Vera Rubin NVL72 product page (NVIDIA, 2026)</a
+              >
+            </li>
+          </ol>
+          <nav class="doc-pager" aria-label="Chapter navigation">
+            <a class="pager-prev" href="memory-storage.html"
+              ><span>Previous</span>Memory and Storage</a
+            ><a class="pager-next" href="facilities.html"
+              ><span>Next</span>Power, Cooling and Facilities</a
+            >
+          </nav>
+        </article>
+      </div>
+    </main>
+
+    <footer class="section-dark">
+      <div class="container text-center">
+        <p class="footer-note">
+          2026 edition |
+          <a href="index.html" class="subtle-link">Field Manual</a> |
+          <a href="../index.html" class="subtle-link"
+            >charles-forsyth.github.io</a
+          >
+        </p>
+      </div>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+      document.querySelectorAll('pre code').forEach(function (el) {
+        if (el.className === 'c++') el.className = 'language-cpp';
+        else if (el.className && el.className.indexOf('language-') !== 0)
+          el.className = 'language-' + el.className;
+        hljs.highlightElement(el);
+      });
+    </script>
+  </body>
+</html>
