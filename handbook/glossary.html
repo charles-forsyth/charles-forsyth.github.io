@@ -1,0 +1,1433 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Glossary | Field Manual</title>
+    <meta
+      name="description"
+      content="Plain definitions of more than 100 terms spanning accelerators, memory, interconnects, scheduling, training, inference and numerics, with links to the chapters that cover each one in depth."
+    />
+    <link
+      rel="canonical"
+      href="https://charles-forsyth.github.io/handbook/glossary.html"
+    />
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="handbook.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
+    />
+  </head>
+  <body>
+    <header class="hero doc-hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="doc-kicker">
+            <i class="fas fa-book"></i> AI + HPC Field Manual
+          </p>
+          <h1>Glossary</h1>
+          <h2>A-Z definitions of the AI and HPC terms used in this manual</h2>
+          <div class="cta-buttons">
+            <a href="index.html" class="btn btn-secondary"
+              ><i class="fas fa-book-open"></i> Field Manual</a
+            >
+            <a href="../index.html" class="btn btn-secondary"
+              ><i class="fas fa-arrow-left"></i> Main Site</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+    <nav class="doc-nav" aria-label="Field manual chapters">
+      <div class="container">
+        <a href="convergence.html">Convergence</a
+        ><a href="accelerators.html">Accelerators</a
+        ><a href="memory-storage.html">Memory &amp; Storage</a
+        ><a href="interconnects.html">Interconnects</a
+        ><a href="facilities.html">Facilities</a
+        ><a href="systems-software.html">Systems Software</a
+        ><a href="scheduling.html">Scheduling</a
+        ><a href="observability.html">Observability</a
+        ><a href="operations.html">Operations</a
+        ><a href="training.html">Training</a
+        ><a href="inference.html">Inference</a
+        ><a href="scientific-computing.html">Scientific Computing</a
+        ><a href="cloud.html">Cloud</a><a href="linux.html">Linux</a
+        ><a href="glossary.html" class="active" aria-current="page">Glossary</a>
+      </div>
+    </nav>
+    <main class="section-light">
+      <div class="container doc-layout">
+        <aside class="doc-toc">
+          <h4><i class="fas fa-list"></i> On this page</h4>
+          <ul>
+            <li><a href="#letter-a">A</a></li>
+            <li><a href="#letter-b">B</a></li>
+            <li><a href="#letter-c">C</a></li>
+            <li><a href="#letter-d">D</a></li>
+            <li><a href="#letter-e">E</a></li>
+            <li><a href="#letter-f">F</a></li>
+            <li><a href="#letter-g">G</a></li>
+            <li><a href="#letter-h">H</a></li>
+            <li><a href="#letter-i">I</a></li>
+            <li><a href="#letter-k">K</a></li>
+            <li><a href="#letter-l">L</a></li>
+            <li><a href="#letter-m">M</a></li>
+            <li><a href="#letter-n">N</a></li>
+            <li><a href="#letter-o">O</a></li>
+            <li><a href="#letter-p">P</a></li>
+            <li><a href="#letter-q">Q</a></li>
+            <li><a href="#letter-r">R</a></li>
+            <li><a href="#letter-s">S</a></li>
+            <li><a href="#letter-t">T</a></li>
+            <li><a href="#letter-u">U</a></li>
+            <li><a href="#letter-v">V</a></li>
+            <li><a href="#letter-x">X</a></li>
+            <li><a href="#letter-z">Z</a></li>
+            <li><a href="#key-takeaways">Key Takeaways</a></li>
+          </ul>
+        </aside>
+        <article class="doc-content">
+          <p>
+            AI and HPC grew up with separate vocabularies, and the convergence
+            has left research computing staff fluent in one dialect and guessing
+            in the other. This glossary puts both in one place. Definitions are
+            short and factual; where a term has a home chapter in this manual,
+            the entry links to it. Hard numbers are cited to primary sources and
+            reflect what was published as of September 2026. Terms are grouped
+            by their first letter; acronyms are listed under the letter they
+            start with.
+          </p>
+
+          <h2 id="letter-a">A</h2>
+          <p>
+            <strong>Accelerator</strong>: A processor specialized for a class of
+            computation, most commonly a GPU, that sits alongside a
+            general-purpose CPU host and does the bulk of the floating-point
+            work. See <a href="accelerators.html">Accelerators</a>.
+          </p>
+          <p>
+            <strong>Activation checkpointing</strong>: A training technique that
+            discards intermediate activations during the forward pass and
+            recomputes them during the backward pass, trading extra compute for
+            lower memory use. The Megatron-LM paper lists it among the standard
+            memory management techniques for large models.<a href="#src-8"
+              >[8]</a
+            >
+            See <a href="training.html">Training at Scale</a>.
+          </p>
+          <p>
+            <strong>Agentic workflow</strong>: A workflow in which an LLM-driven
+            agent plans steps, calls tools, launches jobs and acts on the
+            results with limited human intervention. MLPerf Inference v6.1 added
+            an agentic benchmark to reflect this workload.<a href="#src-41"
+              >[41]</a
+            >
+            See <a href="convergence.html">The Convergence</a>.
+          </p>
+          <p>
+            <strong>All-gather</strong>: A collective operation in which each of
+            k ranks contributes N values and every rank receives the full k x N
+            result, ordered by rank.<a href="#src-2">[2]</a>
+          </p>
+          <p>
+            <strong>All-reduce</strong>: A collective operation that combines
+            (for example, sums) arrays from all ranks and leaves the identical
+            result on every rank. It is the core operation of data-parallel
+            training, and it is equivalent to a reduce-scatter followed by an
+            all-gather.<a href="#src-2">[2]</a> See
+            <a href="interconnects.html">Interconnects</a>.
+          </p>
+          <p>
+            <strong>All-to-all</strong>: A collective in which every rank sends
+            a distinct piece of data to every other rank. It dominates
+            communication in Mixture-of-Experts models, where tokens are routed
+            to experts on other GPUs; NCCL provides it as a primitive.<a
+              href="#src-1"
+              >[1]</a
+            >
+          </p>
+          <p>
+            <strong>APU (Accelerated Processing Unit)</strong>: A package that
+            combines CPU cores and GPU compute on the same device with shared
+            memory. El Capitan's nodes each hold four AMD MI300A APUs with 128
+            GB of memory per APU.<a href="#src-38">[38]</a>
+          </p>
+          <p>
+            <strong>Apptainer</strong>: An open-source container platform, first
+            developed at Lawrence Berkeley National Laboratory, designed to run
+            applications on HPC clusters as single-file images that integrate
+            with GPUs, high-speed networks and parallel file systems by
+            default.<a href="#src-19">[19]</a> See
+            <a href="systems-software.html">Systems Software</a>.
+          </p>
+          <p>
+            <strong>Arithmetic intensity</strong>: The number of floating-point
+            operations performed per byte moved from memory. It determines
+            whether a kernel is memory-bound or compute-bound on a given
+            processor.<a href="#src-31">[31]</a> See
+            <a href="convergence.html#the-roofline-model-and-the-memory-wall"
+              >The Convergence</a
+            >.
+          </p>
+
+          <h2 id="letter-b">B</h2>
+          <p>
+            <strong>Backfill scheduling</strong>: A scheduler policy that starts
+            smaller or shorter jobs out of priority order when doing so will not
+            delay the expected start of higher-priority jobs. Slurm offers it as
+            an optional plugin.<a href="#src-17">[17]</a> See
+            <a href="scheduling.html">Scheduling</a>.
+          </p>
+          <p>
+            <strong>BF16 (bfloat16)</strong>: A 16-bit floating-point format
+            with 1 sign bit, 8 exponent bits and 7 mantissa bits, giving it the
+            same dynamic range as FP32 at lower precision. It was designed at
+            Google Brain for TPUs and is the default AI training format today.<a
+              href="#src-35"
+              >[35]</a
+            >
+          </p>
+          <p>
+            <strong>Bisection bandwidth</strong>: The total bandwidth across the
+            narrowest cut that splits a network into two equal halves; a measure
+            of how well a fabric handles all-to-all traffic. Aurora, for
+            example, lists a peak bisection bandwidth of 0.69 PB/s.<a
+              href="#src-39"
+              >[39]</a
+            >
+          </p>
+
+          <h2 id="letter-c">C</h2>
+          <p>
+            <strong>Checkpoint</strong>: A saved snapshot of a running job's
+            state (model weights and optimizer state, or simulation fields) that
+            allows restart after failure or preemption. Large training
+            checkpoints are a major storage workload. See
+            <a href="training.html">Training at Scale</a> and
+            <a href="memory-storage.html">Memory and Storage</a>.
+          </p>
+          <p>
+            <strong>Collective (collective operation)</strong>: A communication
+            operation in which every rank in a group participates, such as
+            broadcast, reduce, all-reduce, all-gather and reduce-scatter. Each
+            rank must call the collective with the same count and datatype;
+            mismatches can cause hangs or data corruption.<a href="#src-2"
+              >[2]</a
+            >
+          </p>
+          <p>
+            <strong>Continuous batching</strong>: An inference serving technique
+            that adds new requests to the running batch as soon as earlier
+            requests finish, instead of waiting for a whole batch to complete.
+            vLLM lists it among its core features.<a href="#src-5">[5]</a> See
+            <a href="inference.html">Inference at Scale</a>.
+          </p>
+          <p>
+            <strong>CUDA</strong>: NVIDIA's parallel computing platform and
+            programming model for its GPUs, usable from C, C++ and Fortran.<a
+              href="#src-21"
+              >[21]</a
+            >
+            See <a href="systems-software.html">Systems Software</a>.
+          </p>
+          <p>
+            <strong>CXL (Compute Express Link)</strong>: An open interconnect
+            standard built on the PCIe physical layer for cache-coherent
+            attachment of memory and accelerators. CXL 4.0 is based on PCIe 7.0
+            and doubles the data rate to 128 GT/s.<a href="#src-26">[26]</a> See
+            <a href="memory-storage.html">Memory and Storage</a>.
+          </p>
+
+          <h2 id="letter-d">D</h2>
+          <p>
+            <strong>DAOS (Distributed Asynchronous Object Storage)</strong>: An
+            open-source object store designed for massively distributed
+            non-volatile memory and NVMe, presenting a key-value interface on
+            commodity hardware.<a href="#src-42">[42]</a> Aurora's 230 PB DAOS
+            system is rated at 31 TB/s.<a href="#src-39">[39]</a>
+          </p>
+          <p>
+            <strong>Data parallelism</strong>: A training strategy in which
+            every GPU holds a full copy of the model, processes a different
+            slice of each batch, and synchronizes gradients with an all-reduce.
+            It is the simplest form of distributed training. See
+            <a href="training.html">Training at Scale</a>.
+          </p>
+          <p>
+            <strong>Decode (decode phase)</strong>: The token-by-token
+            generation phase of LLM inference, in which each step reads the
+            model weights and KV cache to produce one new token per sequence. It
+            is typically memory-bandwidth-bound.<a href="#src-31">[31]</a> See
+            <a href="inference.html">Inference at Scale</a>.
+          </p>
+          <p>
+            <strong>Direct liquid cooling (DLC)</strong>: Cooling in which
+            liquid flows through cold plates attached to processors and other
+            hot components, rather than relying on air. JUPITER Booster and the
+            June 2026 Green500 leaders use direct liquid-cooled BullSequana
+            XH3000 hardware.<a href="#src-37">[37]</a> See
+            <a href="facilities.html">Facilities</a>.
+          </p>
+          <p>
+            <strong>DPU (Data Processing Unit)</strong>: A programmable network
+            adapter with its own processor cores that offloads networking,
+            storage and security functions from the host. NVIDIA describes its
+            BlueField DPUs as enabling cloud networking, composable storage,
+            zero-trust security and GPU compute elasticity.<a href="#src-40"
+              >[40]</a
+            >
+          </p>
+          <p>
+            <strong>Dragonfly</strong>: A hierarchical network topology in which
+            groups of switches are densely connected internally and each group
+            has direct links to other groups, reducing the number of hops across
+            a large system. Aurora's Slingshot 11 network uses a dragonfly
+            topology with adaptive routing.<a href="#src-39">[39]</a> See
+            <a href="interconnects.html">Interconnects</a>.
+          </p>
+
+          <h2 id="letter-e">E</h2>
+          <p>
+            <strong>Emulated FP64</strong>: Computing FP64-accurate results,
+            typically matrix multiplications, on lower-precision hardware units
+            by splitting operands into slices and combining the partial
+            products. cuBLAS in CUDA 13.0 Update 2 added FP64 matmul emulation
+            on Blackwell INT8 tensor cores.<a href="#src-29">[29]</a> See
+            <a href="scientific-computing.html">Scientific Computing</a>.
+          </p>
+          <p>
+            <strong>Exascale</strong>: Sustained performance of at least 10^18
+            floating-point operations per second, conventionally measured in
+            FP64 on HPL. Frontier was the first system to cross it on HPL, at
+            1.102 Exaflop/s in May 2022.<a href="#src-43">[43]</a> Five systems
+            exceed it on the June 2026 TOP500.<a href="#src-37">[37]</a>
+          </p>
+          <p>
+            <strong>Expert parallelism</strong>: A parallelism strategy for
+            Mixture-of-Experts models that places different experts on different
+            GPUs and routes tokens to them with all-to-all communication. See
+            <a href="training.html">Training at Scale</a>.
+          </p>
+
+          <h2 id="letter-f">F</h2>
+          <p>
+            <strong>Fat tree</strong>: A multi-level switched network topology
+            in which link capacity increases toward the core so that, when fully
+            provisioned, any half of the nodes can talk to the other half at
+            full bandwidth. It is the most common InfiniBand cluster topology.
+            See <a href="interconnects.html">Interconnects</a>.
+          </p>
+          <p>
+            <strong>Fine-tuning</strong>: Continuing to train a pre-trained
+            model on a smaller, task-specific dataset. Full fine-tuning updates
+            all parameters; parameter-efficient methods such as LoRA update a
+            small subset. See <a href="training.html">Training at Scale</a>.
+          </p>
+          <p>
+            <strong>FlashAttention</strong>: An exact attention algorithm that
+            uses tiling to reduce reads and writes between GPU HBM and on-chip
+            SRAM, making attention faster and more memory-efficient without
+            approximation.<a href="#src-11">[11]</a>
+          </p>
+          <p>
+            <strong>FLOPS</strong>: Floating-point operations per second, the
+            standard measure of compute throughput. A FLOPS figure is
+            meaningless without the precision (FP64, BF16, FP4 and so on) and
+            whether it assumes sparsity. See
+            <a href="convergence.html#the-numeric-precision-spectrum"
+              >The Convergence</a
+            >.
+          </p>
+          <p>
+            <strong>FP4</strong>: A 4-bit floating-point format; the common E2M1
+            layout has 1 sign bit, 2 exponent bits and 1 mantissa bit and
+            represents values from about -6 to 6. It is usable in practice only
+            with block scaling, as in MXFP4 or NVFP4.<a href="#src-33">[33]</a>
+          </p>
+          <p>
+            <strong>FP8</strong>: An 8-bit floating-point format with two
+            encodings: E4M3 (4 exponent, 3 mantissa bits) and E5M2 (5 exponent,
+            2 mantissa bits). FP8 training has been shown to match 16-bit
+            results on models up to 175 billion parameters.<a href="#src-34"
+              >[34]</a
+            >
+          </p>
+          <p>
+            <strong>FP16 (half precision)</strong>: The IEEE 754 16-bit format,
+            with 5 exponent bits and 10 mantissa bits. Its narrow range made
+            loss scaling necessary in early mixed-precision training.<a
+              href="#src-36"
+              >[36]</a
+            ><a href="#src-34">[34]</a>
+          </p>
+          <p>
+            <strong>FP32 (single precision)</strong>: The IEEE 754 32-bit
+            format, with 8 exponent bits and 23 stored mantissa bits. It is used
+            for many science codes and for master weights in AI training. See
+            <a href="convergence.html#the-numeric-precision-spectrum"
+              >The Convergence</a
+            >.
+          </p>
+          <p>
+            <strong>FP64 (double precision)</strong>: The IEEE 754 64-bit
+            format, with a 53-bit significand.<a href="#src-29">[29]</a> It is
+            the precision used by HPL and required by many simulation codes for
+            stability and validated results.
+          </p>
+          <p>
+            <strong>FSDP (Fully Sharded Data Parallel)</strong>: PyTorch's
+            implementation of sharded data parallelism, which splits parameters,
+            gradients and optimizer state across data-parallel workers. The
+            PyTorch documentation describes it as inspired by ZeRO Stage 3.<a
+              href="#src-7"
+              >[7]</a
+            >
+            See <a href="training.html">Training at Scale</a>.
+          </p>
+
+          <h2 id="letter-g">G</h2>
+          <p>
+            <strong>GEMM (General Matrix Multiply)</strong>: The BLAS level-3
+            operation C = alpha x A x B + beta x C. Tensor cores and matrix
+            units are built to accelerate it, and it dominates both transformer
+            training and dense linear algebra; DGEMM is the FP64 version.
+          </p>
+          <p>
+            <strong>GPU (Graphics Processing Unit)</strong>: A massively
+            parallel processor, originally for graphics, that is now the
+            dominant accelerator for both AI and HPC. See
+            <a href="accelerators.html">Accelerators</a>.
+          </p>
+          <p>
+            <strong>GPUDirect RDMA</strong>: An NVIDIA technology, introduced
+            with Kepler-class GPUs and CUDA 5.0, that gives third-party PCIe
+            devices such as network adapters a direct path to GPU memory without
+            staging through host memory. The two devices generally must share
+            the same upstream PCIe root complex.<a href="#src-3">[3]</a> See
+            <a href="interconnects.html">Interconnects</a>.
+          </p>
+          <p>
+            <strong>Gradient accumulation</strong>: Summing gradients over
+            several micro-batches before an optimizer step, which gives the
+            effect of a larger batch without the memory cost. See
+            <a href="training.html">Training at Scale</a>.
+          </p>
+          <p>
+            <strong>Green500</strong>: The TOP500's companion ranking by energy
+            efficiency (GFLOPS per watt on HPL). In June 2026 the leader is
+            KAIROS at the University of Toulouse at 73.28 GFLOPS/W.<a
+              href="#src-37"
+              >[37]</a
+            >
+            See <a href="facilities.html">Facilities</a>.
+          </p>
+
+          <h2 id="letter-h">H</h2>
+          <p>
+            <strong>HBM (High Bandwidth Memory)</strong>: Stacked DRAM placed
+            next to the processor on the same package, with a very wide
+            interface. The JEDEC HBM4 standard (JESD270-4, April 2025) defines a
+            2048-bit interface at up to 8 Gb/s for up to 2 TB/s, and stacks up
+            to 64 GB.<a href="#src-27">[27]</a> See
+            <a href="memory-storage.html">Memory and Storage</a>.
+          </p>
+          <p>
+            <strong>HIP</strong>: AMD's C++ GPU programming interface, part of
+            the ROCm stack, designed so that CUDA-style code can be ported to
+            AMD GPUs.<a href="#src-20">[20]</a>
+          </p>
+          <p>
+            <strong>HPCG (High Performance Conjugate Gradients)</strong>: A
+            benchmark that measures performance on sparse, memory-bound access
+            patterns closer to real solvers than HPL. June 2026 scores are
+            roughly one percent of the leading systems' HPL scores.<a
+              href="#src-37"
+              >[37]</a
+            >
+          </p>
+          <p>
+            <strong>HPL (High Performance Linpack)</strong>: The benchmark used
+            to rank the TOP500: solving a dense linear system in FP64. It
+            rewards peak FP64 matrix throughput and a well-tuned network.<a
+              href="#src-37"
+              >[37]</a
+            >
+          </p>
+          <p>
+            <strong>HPL-MxP</strong>: A mixed-precision variant of HPL (formerly
+            HPL-AI) that performs the LU factorization in low precision and uses
+            iterative refinement to recover FP64 accuracy.<a href="#src-30"
+              >[30]</a
+            >
+            El Capitan leads the June 2026 list at 16.7 EF/s.<a href="#src-37"
+              >[37]</a
+            >
+          </p>
+
+          <h2 id="letter-i">I</h2>
+          <p>
+            <strong>InfiniBand</strong>: An industry-standard switched fabric
+            maintained by the InfiniBand Trade Association, providing reliable
+            messaging and RDMA without software in the data path.<a
+              href="#src-22"
+              >[22]</a
+            >
+            See <a href="interconnects.html">Interconnects</a>.
+          </p>
+          <p>
+            <strong>Inference</strong>: Running a trained model to produce
+            outputs (predictions, generated tokens) for new inputs. At scale,
+            inference is a serving problem dominated by latency, memory
+            bandwidth and KV cache capacity. See
+            <a href="inference.html">Inference at Scale</a>.
+          </p>
+          <p>
+            <strong>Iterative refinement</strong>: A numerical technique that
+            solves a system in low precision, then repeatedly computes the
+            residual in high precision and corrects the solution until it
+            reaches the desired accuracy. It underlies HPL-MxP.<a href="#src-30"
+              >[30]</a
+            >
+          </p>
+
+          <h2 id="letter-k">K</h2>
+          <p>
+            <strong>KV cache (key-value cache)</strong>: The stored attention
+            keys and values for all previous tokens of each sequence during LLM
+            inference, which avoids recomputing them at every step. It is large
+            and grows and shrinks dynamically, which makes its memory management
+            a central serving problem.<a href="#src-4">[4]</a> See
+            <a href="inference.html">Inference at Scale</a>.
+          </p>
+          <p>
+            <strong>Kubernetes</strong>: A portable, extensible, open-source
+            platform for managing containerized workloads and services,
+            open-sourced by Google in 2014.<a href="#src-18">[18]</a> In
+            research computing it is used mainly for serving and services
+            alongside batch schedulers. See
+            <a href="scheduling.html">Scheduling</a>.
+          </p>
+
+          <h2 id="letter-l">L</h2>
+          <p>
+            <strong>LLM (Large Language Model)</strong>: A neural network,
+            almost always transformer-based, trained on large text corpora to
+            predict the next token. See <a href="training.html">Training</a> and
+            <a href="inference.html">Inference</a>.
+          </p>
+          <p>
+            <strong>LoRA (Low-Rank Adaptation)</strong>: A parameter-efficient
+            fine-tuning method that freezes the pre-trained weights and trains
+            small low-rank matrices injected into each layer. For GPT-3 175B,
+            the authors report 10,000x fewer trainable parameters and 3x lower
+            GPU memory than full fine-tuning with Adam.<a href="#src-12"
+              >[12]</a
+            >
+          </p>
+          <p>
+            <strong>Lustre</strong>: An open-source parallel file system widely
+            used on leadership-class HPC systems.<a href="#src-44">[44]</a> See
+            <a href="memory-storage.html">Memory and Storage</a>.
+          </p>
+
+          <h2 id="letter-m">M</h2>
+          <p>
+            <strong>Memory wall</strong>: The growing gap between processor
+            compute throughput and memory bandwidth, a term coined by Wulf and
+            McKee in 1995. Gholami and colleagues report peak server FLOPS
+            growing 3.0x every two years versus 1.6x for DRAM bandwidth.<a
+              href="#src-31"
+              >[31]</a
+            >
+          </p>
+          <p>
+            <strong>MIG (Multi-Instance GPU)</strong>: An NVIDIA feature,
+            starting with the Ampere architecture, that partitions one GPU into
+            up to seven isolated instances, each with dedicated compute, L2
+            cache and memory paths.<a href="#src-15">[15]</a> See
+            <a href="scheduling.html">Scheduling</a>.
+          </p>
+          <p>
+            <strong>Mixed precision</strong>: Using lower-precision formats for
+            most arithmetic while keeping selected values (master weights,
+            accumulations) in higher precision. The original recipe keeps an
+            FP32 weight copy, applies loss scaling and accumulates
+            half-precision products into FP32.<a href="#src-36">[36]</a>
+          </p>
+          <p>
+            <strong>MLPerf</strong>: The benchmark suites run by the MLCommons
+            consortium that measure AI training time-to-accuracy and inference
+            throughput on fixed reference models. MLPerf began in 2018.<a
+              href="#src-32"
+              >[32]</a
+            >
+          </p>
+          <p>
+            <strong>MoE (Mixture of Experts)</strong>: A model architecture in
+            which a trainable gating network routes each input to a small subset
+            of many expert sub-networks, so total parameters can be very large
+            while per-token compute stays modest.<a href="#src-10">[10]</a>
+            DeepSeek V3, an MLPerf Training benchmark, has 671 billion total
+            parameters with 37 billion active per token.<a href="#src-32"
+              >[32]</a
+            >
+          </p>
+          <p>
+            <strong>MPI (Message Passing Interface)</strong>: The standard API
+            for message passing between processes in parallel programs,
+            maintained by the MPI Forum. MPI 5.0 was approved on June 5, 2025.<a
+              href="#src-25"
+              >[25]</a
+            >
+            See <a href="scientific-computing.html">Scientific Computing</a>.
+          </p>
+          <p>
+            <strong>MPS (Multi-Process Service)</strong>: An NVIDIA facility
+            that lets multiple processes share one GPU concurrently through a
+            common server process, improving utilization for small jobs without
+            MIG's hardware partitioning. See
+            <a href="scheduling.html">Scheduling</a>.
+          </p>
+          <p>
+            <strong>MX (Microscaling) formats</strong>: Narrow data formats in
+            which a small block of values shares one scale factor. The OCP MX
+            specification v1.0 defines MXFP8, MXFP6, MXFP4 and MXINT8; MXFP4
+            uses a power-of-two scale per 32-value block.<a href="#src-16"
+              >[16]</a
+            ><a href="#src-33">[33]</a>
+          </p>
+
+          <h2 id="letter-n">N</h2>
+          <p>
+            <strong>NCCL (NVIDIA Collective Communications Library)</strong>: A
+            topology-aware library of GPU collective and point-to-point
+            communication primitives that runs over PCIe, NVLink, InfiniBand
+            verbs and IP sockets. Its API closely follows MPI collectives, with
+            an added CUDA stream argument.<a href="#src-1">[1]</a> See
+            <a href="interconnects.html">Interconnects</a>.
+          </p>
+          <p>
+            <strong>NUMA (Non-Uniform Memory Access)</strong>: A memory
+            architecture in which access time depends on which socket or device
+            the memory is attached to. On El Capitan nodes, each APU socket with
+            its 128 GB defines a NUMA domain.<a href="#src-38">[38]</a>
+          </p>
+          <p>
+            <strong>NVFP4</strong>: NVIDIA's 4-bit floating-point format for
+            Blackwell and later GPUs: E2M1 values with an FP8 (E4M3) scale per
+            16-value block plus an FP32 per-tensor scale, about 4.5 bits per
+            value.<a href="#src-33">[33]</a>
+          </p>
+          <p>
+            <strong>NVLink</strong>: NVIDIA's high-bandwidth GPU-to-GPU
+            interconnect for scale-up. Fifth-generation NVLink (Blackwell)
+            provides 1,800 GB/s per GPU; sixth-generation (Rubin, preliminary
+            specification) lists 3,600 GB/s.<a href="#src-28">[28]</a> See
+            <a href="interconnects.html">Interconnects</a>.
+          </p>
+          <p>
+            <strong>NVSwitch (NVLink Switch)</strong>: The switch chip that
+            connects many NVLinks so that every GPU in a domain can talk to
+            every other at full NVLink speed. In an NVL72 rack it connects 72
+            GPUs in an all-to-all topology, and it includes SHARP engines for
+            in-network reductions.<a href="#src-28">[28]</a>
+          </p>
+
+          <h2 id="letter-o">O</h2>
+          <p>
+            <strong>OpenMP</strong>: A directive-based API for shared-memory
+            parallel programming in C, C++ and Fortran, now also used to offload
+            loops to GPUs. It is supported in the ROCm and oneAPI stacks.<a
+              href="#src-20"
+              >[20]</a
+            ><a href="#src-39">[39]</a>
+          </p>
+          <p>
+            <strong>Ozaki scheme</strong>: An accurate matrix multiplication
+            method, proposed by Ozaki and colleagues in 2012, that computes FP64
+            matrix products using lower-precision units such as FP16, INT8 or
+            FP8 tensor cores.<a href="#src-24">[24]</a> See
+            <a href="scientific-computing.html">Scientific Computing</a>.
+          </p>
+
+          <h2 id="letter-p">P</h2>
+          <p>
+            <strong>PagedAttention</strong>: An attention algorithm, inspired by
+            virtual memory paging in operating systems, that stores the KV cache
+            in non-contiguous blocks to nearly eliminate memory waste. The vLLM
+            authors report 2-4x higher throughput than prior systems at the same
+            latency.<a href="#src-4">[4]</a>
+          </p>
+          <p>
+            <strong>Parallel file system</strong>: A file system that stripes
+            data across many storage servers so that many clients can read and
+            write concurrently at high aggregate bandwidth. Examples include
+            Lustre, IBM Storage Scale (GPFS) and DAOS. See
+            <a href="memory-storage.html">Memory and Storage</a>.
+          </p>
+          <p>
+            <strong>PEFT (Parameter-Efficient Fine-Tuning)</strong>: The family
+            of fine-tuning methods, including LoRA, that train only a small
+            fraction of a model's parameters. See
+            <a href="training.html">Training at Scale</a>.
+          </p>
+          <p>
+            <strong>Pipeline parallelism</strong>: A model-parallel strategy
+            that places consecutive groups of layers on different accelerators
+            and streams micro-batches through them. GPipe introduced it as a
+            general library for any network expressible as a sequence of
+            layers.<a href="#src-9">[9]</a>
+          </p>
+          <p>
+            <strong>Prefill</strong>: The first phase of LLM inference, in which
+            the whole input prompt is processed in parallel to populate the KV
+            cache. It is typically compute-bound, unlike decode; vLLM supports
+            chunked prefill to interleave it with decoding.<a href="#src-5"
+              >[5]</a
+            >
+          </p>
+          <p>
+            <strong>PUE (Power Usage Effectiveness)</strong>: Total facility
+            power divided by IT equipment power. A value of 1.0 would mean every
+            watt goes to computing. See
+            <a href="facilities.html">Facilities</a>.
+          </p>
+
+          <h2 id="letter-q">Q</h2>
+          <p>
+            <strong>Quantization</strong>: Converting model weights and/or
+            activations to a lower-precision format (INT8, FP8, FP4) to reduce
+            memory footprint and increase throughput. NVIDIA reports 1 percent
+            or less accuracy loss when quantizing DeepSeek-R1-0528 from FP8 to
+            NVFP4.<a href="#src-33">[33]</a> See
+            <a href="inference.html">Inference at Scale</a>.
+          </p>
+
+          <h2 id="letter-r">R</h2>
+          <p>
+            <strong>RAG (Retrieval-Augmented Generation)</strong>: An LLM
+            application pattern that retrieves relevant documents from a search
+            index or vector database and adds them to the prompt. MLPerf
+            Inference v6.1 added an end-to-end RAG benchmark.<a href="#src-41"
+              >[41]</a
+            >
+          </p>
+          <p>
+            <strong>RCCL</strong>: AMD's ROCm collective communication library,
+            the counterpart to NCCL for AMD GPUs. See
+            <a href="interconnects.html">Interconnects</a>.
+          </p>
+          <p>
+            <strong>RDMA (Remote Direct Memory Access)</strong>: Moving data
+            directly between the memory of two machines through the network
+            adapters, without involving either host's operating system in the
+            data path. It is the basis of InfiniBand and RoCE.<a href="#src-22"
+              >[22]</a
+            >
+          </p>
+          <p>
+            <strong>Reduce-scatter</strong>: A collective that performs a
+            reduction and then splits the result into equal blocks, one per
+            rank. It is the first half of a ring all-reduce and a key operation
+            in sharded training.<a href="#src-2">[2]</a>
+          </p>
+          <p>
+            <strong>Ridge point</strong>: On a roofline plot, the arithmetic
+            intensity at which a processor shifts from memory-bound to
+            compute-bound, equal to peak FLOPS divided by memory bandwidth. See
+            <a href="convergence.html#the-roofline-model-and-the-memory-wall"
+              >The Convergence</a
+            >.
+          </p>
+          <p>
+            <strong>RoCE (RDMA over Converged Ethernet)</strong>: A protocol
+            that carries RDMA over Ethernet networks. Its specifications are
+            maintained by the InfiniBand Trade Association.<a href="#src-23"
+              >[23]</a
+            >
+            See <a href="interconnects.html">Interconnects</a>.
+          </p>
+          <p>
+            <strong>ROCm</strong>: AMD's mostly open-source software stack for
+            programming AMD GPUs, providing compilers, libraries, debuggers,
+            profilers and runtimes for HIP, OpenCL and OpenMP.<a href="#src-20"
+              >[20]</a
+            >
+            See <a href="systems-software.html">Systems Software</a>.
+          </p>
+          <p>
+            <strong>Roofline model</strong>: A visual performance model,
+            introduced by Williams, Waterman and Patterson, that bounds
+            attainable performance by peak compute and by memory bandwidth times
+            arithmetic intensity.<a href="#src-6">[6]</a> See
+            <a href="convergence.html#the-roofline-model-and-the-memory-wall"
+              >The Convergence</a
+            >.
+          </p>
+
+          <h2 id="letter-s">S</h2>
+          <p>
+            <strong>Scale-out</strong>: Adding capacity by connecting more nodes
+            over a network such as InfiniBand or Ethernet. See
+            <a href="interconnects.html">Interconnects</a>.
+          </p>
+          <p>
+            <strong>Scale-up</strong>: Adding capacity within a single tightly
+            coupled domain, such as GPUs joined by NVLink inside a node or rack,
+            where bandwidth is much higher and latency much lower than on the
+            scale-out network. See
+            <a href="interconnects.html">Interconnects</a>.
+          </p>
+          <p>
+            <strong
+              >SHARP (Scalable Hierarchical Aggregation and Reduction
+              Protocol)</strong
+            >: NVIDIA's in-network computing technology that performs reductions
+            inside switches rather than on endpoints. NVLink Switch chips
+            include SHARP engines for in-network reductions and multicast.<a
+              href="#src-28"
+              >[28]</a
+            >
+          </p>
+          <p>
+            <strong>Slingshot</strong>: HPE Cray's high-performance interconnect
+            used on El Capitan, Frontier and Aurora. On Aurora, each Slingshot
+            switch provides 25.6 Tb/s across 64 ports of 200 Gb/s.<a
+              href="#src-39"
+              >[39]</a
+            >
+          </p>
+          <p>
+            <strong>Slurm</strong>: An open-source cluster management and job
+            scheduling system for Linux clusters. A central slurmctld daemon
+            manages resources and the queue, and a slurmd daemon on each node
+            runs work.<a href="#src-17">[17]</a> See
+            <a href="scheduling.html">Scheduling</a>.
+          </p>
+          <p>
+            <strong>Sparsity (structured sparsity)</strong>: Hardware support
+            for skipping zero values in a fixed pattern of weights. NVIDIA
+            introduced it with Ampere, doubling tensor core throughput for
+            structured sparse matrices, which is why vendor spec sheets often
+            show separate "sparse" and "dense" figures.<a href="#src-14"
+              >[14]</a
+            >
+          </p>
+          <p>
+            <strong>Speculative decoding</strong>: An inference technique in
+            which a small draft model proposes several tokens that the large
+            model verifies in parallel, producing identical output distributions
+            faster. The original paper reports 2-3x acceleration on T5-XXL.<a
+              href="#src-13"
+              >[13]</a
+            >
+          </p>
+          <p>
+            <strong>Surrogate model</strong>: A machine-learned model trained to
+            approximate an expensive simulation or physical process. GraphCast,
+            trained on reanalysis data, produces 10-day global weather forecasts
+            at 0.25 degree resolution in under one minute.<a href="#src-45"
+              >[45]</a
+            >
+            See <a href="scientific-computing.html">Scientific Computing</a>.
+          </p>
+          <p>
+            <strong>Systolic array</strong>: A grid of multiply-accumulate units
+            through which data flows rhythmically, each unit passing partial
+            results to its neighbor. Google's TPUs use systolic arrays to
+            accelerate matrix multiplication.<a href="#src-35">[35]</a>
+          </p>
+
+          <h2 id="letter-t">T</h2>
+          <p>
+            <strong>Tensor core</strong>: NVIDIA's name for the
+            matrix-multiply-accumulate units in its GPUs; AMD calls the
+            equivalent matrix cores. Each generation adds formats: Ampere's
+            third-generation tensor cores added TF32, BF16 and FP64 support.<a
+              href="#src-14"
+              >[14]</a
+            >
+            See <a href="accelerators.html">Accelerators</a>.
+          </p>
+          <p>
+            <strong>Tensor parallelism</strong>: A model-parallel strategy that
+            splits individual layers (weight matrices) across GPUs, requiring
+            communication inside each layer. Megatron-LM introduced the widely
+            used intra-layer approach for transformers.<a href="#src-8">[8]</a>
+            See <a href="training.html">Training at Scale</a>.
+          </p>
+          <p>
+            <strong>TF32 (TensorFloat-32)</strong>: An NVIDIA tensor core math
+            mode with 8 exponent bits (FP32 range) and 10 mantissa bits (FP16
+            precision). It reads and writes FP32 data, so it can accelerate FP32
+            code with no data format changes.<a href="#src-14">[14]</a>
+          </p>
+          <p>
+            <strong>TFLOPS / PFLOPS / EFLOPS</strong>: 10^12, 10^15 and 10^18
+            floating-point operations per second. Always check the precision and
+            sparsity assumption behind the number. See
+            <a href="accelerators.html">Accelerators</a>.
+          </p>
+          <p>
+            <strong>Token</strong>: The unit of text (a word piece, character
+            group or symbol) that a language model reads and generates.
+            Inference throughput is reported in tokens per second.
+          </p>
+          <p>
+            <strong>TOP500</strong>: The twice-yearly (June and November)
+            ranking of the world's most powerful supercomputers by HPL, begun in
+            1993.<a href="#src-37">[37]</a> See
+            <a href="convergence.html#the-two-scoreboards">The Convergence</a>.
+          </p>
+          <p>
+            <strong>TPU (Tensor Processing Unit)</strong>: Google's custom AI
+            accelerator, built around systolic arrays and the bfloat16 format,
+            available through Google Cloud.<a href="#src-35">[35]</a> See
+            <a href="accelerators.html">Accelerators</a> and
+            <a href="cloud.html">Cloud</a>.
+          </p>
+          <p>
+            <strong>Transformer</strong>: The neural network architecture,
+            introduced in 2017, built entirely on attention mechanisms without
+            recurrence or convolution. It underlies nearly all current LLMs.<a
+              href="#src-46"
+              >[46]</a
+            >
+          </p>
+
+          <h2 id="letter-u">U</h2>
+          <p>
+            <strong>UALink (Ultra Accelerator Link)</strong>: An open scale-up
+            interconnect standard for accelerator-to-accelerator and
+            accelerator-to-switch communication. The UALink 200G 1.0
+            specification defines 200G per lane connections for up to 1,024
+            accelerators in a pod.<a href="#src-49">[49]</a> See
+            <a href="interconnects.html">Interconnects</a>.
+          </p>
+          <p>
+            <strong>Ultra Ethernet (UEC)</strong>: An Ethernet-based
+            communication stack for AI and HPC defined by the Ultra Ethernet
+            Consortium, covering transport, congestion control and RDMA across
+            NICs, switches, optics and cables. Specification 1.0 was released on
+            June 11, 2025.<a href="#src-48">[48]</a> See
+            <a href="interconnects.html">Interconnects</a>.
+          </p>
+
+          <h2 id="letter-v">V</h2>
+          <p>
+            <strong>vLLM</strong>: An open-source LLM inference and serving
+            engine, originally developed at UC Berkeley's Sky Computing Lab,
+            built around PagedAttention, continuous batching and prefix caching,
+            with an OpenAI-compatible API server and support for NVIDIA and AMD
+            GPUs.<a href="#src-5">[5]</a> See
+            <a href="inference.html">Inference at Scale</a>.
+          </p>
+
+          <h2 id="letter-x">X</h2>
+          <p>
+            <strong>XDR InfiniBand</strong>: The InfiniBand generation defined
+            in IBTA Volume 1 Release 1.7 (October 2023), with 200 Gb/s per lane
+            SerDes, 800 Gb/s per port and 1.6 Tb/s switch-to-switch links. The
+            preceding NDR generation runs at 400 Gb/s.<a href="#src-23">[23]</a
+            ><a href="#src-22">[22]</a>
+          </p>
+
+          <h2 id="letter-z">Z</h2>
+          <p>
+            <strong>ZeRO (Zero Redundancy Optimizer)</strong>: A family of
+            memory optimizations from Microsoft DeepSpeed that eliminates
+            redundant copies of optimizer state, gradients and parameters across
+            data-parallel workers, in progressive stages. Its authors trained
+            models over 100 billion parameters on 400 GPUs.<a href="#src-47"
+              >[47]</a
+            >
+            See <a href="training.html">Training at Scale</a>.
+          </p>
+
+          <h2 id="key-takeaways">Key Takeaways</h2>
+          <ul>
+            <li>
+              Many "new" AI terms map directly onto old HPC ideas: collectives
+              are MPI collectives, sharding is domain decomposition, and
+              checkpointing is restart files.
+            </li>
+            <li>
+              Any FLOPS figure needs three qualifiers: precision, dense or
+              sparse, and per device or per system.
+            </li>
+            <li>
+              Scale-up (NVLink, UALink) and scale-out (InfiniBand, Ethernet,
+              Ultra Ethernet) are different networks with different jobs; know
+              which one a term refers to.
+            </li>
+            <li>
+              Memory terms (HBM, KV cache, arithmetic intensity, memory wall)
+              explain more performance problems than compute terms do.
+            </li>
+            <li>
+              Precision terms (FP64 through FP4, MX, NVFP4, emulated FP64) now
+              decide whether a workload fits the hardware at all.
+            </li>
+            <li>
+              When a term here is unfamiliar to a user, point them to the linked
+              chapter rather than a vendor blog.
+            </li>
+          </ul>
+
+          <h2 id="sources">Sources</h2>
+          <ol class="sources">
+            <li id="src-1">
+              <a
+                href="https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/overview.html"
+                target="_blank"
+                rel="noopener"
+                >Overview of NCCL (NVIDIA documentation)</a
+              >
+            </li>
+            <li id="src-2">
+              <a
+                href="https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/usage/collectives.html"
+                target="_blank"
+                rel="noopener"
+                >NCCL Collective Operations (NVIDIA documentation)</a
+              >
+            </li>
+            <li id="src-3">
+              <a
+                href="https://docs.nvidia.com/cuda/gpudirect-rdma/index.html"
+                target="_blank"
+                rel="noopener"
+                >GPUDirect RDMA Overview (NVIDIA documentation)</a
+              >
+            </li>
+            <li id="src-4">
+              <a
+                href="https://arxiv.org/abs/2309.06180"
+                target="_blank"
+                rel="noopener"
+                >Kwon et al., Efficient Memory Management for Large Language
+                Model Serving with PagedAttention (arXiv / SOSP, 2023)</a
+              >
+            </li>
+            <li id="src-5">
+              <a
+                href="https://docs.vllm.ai/en/latest/"
+                target="_blank"
+                rel="noopener"
+                >Welcome to vLLM (vLLM documentation)</a
+              >
+            </li>
+            <li id="src-6">
+              <a
+                href="https://people.eecs.berkeley.edu/~kubitron/cs252/handouts/papers/RooflineVyNoYellow.pdf"
+                target="_blank"
+                rel="noopener"
+                >Williams, Waterman and Patterson, Roofline: An Insightful
+                Visual Performance Model (Communications of the ACM, 2009)</a
+              >
+            </li>
+            <li id="src-7">
+              <a
+                href="https://docs.pytorch.org/docs/2.14/fsdp.html"
+                target="_blank"
+                rel="noopener"
+                >FullyShardedDataParallel (PyTorch documentation)</a
+              >
+            </li>
+            <li id="src-8">
+              <a
+                href="https://arxiv.org/abs/1909.08053"
+                target="_blank"
+                rel="noopener"
+                >Shoeybi et al., Megatron-LM: Training Multi-Billion Parameter
+                Language Models Using Model Parallelism (arXiv, 2019)</a
+              >
+            </li>
+            <li id="src-9">
+              <a
+                href="https://arxiv.org/abs/1811.06965"
+                target="_blank"
+                rel="noopener"
+                >Huang et al., GPipe: Efficient Training of Giant Neural
+                Networks using Pipeline Parallelism (arXiv, 2018)</a
+              >
+            </li>
+            <li id="src-10">
+              <a
+                href="https://arxiv.org/abs/1701.06538"
+                target="_blank"
+                rel="noopener"
+                >Shazeer et al., Outrageously Large Neural Networks: The
+                Sparsely-Gated Mixture-of-Experts Layer (arXiv, 2017)</a
+              >
+            </li>
+            <li id="src-11">
+              <a
+                href="https://arxiv.org/abs/2205.14135"
+                target="_blank"
+                rel="noopener"
+                >Dao et al., FlashAttention: Fast and Memory-Efficient Exact
+                Attention with IO-Awareness (arXiv, 2022)</a
+              >
+            </li>
+            <li id="src-12">
+              <a
+                href="https://arxiv.org/abs/2106.09685"
+                target="_blank"
+                rel="noopener"
+                >Hu et al., LoRA: Low-Rank Adaptation of Large Language Models
+                (arXiv, 2021)</a
+              >
+            </li>
+            <li id="src-13">
+              <a
+                href="https://arxiv.org/abs/2211.17192"
+                target="_blank"
+                rel="noopener"
+                >Leviathan et al., Fast Inference from Transformers via
+                Speculative Decoding (arXiv, 2022)</a
+              >
+            </li>
+            <li id="src-14">
+              <a
+                href="https://developer.nvidia.com/blog/nvidia-ampere-architecture-in-depth/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA Ampere Architecture In-Depth (NVIDIA Technical Blog,
+                2020)</a
+              >
+            </li>
+            <li id="src-15">
+              <a
+                href="https://docs.nvidia.com/datacenter/tesla/mig-user-guide/introduction.html"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA Multi-Instance GPU User Guide: Introduction (NVIDIA
+                documentation)</a
+              >
+            </li>
+            <li id="src-16">
+              <a
+                href="https://www.opencompute.org/blog/amd-arm-intel-meta-microsoft-nvidia-and-qualcomm-standardize-next-generation-narrow-precision-data-formats-for-ai"
+                target="_blank"
+                rel="noopener"
+                >Industry Leaders Standardize Next-Generation Narrow Precision
+                Data Formats for AI (Open Compute Project, 2023)</a
+              >
+            </li>
+            <li id="src-17">
+              <a
+                href="https://slurm.schedmd.com/overview.html"
+                target="_blank"
+                rel="noopener"
+                >Slurm Workload Manager Overview (SchedMD)</a
+              >
+            </li>
+            <li id="src-18">
+              <a
+                href="https://kubernetes.io/docs/concepts/overview/"
+                target="_blank"
+                rel="noopener"
+                >Kubernetes Overview (Kubernetes documentation)</a
+              >
+            </li>
+            <li id="src-19">
+              <a
+                href="https://apptainer.org/docs/user/latest/introduction.html"
+                target="_blank"
+                rel="noopener"
+                >Introduction to Apptainer (Apptainer User Guide)</a
+              >
+            </li>
+            <li id="src-20">
+              <a
+                href="https://rocm.docs.amd.com/en/latest/what-is-rocm.html"
+                target="_blank"
+                rel="noopener"
+                >What is ROCm? (AMD ROCm documentation, 2026)</a
+              >
+            </li>
+            <li id="src-21">
+              <a
+                href="https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html"
+                target="_blank"
+                rel="noopener"
+                >CUDA C++ Programming Guide: Overview (NVIDIA documentation)</a
+              >
+            </li>
+            <li id="src-22">
+              <a
+                href="https://www.infinibandta.org/about-infiniband/"
+                target="_blank"
+                rel="noopener"
+                >About InfiniBand (InfiniBand Trade Association)</a
+              >
+            </li>
+            <li id="src-23">
+              <a
+                href="https://infinibandta.org/ibta-unveils-xdr-infiniband-specification-to-enable-the-next-generation-of-ai-and-scientific-computing/"
+                target="_blank"
+                rel="noopener"
+                >IBTA Unveils XDR InfiniBand Specification (InfiniBand Trade
+                Association, 2023)</a
+              >
+            </li>
+            <li id="src-24">
+              <a
+                href="https://arxiv.org/abs/2508.00441"
+                target="_blank"
+                rel="noopener"
+                >DGEMM without FP64 Arithmetic: Using FP64 Emulation and FP8
+                Tensor Cores with Ozaki Scheme (arXiv, 2025)</a
+              >
+            </li>
+            <li id="src-25">
+              <a
+                href="https://www.mpi-forum.org/docs/"
+                target="_blank"
+                rel="noopener"
+                >MPI Documents (MPI Forum)</a
+              >
+            </li>
+            <li id="src-26">
+              <a
+                href="https://computeexpresslink.org/wp-content/uploads/2025/11/CXL_4.0-White-Paper_FINAL.pdf"
+                target="_blank"
+                rel="noopener"
+                >Introducing Compute Express Link (CXL) 4.0 (CXL Consortium,
+                2025)</a
+              >
+            </li>
+            <li id="src-27">
+              <a
+                href="https://www.jedec.org/news/pressreleases/jedec%C2%AE-and-industry-leaders-collaborate-release-jesd270-4-hbm4-standard-advancing"
+                target="_blank"
+                rel="noopener"
+                >JEDEC Releases JESD270-4 HBM4 Standard (JEDEC, 2025)</a
+              >
+            </li>
+            <li id="src-28">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/nvlink/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA NVLink and NVLink Switch (NVIDIA)</a
+              >
+            </li>
+            <li id="src-29">
+              <a
+                href="https://developer.nvidia.com/blog/unlocking-tensor-core-performance-with-floating-point-emulation-in-cublas/"
+                target="_blank"
+                rel="noopener"
+                >Unlocking Tensor Core Performance with Floating Point Emulation
+                in cuBLAS (NVIDIA Technical Blog, 2025)</a
+              >
+            </li>
+            <li id="src-30">
+              <a
+                href="https://doi.org/10.48550/arxiv.2509.19618"
+                target="_blank"
+                rel="noopener"
+                >HPL-MxP Benchmark: Mixed-Precision Algorithms, Iterative
+                Refinement, and Scalable Data Generators (arXiv, 2025)</a
+              >
+            </li>
+            <li id="src-31">
+              <a
+                href="https://arxiv.org/abs/2403.14123"
+                target="_blank"
+                rel="noopener"
+                >Gholami et al., AI and Memory Wall (arXiv, 2024)</a
+              >
+            </li>
+            <li id="src-32">
+              <a
+                href="https://mlcommons.org/2026/06/mlperf-training-v6-0-results/"
+                target="_blank"
+                rel="noopener"
+                >MLCommons Releases MLPerf Training v6.0 Results (MLCommons,
+                2026)</a
+              >
+            </li>
+            <li id="src-33">
+              <a
+                href="https://developer.nvidia.com/blog/introducing-nvfp4-for-efficient-and-accurate-low-precision-inference/"
+                target="_blank"
+                rel="noopener"
+                >Introducing NVFP4 for Efficient and Accurate Low-Precision
+                Inference (NVIDIA Technical Blog, 2025)</a
+              >
+            </li>
+            <li id="src-34">
+              <a
+                href="https://arxiv.org/abs/2209.05433"
+                target="_blank"
+                rel="noopener"
+                >Micikevicius et al., FP8 Formats for Deep Learning (arXiv,
+                2022)</a
+              >
+            </li>
+            <li id="src-35">
+              <a
+                href="https://cloud.google.com/blog/products/ai-machine-learning/bfloat16-the-secret-to-high-performance-on-cloud-tpus"
+                target="_blank"
+                rel="noopener"
+                >BFloat16: The secret to high performance on Cloud TPUs (Google
+                Cloud, 2019)</a
+              >
+            </li>
+            <li id="src-36">
+              <a
+                href="https://arxiv.org/abs/1710.03740"
+                target="_blank"
+                rel="noopener"
+                >Micikevicius et al., Mixed Precision Training (arXiv, 2017)</a
+              >
+            </li>
+            <li id="src-37">
+              <a
+                href="https://top500.org/news/lineshine-debuts-no-1-top500-enters-new-global-exascale-era/"
+                target="_blank"
+                rel="noopener"
+                >LineShine Debuts at No. 1 as the TOP500 Enters a New Global
+                Exascale Era (TOP500, 2026)</a
+              >
+            </li>
+            <li id="src-38">
+              <a
+                href="https://hpc.llnl.gov/documentation/user-guides/using-el-capitan-systems/hardware-overview"
+                target="_blank"
+                rel="noopener"
+                >Using El Capitan Systems: Hardware Overview (Lawrence Livermore
+                National Laboratory)</a
+              >
+            </li>
+            <li id="src-39">
+              <a
+                href="https://alcf.anl.gov/aurora"
+                target="_blank"
+                rel="noopener"
+                >Aurora system specifications (Argonne Leadership Computing
+                Facility)</a
+              >
+            </li>
+            <li id="src-40">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/hgx/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA HGX Platform (NVIDIA)</a
+              >
+            </li>
+            <li id="src-41">
+              <a
+                href="https://mlcommons.org/2026/09/chairs-mlperf-inference-v6-1/"
+                target="_blank"
+                rel="noopener"
+                >Where the Industry Is Investing: A Look at MLPerf Inference
+                v6.1 (MLCommons, 2026)</a
+              >
+            </li>
+            <li id="src-42">
+              <a
+                href="https://docs.daos.io/latest/"
+                target="_blank"
+                rel="noopener"
+                >DAOS v2.6 documentation (DAOS project)</a
+              >
+            </li>
+            <li id="src-43">
+              <a
+                href="https://www.top500.org/news/ornls-frontier-first-to-break-the-exaflop-ceiling"
+                target="_blank"
+                rel="noopener"
+                >ORNL's Frontier First to Break the Exaflop Ceiling (TOP500,
+                2022)</a
+              >
+            </li>
+            <li id="src-44">
+              <a href="https://www.lustre.org/" target="_blank" rel="noopener"
+                >The Lustre File System (lustre.org)</a
+              >
+            </li>
+            <li id="src-45">
+              <a
+                href="https://arxiv.org/abs/2212.12794"
+                target="_blank"
+                rel="noopener"
+                >Lam et al., GraphCast: Learning skillful medium-range global
+                weather forecasting (arXiv / Science, 2023)</a
+              >
+            </li>
+            <li id="src-46">
+              <a
+                href="https://arxiv.org/abs/1706.03762"
+                target="_blank"
+                rel="noopener"
+                >Vaswani et al., Attention Is All You Need (arXiv, 2017)</a
+              >
+            </li>
+            <li id="src-47">
+              <a
+                href="https://arxiv.org/abs/1910.02054"
+                target="_blank"
+                rel="noopener"
+                >Rajbhandari et al., ZeRO: Memory Optimizations Toward Training
+                Trillion Parameter Models (arXiv, 2019)</a
+              >
+            </li>
+            <li id="src-48">
+              <a
+                href="https://ultraethernet.org/ultra-ethernet-consortium-uec-launches-specification-1-0-transforming-ethernet-for-ai-and-hpc-at-scale/"
+                target="_blank"
+                rel="noopener"
+                >Ultra Ethernet Consortium Launches Specification 1.0 (Ultra
+                Ethernet Consortium, 2025)</a
+              >
+            </li>
+            <li id="src-49">
+              <a
+                href="https://ualinkconsortium.org/specification/"
+                target="_blank"
+                rel="noopener"
+                >UALink Specifications (UALink Consortium)</a
+              >
+            </li>
+          </ol>
+          <nav class="doc-pager" aria-label="Chapter navigation">
+            <a class="pager-prev" href="linux.html"
+              ><span>Previous</span>Linux Essentials</a
+            >
+          </nav>
+        </article>
+      </div>
+    </main>
+
+    <footer class="section-dark">
+      <div class="container text-center">
+        <p class="footer-note">
+          2026 edition |
+          <a href="index.html" class="subtle-link">Field Manual</a> |
+          <a href="../index.html" class="subtle-link"
+            >charles-forsyth.github.io</a
+          >
+        </p>
+      </div>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+      document.querySelectorAll('pre code').forEach(function (el) {
+        if (el.className === 'c++') el.className = 'language-cpp';
+        else if (el.className && el.className.indexOf('language-') !== 0)
+          el.className = 'language-' + el.className;
+        hljs.highlightElement(el);
+      });
+    </script>
+  </body>
+</html>

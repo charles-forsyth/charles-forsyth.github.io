@@ -1,0 +1,1494 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Power, Cooling and Facilities | Field Manual</title>
+    <meta
+      name="description"
+      content="What changed when GPU racks went from 10 kW to more than 130 kW, and how to plan power, cooling, floor, water and procurement for your first liquid-cooled systems."
+    />
+    <link
+      rel="canonical"
+      href="https://charles-forsyth.github.io/handbook/facilities.html"
+    />
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="handbook.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
+    />
+  </head>
+  <body>
+    <header class="hero doc-hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="doc-kicker">
+            <i class="fas fa-temperature-low"></i> AI + HPC Field Manual
+          </p>
+          <h1>Power, Cooling and Facilities</h1>
+          <h2>
+            Rack density, liquid cooling, power delivery and planning for
+            GPU-era machine rooms
+          </h2>
+          <div class="cta-buttons">
+            <a href="index.html" class="btn btn-secondary"
+              ><i class="fas fa-book-open"></i> Field Manual</a
+            >
+            <a href="../index.html" class="btn btn-secondary"
+              ><i class="fas fa-arrow-left"></i> Main Site</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+    <nav class="doc-nav" aria-label="Field manual chapters">
+      <div class="container">
+        <a href="convergence.html">Convergence</a
+        ><a href="accelerators.html">Accelerators</a
+        ><a href="memory-storage.html">Memory &amp; Storage</a
+        ><a href="interconnects.html">Interconnects</a
+        ><a href="facilities.html" class="active" aria-current="page"
+          >Facilities</a
+        ><a href="systems-software.html">Systems Software</a
+        ><a href="scheduling.html">Scheduling</a
+        ><a href="observability.html">Observability</a
+        ><a href="operations.html">Operations</a
+        ><a href="training.html">Training</a
+        ><a href="inference.html">Inference</a
+        ><a href="scientific-computing.html">Scientific Computing</a
+        ><a href="cloud.html">Cloud</a><a href="linux.html">Linux</a
+        ><a href="glossary.html">Glossary</a>
+      </div>
+    </nav>
+    <main class="section-light">
+      <div class="container doc-layout">
+        <aside class="doc-toc">
+          <h4><i class="fas fa-list"></i> On this page</h4>
+          <ul>
+            <li>
+              <a href="#rack-density-then-and-now"
+                >Rack Density: Then and Now</a
+              >
+            </li>
+            <li>
+              <a href="#power-delivery"
+                >Power Delivery: From the Utility to the GPU</a
+              >
+            </li>
+            <li><a href="#cooling">Cooling: Why Air Ran Out</a></li>
+            <li>
+              <a href="#pue-wue-and-efficiency-metrics"
+                >PUE, WUE and Heat Reuse</a
+              >
+            </li>
+            <li>
+              <a href="#floor-loading-and-weight"
+                >Floor Loading, Weight and Space</a
+              >
+            </li>
+            <li>
+              <a href="#ups-and-generator-sizing">UPS and Generator Sizing</a>
+            </li>
+            <li>
+              <a href="#campus-colocation-or-cloud"
+                >Campus Data Center, Colocation or Cloud</a
+              >
+            </li>
+            <li>
+              <a href="#lead-times-and-procurement"
+                >Lead Times and Procurement</a
+              >
+            </li>
+            <li>
+              <a href="#sustainability-and-green500"
+                >Sustainability and the Green500</a
+              >
+            </li>
+            <li>
+              <a href="#planning-checklist"
+                >Planning Checklist: A University's First Liquid-Cooled GPU
+                Racks</a
+              >
+            </li>
+            <li><a href="#key-takeaways">Key Takeaways</a></li>
+          </ul>
+        </aside>
+        <article class="doc-content">
+          <p>
+            For most of the history of research computing, the machine room was
+            the part of the project you could take for granted. You asked
+            facilities for a few more 208V circuits, checked that the CRAC units
+            had headroom, and got on with building the cluster. That era is
+            over. A single current-generation GPU rack draws more power than an
+            entire row of the CPU clusters described in the 2019 edition of this
+            manual, it cannot be cooled with air, it weighs about as much as a
+            small car, and the electrical gear that feeds it can take longer to
+            arrive than the computers. This chapter walks through what changed,
+            what the numbers actually are (from vendor documentation and
+            industry surveys, not rumor), and how a university should plan for
+            its first liquid-cooled GPU racks. For the hardware itself see
+            <a href="accelerators.html">Accelerators</a>; for the cloud
+            alternative see <a href="cloud.html">Cloud and Hybrid AI/HPC</a>.
+          </p>
+
+          <h2 id="rack-density-then-and-now">Rack Density: Then and Now</h2>
+
+          <p>
+            The single most important number in facilities planning is kilowatts
+            per rack. It drives circuit sizing, cooling technology, floor
+            loading, UPS capacity and, ultimately, whether a given room can host
+            the system at all.
+          </p>
+
+          <h3 id="the-typical-enterprise-rack">The typical enterprise rack</h3>
+
+          <p>
+            Uptime Institute has surveyed data center operators every year for
+            more than a decade, and the picture for the broad industry is still
+            modest. The 2024 survey found that 4 kW to 6 kW racks remained the
+            most commonly deployed density, that 7 kW to 9 kW racks had become
+            notably more common, and that the average of typical rack densities
+            across respondents was 8 kW (7.1 kW if 11 sites reporting more than
+            50 kW were excluded as outliers). The majority of facilities had no
+            racks above 30 kW at all.<a href="#src-1">[1]</a> The 2025 survey
+            reported continued increases, with greater adoption of racks in the
+            10 kW to 30 kW range, while noting that few facilities exceed 30 kW
+            and that extreme densities are still rare.<a href="#src-2">[2]</a>
+            Microsoft describes its general-purpose cloud compute and storage
+            racks the same way: usually below 20 kW.<a href="#src-3">[3]</a>
+          </p>
+
+          <p>
+            That is the world most campus machine rooms were designed for:
+            raised floor or slab, perforated tiles or in-row coolers, and
+            single- or three-phase whips sized for 5 kW to 15 kW per cabinet.
+          </p>
+
+          <h3 id="the-rack-scale-gpu-system">The rack-scale GPU system</h3>
+
+          <p>
+            NVIDIA's rack-scale Blackwell systems (GB200 NVL72 and GB300 NVL72)
+            put 72 GPUs and 36 Grace CPUs in a single 48U rack, with 18 compute
+            trays, 9 NVLink switch trays, power shelves and a busbar, all liquid
+            cooled.<a href="#src-4">[4]</a> The vendor documentation for these
+            racks gives the following power figures:
+          </p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>System (vendor document)</th>
+                <th>Rated / nominal power</th>
+                <th>Peak or provisioning figure</th>
+                <th>Power shelves</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>GB200 NVL72 (Supermicro)<a href="#src-5">[5]</a></td>
+                <td>8x 1U 33 kW shelves, "total power 132 kW"</td>
+                <td>Not stated</td>
+                <td>8x 33 kW (6x 5.5 kW PSUs each)</td>
+              </tr>
+              <tr>
+                <td>GB200 NVL72 (HPE QuickSpecs)<a href="#src-6">[6]</a></td>
+                <td>132 kW TDP nominal</td>
+                <td>
+                  EDPp of 1.5x TDP, "approximately 192 kW"; HPE suggests
+                  provisioning busways for 192 kW
+                </td>
+                <td>6 (max 8) x 33 kW</td>
+              </tr>
+              <tr>
+                <td>GB300 NVL72 (Lenovo)<a href="#src-7">[7]</a></td>
+                <td>135 kW TDP</td>
+                <td>Up to 155 kW peak depending on workload</td>
+                <td>6 or 8 x 33 kW (198 kW or 264 kW capacity)</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <p>
+            Put those side by side with the Uptime numbers and the change is
+            stark: one GPU rack at roughly 132 kW to 135 kW nominal is on the
+            order of 16 times the 8 kW survey average, and it can briefly exceed
+            that nominal figure. NVIDIA itself frames the shift as data centers
+            that "once operated at 20 kW per rack" moving to hyperscale
+            facilities that "can support over 135 kW per rack".<a href="#src-8"
+              >[8]</a
+            >
+          </p>
+
+          <h3 id="where-density-is-heading">Where density is heading</h3>
+
+          <p>
+            The trajectory is still upward. Google has stated publicly that
+            machine learning will require more than 500 kW per IT rack before
+            2030.<a href="#src-9">[9]</a> NVIDIA's roadmap describes 800 VDC
+            power infrastructure intended to support 1 MW IT racks starting in
+            2027, timed with its Kyber rack generation.<a href="#src-10"
+              >[10]</a
+            >
+            The successor to GB300, Vera Rubin NVL72, is described by NVIDIA as
+            in full production, is built on the third-generation MGX NVL72 rack
+            design, and is specified for 45 C liquid inlet temperature.<a
+              href="#src-11"
+              >[11]</a
+            >
+            NVIDIA's own material on power provisioning for these racks states
+            that its dynamic power software reduced provisioned rack power from
+            136 kW to 101 kW for Vera Rubin NVL72 on a tested inference workload
+            (a vendor claim about its own software, but a useful indication of
+            the provisioning figure).<a href="#src-12">[12]</a> Treat any
+            per-rack figure for Rubin Ultra or Kyber as roadmap until a vendor
+            publishes a datasheet.
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Always ask for three numbers per
+              rack: nominal (TDP), peak electrical design power, and what the
+              vendor recommends you provision. HPE's GB200 NVL72 guidance is a
+              good example of why: 132 kW nominal, but provision the busway for
+              about 192 kW.<a href="#src-6">[6]</a> Designing to nameplate
+              average is how you trip breakers during a synchronized training
+              step.
+            </p>
+          </blockquote>
+
+          <h2 id="power-delivery">
+            Power Delivery: From the Utility to the GPU
+          </h2>
+
+          <p>
+            Power reaches a GPU through a chain: utility service and substation
+            transformers, switchgear, UPS, distribution (PDUs or overhead
+            busway), the rack power shelf, the in-rack busbar and finally the
+            DC-DC converters on the board. Each hop has changed.
+          </p>
+
+          <h3 id="facility-distribution-busways-and-three-phase">
+            Facility distribution: busways and three-phase AC
+          </h3>
+
+          <p>
+            High-density rooms in North America commonly distribute three-phase
+            power at 415/240 V or 480/277 V wye, often fed to racks from
+            overhead busway with tap-off boxes rather than under-floor whips.
+            NVIDIA's own description of the status quo is "traditional 415 or
+            480 VAC three-phase systems".<a href="#src-13">[13]</a> The Lenovo
+            GB300 NVL72 documentation shows what the rack actually expects: each
+            33 kW power shelf holds six 5.5 kW hot-swappable PSUs with a wide
+            input range of 200-277 VAC (346-480 VAC wye, 5 wires), and each
+            shelf is fed by one 60 A IEC 60309 power whip.<a href="#src-7"
+              >[7]</a
+            >
+            HPE's GB200 documentation likewise specifies an IEC 60309 5-wire
+            connector per shelf.<a href="#src-6">[6]</a> With six to eight
+            shelves, that is six to eight 60 A three-phase whips per rack, which
+            is why overhead busway has become the default.
+          </p>
+
+          <h3 id="in-rack-48v-54v-and-50v-busbars">
+            In-rack DC: 48 V, 50 V and 54 V busbars
+          </h3>
+
+          <p>
+            Inside the rack, the power shelves rectify AC to low-voltage DC and
+            drive a vertical copper busbar that the trays clip onto. Google
+            championed 48 VDC in-rack distribution almost a decade ago, and
+            describes that architecture as having scaled from 10 kW to 100 kW IT
+            racks.<a href="#src-9">[9]</a> NVIDIA describes the GB200 and GB300
+            NVL72 as using 54 VDC distribution with "up to eight power
+            shelves".<a href="#src-10">[10]</a> Lenovo's GB300 documentation
+            specifies 50 V nominal output (47.5 V to 51.5 V input range at the
+            tray) on an MGX-compliant busbar rated at 1400 A.<a href="#src-7"
+              >[7]</a
+            >
+            The labels 48 V, 50 V and 54 V all refer to this same class of
+            low-voltage in-rack bus; check the specific vendor document for the
+            exact nominal value.
+          </p>
+
+          <p>
+            The physics problem is current. At roughly 50 V, every 50 kW is
+            about 1000 A. NVIDIA notes that at MW scale a 54 VDC rack would need
+            up to 200 kg of copper busbar and that power shelves would consume
+            up to 64 U, leaving no room for compute.<a href="#src-10">[10]</a>
+          </p>
+
+          <h3 id="higher-voltage-dc-roadmaps">
+            Higher-voltage DC roadmaps: 400 V and 800 V
+          </h3>
+
+          <p>
+            The industry answer is to move conversion out of the IT rack and
+            distribute DC at much higher voltage. Two related efforts are worth
+            knowing:
+          </p>
+          <ul>
+            <li>
+              <strong>Mt Diablo (+/-400 VDC).</strong> Google, Meta and
+              Microsoft are collaborating through the Open Compute Project on a
+              disaggregated "sidecar" power rack that converts AC to DC outside
+              the IT rack, with +/-400 VDC delivery that Google says can support
+              up to 1 MW per rack. The choice of 400 VDC is explicitly meant to
+              reuse the electric-vehicle supply chain.<a href="#src-9">[9]</a>
+              Microsoft notes the first disaggregated power racks use the
+              existing 48 VDC ecosystem, with the larger gains coming at 400
+              VDC, and that moving power out of the server rack enables up to
+              35% more AI accelerators per rack.<a href="#src-3">[3]</a>
+            </li>
+            <li>
+              <strong>NVIDIA 800 VDC.</strong> NVIDIA's architecture converts
+              13.8 kV AC grid power to 800 VDC at the facility perimeter, runs
+              800 V busways to the row, and feeds racks with a two-conductor 800
+              V input and in-rack DC-DC conversion. NVIDIA claims 85% more power
+              through the same conductor size and 45% less copper than 415 VAC,
+              and up to 5% better end-to-end efficiency than current 54 V
+              systems. Full-scale production is planned to coincide with Kyber
+              racks in 2027.<a href="#src-10">[10]</a> NVIDIA reported that more
+              than 20 companies are joining its 800 VDC partner ecosystem.<a
+                href="#src-13"
+                >[13]</a
+              >
+            </li>
+          </ul>
+          <p>
+            Both are roadmap for most sites. NVIDIA itself notes that
+            facility-level DC introduces new challenges in safety, standards and
+            workforce training.<a href="#src-10">[10]</a> For a university
+            buying GB300 or Vera Rubin class racks in 2026, the practical design
+            is still three-phase AC to MGX power shelves. What you can do now is
+            avoid decisions that make a later DC retrofit harder: leave space in
+            electrical rooms, prefer overhead distribution, and ask your
+            electrical engineer about the path to DC busway.
+          </p>
+
+          <h3 id="power-swings-and-smoothing">
+            Power swings and grid interaction
+          </h3>
+
+          <p>
+            Large training jobs run thousands of GPUs in lockstep, so the whole
+            cluster's power draw rises and falls together at each step. NVIDIA,
+            Microsoft and OpenAI have published on this problem, and NVIDIA
+            notes that when demand ramps suddenly it can take one minute to 90
+            minutes for generation resources to respond. The GB300 NVL72 power
+            shelves add electrolytic capacitor energy storage (about 65 joules
+            per GPU) plus software ramp limits and a "power burner" mode for
+            ramp-down, and NVIDIA reports these reduced peak grid demand by up
+            to 30% on a Megatron training run.<a href="#src-14">[14]</a> NVIDIA
+            says the Vera Rubin NVL72 rack adds a liquid-cooled busbar and 20x
+            more energy storage.<a href="#src-13">[13]</a> Tell your utility and
+            your electrical engineer that the load is a synchronized,
+            fast-changing one, not a flat data center load.
+          </p>
+
+          <h2 id="cooling">Cooling: Why Air Ran Out</h2>
+
+          <h3 id="air-cooling-limits">Air cooling and its limits</h3>
+
+          <p>
+            ASHRAE TC 9.9's thermal guidelines define the air environment IT
+            equipment is built to. The recommended inlet range for classes A1 to
+            A4 is 18 C to 27 C; allowable ranges run from 15-32 C (A1) up to
+            5-45 C (A4). The 2021 edition added a high-density air-cooled class,
+            H1, with a tighter recommended range of 18 C to 22 C (allowable
+            15-25 C), intended for zones that host dense air-cooled products.<a
+              href="#src-15"
+              >[15]</a
+            >
+            That H1 class exists precisely because dense air-cooled servers need
+            colder air to stay within limits.
+          </p>
+
+          <p>
+            Well-run air cooling still matters for the 10% or so of heat that
+            liquid-cooled racks reject to air, and for storage, network and
+            management racks. NVIDIA's DGX SuperPOD design guide is a good
+            checklist: hot/cold aisle orientation, aisles at least 36 inches
+            wide (48 inches recommended for cold aisles so server lifts fit),
+            containment, blanking panels and brush grommets, filter and tile
+            audits, and a CFD model of the room before changes.<a href="#src-16"
+              >[16]</a
+            >
+            The same guide works an example where 358 kW of heat load in a
+            constrained area had only 260 kW of cooling, resolved by spacing
+            racks to borrow cooling capacity from adjacent footprints, at the
+            cost of floor space and longer cables.<a href="#src-16">[16]</a>
+          </p>
+
+          <h3 id="rear-door-heat-exchangers">Rear-door heat exchangers</h3>
+
+          <p>
+            A rear-door heat exchanger (RDHx) replaces the back door of a rack
+            with a water coil (and often fans), so server exhaust is cooled
+            before it enters the room. Vendors rate active doors in the tens of
+            kilowatts; for example, Motivair's ChilledDoor literature states
+            capacity up to 75 kW per rack.<a href="#src-17">[17]</a> RDHx is an
+            excellent retrofit tool for dense air-cooled CPU or PCIe GPU racks,
+            and for capturing the residual air-side heat of liquid-cooled racks.
+            It is not a substitute for direct liquid cooling on a 130 kW
+            rack-scale system.
+          </p>
+
+          <h3 id="direct-to-chip-liquid-cooling">
+            Direct-to-chip liquid cooling
+          </h3>
+
+          <p>
+            Direct-to-chip (DLC, also called cold-plate cooling) runs coolant
+            through cold plates bolted to the GPUs, CPUs and switch ASICs. For
+            GB300 NVL72, Lenovo documents that the CPU, GPU and HBM are liquid
+            cooled while front I/O, the power distribution board and M.2 remain
+            air cooled, giving a rack-level split of about 90% of heat to liquid
+            and 10% to air.<a href="#src-7">[7]</a> The liquid system consists
+            of a coolant distribution unit, rear manifolds, quick disconnects
+            and cold plates. Lenovo supports deionized water (recommended) or
+            PG25 (25% propylene glycol) as coolant, and the rack ships dry.<a
+              href="#src-7"
+              >[7]</a
+            >
+          </p>
+
+          <p>
+            Two loops matter, and the vocabulary is worth getting right because
+            it appears in every contract:
+          </p>
+          <ul>
+            <li>
+              <strong>Technology cooling system (TCS):</strong> the secondary
+              loop that moves heat between the racks, cold plates and the CDU.
+              It carries treated coolant at controlled quality.<a href="#src-12"
+                >[12]</a
+              >
+            </li>
+            <li>
+              <strong>Facility water system (FWS):</strong> the primary loop
+              that takes heat from the CDU to chillers, dry coolers, cooling
+              towers or a heat-reuse system.<a href="#src-12">[12]</a>
+            </li>
+          </ul>
+
+          <h3 id="coolant-distribution-units">Coolant distribution units</h3>
+
+          <p>
+            The CDU is a liquid-to-liquid heat exchanger with pumps, filtration
+            and controls that isolates the TCS from facility water. Form factors
+            in current vendor catalogs include:
+          </p>
+          <ul>
+            <li>
+              <strong>In-rack CDU:</strong> Supermicro lists up to 250 kW
+              capacity with N+1 redundant pumps.<a href="#src-18">[18]</a>
+            </li>
+            <li>
+              <strong>In-row CDU:</strong> Supermicro lists up to 1.8 MW
+              supporting up to 8 racks<a href="#src-18">[18]</a>; HPE lists an
+              in-row CDU rated for 1.3 MW supporting a maximum of 8 racks, with
+              overhead or underfloor secondary loop options.<a href="#src-6"
+                >[6]</a
+              >
+            </li>
+            <li>
+              <strong>Liquid-to-air (L2A) sidecar:</strong> Supermicro lists up
+              to 200 kW with no facility water required, rejecting heat to room
+              air.<a href="#src-18">[18]</a> This is a bridge for rooms without
+              facility water, but the heat still lands on your room air system.
+            </li>
+          </ul>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Budget for CDU redundancy the way you
+              budget for UPS redundancy. An in-row CDU serving eight racks is a
+              single point of failure for roughly a megawatt of GPUs. Ask how
+              the CDU behaves on loss of facility water, loss of one pump, and
+              loss of utility power, and how long the TCS can ride through
+              before GPUs throttle or trip.
+            </p>
+          </blockquote>
+
+          <h3 id="facility-water-temperatures-ashrae-w-classes">
+            Facility water temperatures: ASHRAE W classes
+          </h3>
+
+          <p>
+            ASHRAE classifies liquid-cooled equipment by the facility water
+            supply temperature it can accept. The classes were renamed so the
+            upper limit appears in the name; all share a 2 C minimum.<a
+              href="#src-19"
+              >[19]</a
+            >
+          </p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Class (old name)</th>
+                <th>Max facility water supply</th>
+                <th>Typical primary infrastructure (ASHRAE)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>W17 (W1)</td>
+                <td>17 C</td>
+                <td>
+                  Chiller and cooling tower, optional water-side economizer
+                </td>
+              </tr>
+              <tr>
+                <td>W27 (W2)</td>
+                <td>27 C</td>
+                <td>
+                  Chiller and cooling tower, optional water-side economizer
+                </td>
+              </tr>
+              <tr>
+                <td>W32 (W3)</td>
+                <td>32 C</td>
+                <td>
+                  Cooling tower; chiller or district heating as supplemental
+                </td>
+              </tr>
+              <tr>
+                <td>W40 (new)</td>
+                <td>40 C</td>
+                <td>
+                  Cooling tower; chiller or district heating as supplemental
+                </td>
+              </tr>
+              <tr>
+                <td>W45 (W4)</td>
+                <td>45 C</td>
+                <td>Cooling tower; district heating as supplemental</td>
+              </tr>
+              <tr>
+                <td>W+ (W5)</td>
+                <td>Above 45 C</td>
+                <td>Cooling tower; district heating as supplemental</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Sources for table: ASHRAE 2021 Thermal Guidelines reference card,
+            Table 3.1<a href="#src-15">[15]</a>; ASHRAE AI Data Center Energy
+            Performance Framework<a href="#src-19">[19]</a>.
+          </p>
+
+          <p>
+            ASHRAE describes W17/W27 facilities as typically chiller-based,
+            W32/W40 as typically operated without chillers in most locations,
+            and W45/W+ as typically chiller-free to save energy and capital,
+            though some locations are unsuitable for dry coolers.<a
+              href="#src-15"
+              >[15]</a
+            >
+          </p>
+
+          <p>
+            Current GPU racks sit at the warm end. Lenovo states allowable water
+            inlet as high as 45 C for GB300 NVL72, and lists the NVLink switch
+            tray as ASHRAE W45 compliant (2 C to 50 C operating water).<a
+              href="#src-7"
+              >[7]</a
+            >
+            NVIDIA specifies 45 C inlet for Vera Rubin NVL72 and argues that
+            warmer inlet lets facilities use free cooling more often and rely
+            less on chillers or evaporative coolers.<a href="#src-11">[11]</a
+            ><a href="#src-12">[12]</a> That is good news for universities: a
+            W32 to W45 loop can often be served by dry coolers or towers most of
+            the year, and the return water is warm enough to be useful for
+            heating.
+          </p>
+
+          <h3 id="immersion-cooling">Immersion cooling</h3>
+
+          <p>
+            Immersion submerges whole servers in a dielectric fluid, either
+            single-phase (the fluid stays liquid and is pumped through a heat
+            exchanger) or two-phase (the fluid boils on hot components and
+            condenses on a coil). The Open Compute Project's Immersion
+            Requirements document defines terminology, fluid property tests, and
+            customer requirements, including spill containment sized to at least
+            100% of the largest container, spill absorption materials, and fluid
+            safety documentation (MSDS and TDS) in the room.<a href="#src-20"
+              >[20]</a
+            >
+            Immersion works and has real deployments, but for 2026-era
+            rack-scale GPU systems the vendor-supported path is direct-to-chip
+            in MGX racks. Unless your vendor explicitly supports and warrants a
+            specific GPU platform in a specific immersion tank, treat immersion
+            as a research project, not a procurement option.
+          </p>
+
+          <h2 id="pue-wue-and-efficiency-metrics">PUE, WUE and Heat Reuse</h2>
+
+          <h3 id="power-usage-effectiveness">Power usage effectiveness</h3>
+
+          <p>
+            PUE is total facility energy divided by IT equipment energy over a
+            year (standardized as ISO/IEC 30134-2). A PUE of 1.5 means half a
+            watt of overhead (cooling, UPS losses, lighting) for every watt that
+            reaches IT gear. Reference points from primary sources:
+          </p>
+          <ul>
+            <li>
+              Industry average: Uptime reported 1.56 in its 2024 survey<a
+                href="#src-1"
+                >[1]</a
+              >
+              and "little change for the sixth consecutive year" in 2025.<a
+                href="#src-2"
+                >[2]</a
+              >
+              Uptime also notes that many recent builds consistently achieve 1.3
+              or better.<a href="#src-1">[1]</a>
+            </li>
+            <li>
+              Hyperscale: Google reports a 2025 fleet-wide trailing twelve-month
+              PUE of 1.09.<a href="#src-21">[21]</a>
+            </li>
+            <li>
+              Warm-water research facility: the National Laboratory of the
+              Rockies (formerly NREL) HPC data center reports an annualized
+              average PUE of 1.036 using warm-water liquid cooling, with no
+              mechanical chillers.<a href="#src-22">[22]</a>
+            </li>
+          </ul>
+
+          <p>
+            Two cautions. First, PUE says nothing about whether the IT load does
+            useful work; an idle GPU cluster with PUE 1.1 is still waste (see
+            <a href="observability.html"
+              >Observability, Performance and Efficiency</a
+            >). Second, moving fans from the facility into the servers (or vice
+            versa) shifts energy across the PUE boundary. Liquid cooling removes
+            most server fans, which lowers IT energy and can make PUE look
+            slightly worse even as total energy falls.
+          </p>
+
+          <h3 id="water-usage-effectiveness">Water usage effectiveness</h3>
+
+          <p>
+            The Green Grid defines WUE as annual site water usage divided by IT
+            equipment energy, in liters per kWh, using the same IT energy
+            denominator as PUE. Site water includes cooling tower evaporation,
+            blowdown and drift, and humidification. A second metric, WUEsource,
+            adds the water consumed off-site to generate the electricity.<a
+              href="#src-23"
+              >[23]</a
+            >
+            For scale, Microsoft reports its average data center WUE fell from
+            2.3 L/kWh in its first-generation sites to 0.27 L/kWh in 2025.<a
+              href="#src-24"
+              >[24]</a
+            >
+          </p>
+
+          <p>
+            Closed-loop liquid cooling with dry coolers uses very little site
+            water; evaporative towers use much more but save electricity. NVIDIA
+            summarizes the tradeoff: evaporative cooling is far more
+            energy-efficient than chillers but can consume millions of gallons
+            of water per megawatt annually, while dry coolers use no water but
+            depend on ambient temperature and pair best with warm-water IT.<a
+              href="#src-8"
+              >[8]</a
+            >
+            In drought-prone regions (much of the University of California
+            system, for example) the water number may matter as much to your
+            administration as the energy number.
+          </p>
+
+          <h3 id="heat-reuse">Heat reuse</h3>
+
+          <p>
+            Warm-water liquid cooling turns waste heat into a usable resource.
+            Examples with public documentation:
+          </p>
+          <ul>
+            <li>
+              <strong>NLR ESIF (Colorado):</strong> the data center captures and
+              reuses waste heat as the primary heating source for the building's
+              offices and laboratory space.<a href="#src-22">[22]</a>
+            </li>
+            <li>
+              <strong>CSC Kajaani (Finland), home of LUMI:</strong> excess heat
+              is recovered and fed into the City of Kajaani's district heating
+              network, covering the annual heating needs of hundreds of
+              households.<a href="#src-25">[25]</a>
+            </li>
+          </ul>
+          <p>
+            ASHRAE's W-class table explicitly lists district heating as a
+            secondary facility for W32 through W+ classes.<a href="#src-15"
+              >[15]</a
+            >
+            For a campus with a central plant and a hot-water or steam loop, the
+            questions are practical: what return temperature will the GPU loop
+            deliver, what temperature does the campus heating loop need, is a
+            heat pump required to bridge the gap, and who owns the heat
+            exchanger. Campus energy managers are often enthusiastic partners
+            once they learn the heat is available year-round.
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Heat reuse only pays when there is a
+              year-round heat sink. A building that needs heat only in winter
+              will force you to reject most of the heat anyway. Bring the campus
+              energy office in during design, not after the racks arrive.
+            </p>
+          </blockquote>
+
+          <h2 id="floor-loading-and-weight">Floor Loading, Weight and Space</h2>
+
+          <p>
+            HPE lists the GB200 NVL72 rack at approximately 3,245 lbs fully
+            loaded, with a footprint of 600 mm wide by 1,068 mm deep.<a
+              href="#src-6"
+              >[6]</a
+            >
+            Supermicro gives the same 600 x 1068 mm footprint and a height of
+            2,236 mm for its 48U GB300 NVL72 rack.<a href="#src-18">[18]</a>
+          </p>
+
+          <p>
+            Worked example (arithmetic from the HPE figures above): the
+            footprint is 0.600 m x 1.068 m = 0.64 m2 (about 6.9 ft2). 3,245 lbs
+            over 6.9 ft2 is roughly 470 lbs/ft2 (about 2,300 kg/m2) of static
+            load directly under the rack, before counting coolant in manifolds
+            and overhead busway. Many raised floors and older upper-story rooms
+            were not designed for that concentrated load. Actions:
+          </p>
+          <ul>
+            <li>
+              Get a structural engineer to evaluate concentrated and rolling
+              loads on the actual path from the loading dock to the final
+              position, including elevators, ramps and raised-floor panels.
+            </li>
+            <li>
+              Consider slab-on-grade placement with overhead power and liquid
+              distribution; Lenovo offers top-feed or bottom-feed manifold
+              options, and HPE supports overhead (top feed) or underfloor
+              (bottom feed) secondary loops.<a href="#src-7">[7]</a
+              ><a href="#src-6">[6]</a>
+            </li>
+            <li>
+              Check door heights: at 2,236 mm plus shipping pallet, a 48U rack
+              will not fit through a standard 7-foot (2,134 mm) door.
+            </li>
+            <li>
+              Plan leak containment. NVIDIA's DGX GB rack documentation includes
+              leak detection as a rack subsystem, and Lenovo lists a rack leak
+              tray per NVIDIA reference.<a href="#src-4">[4]</a
+              ><a href="#src-7">[7]</a>
+            </li>
+          </ul>
+
+          <h2 id="ups-and-generator-sizing">UPS and Generator Sizing</h2>
+
+          <p>
+            Research computing has traditionally run compute nodes on utility
+            power with UPS and generator backup reserved for storage, networking
+            and management. That remains a sensible default for GPU clusters: a
+            training job should checkpoint and survive a node loss (see
+            <a href="training.html">Training at Scale</a>), while a parallel
+            file system that loses power mid-write can take days to recover. The
+            considerations that change with GPU racks:
+          </p>
+          <ul>
+            <li>
+              <strong>Size to peak, not nominal.</strong> UPS and generator
+              capacity for any protected GPU load must cover peak electrical
+              design power (for example, HPE's roughly 1.5x TDP figure for GB200
+              NVL72).<a href="#src-6">[6]</a>
+            </li>
+            <li>
+              <strong>Load steps.</strong> Synchronized training produces fast
+              load swings. Generators and UPS inverters must handle the step
+              changes without instability; ask the vendor for step-load test
+              data, and note that rack-level energy storage and ramp limiting
+              (as in GB300 NVL72 power shelves) exists partly for this reason.<a
+                href="#src-14"
+                >[14]</a
+              >
+            </li>
+            <li>
+              <strong>Cooling must ride through too.</strong> If compute stays
+              up on UPS but CDU pumps or facility pumps do not, the GPUs will
+              overheat in seconds to minutes. Put CDU pumps and controls on the
+              same protected power as anything they cool.
+            </li>
+            <li>
+              <strong>Redundancy topology.</strong> The DGX SuperPOD guide
+              points out that with N+1 power provisioning, N equals multiple
+              circuits, and cooling capacity must be aligned to N rather than to
+              a single circuit.<a href="#src-16">[16]</a>
+            </li>
+            <li>
+              <strong>Right-sizing matters for efficiency.</strong> Uptime found
+              that one in four data centers in its 2024 survey is typically
+              under 40% utilized by available UPS capacity, which undermines the
+              energy performance of power distribution.<a href="#src-1">[1]</a>
+            </li>
+          </ul>
+
+          <h2 id="campus-colocation-or-cloud">
+            Campus Data Center, Colocation or Cloud
+          </h2>
+
+          <p>
+            Before designing a room, decide whether you should own the room at
+            all.
+          </p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Option</th>
+                <th>Strengths</th>
+                <th>Weaknesses</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Campus data center</td>
+                <td>
+                  Control, proximity to users and storage, possible heat reuse,
+                  lowest long-run cost at high utilization
+                </td>
+                <td>
+                  Capital cost, long lead times for electrical and mechanical
+                  upgrades, facilities staff may lack liquid-cooling experience
+                </td>
+              </tr>
+              <tr>
+                <td>Colocation</td>
+                <td>
+                  Faster access to high-density power and cooling if a provider
+                  has it built; shifts facility risk
+                </td>
+                <td>
+                  Capacity is scarce in many markets; recurring cost per kW;
+                  remote hands; network backhaul to campus
+                </td>
+              </tr>
+              <tr>
+                <td>Cloud</td>
+                <td>
+                  No facility work; newest GPUs on demand; elastic for bursts
+                  and pilots
+                </td>
+                <td>
+                  High cost at sustained utilization; data egress; quotas and
+                  capacity limits for large GPU counts
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <p>
+            Uptime notes that colocation capacity is scarce in many locations
+            and equipment lead times remain lengthy<a href="#src-1">[1]</a>, and
+            its 2025 supply chain survey found that many operators, colocation
+            providers included, continue to face delays on capital projects.<a
+              href="#src-26"
+              >[26]</a
+            >
+            Do not assume a colocation provider can take 130 kW liquid-cooled
+            racks next quarter; ask for the specific hall, the facility water
+            temperature and capacity, and the date. Many universities end up
+            with a hybrid: a modest owned liquid-cooled footprint for sustained
+            workloads, cloud for bursts and early access (see
+            <a href="cloud.html">Cloud and Hybrid AI/HPC</a>), and national
+            resources for the largest runs.
+          </p>
+
+          <h2 id="lead-times-and-procurement">Lead Times and Procurement</h2>
+
+          <p>
+            The computers are often not the long pole. The electrical and
+            mechanical plant is.
+          </p>
+          <ul>
+            <li>
+              <strong>Utility transformers.</strong> A May 2026 report from the
+              National Laboratory of the Rockies, citing GAO and DOE, states
+              that lead times for typical large power transformers have
+              lengthened from 12-18 months to 30-36 months from purchase order
+              to receipt, and up to 60 months for extra-high-voltage units.<a
+                href="#src-27"
+                >[27]</a
+              >
+              If your project needs a new substation or service upgrade, this
+              can dominate the schedule.
+            </li>
+            <li>
+              <strong>Critical power and cooling equipment.</strong> Uptime's
+              2025 Data Center Spending and Supply Chain Survey found fewer
+              disruptions than at any point in the prior five years, but delays
+              persist; UPS systems, switchgear, cooling units, engine generators
+              and PDUs remain the most affected categories, and manufacturing
+              and equipment delays are the most-cited driver of capital project
+              delays.<a href="#src-26">[26]</a>
+            </li>
+            <li>
+              <strong>Rack-scale systems.</strong> GB200/GB300 NVL72 racks are
+              integrated and tested at the factory and delivered as complete
+              racks, which shortens on-site build but ties delivery to vendor
+              allocation.
+            </li>
+          </ul>
+
+          <p>Practical procurement advice:</p>
+          <ul>
+            <li>
+              Order long-lead facility equipment (switchgear, transformers,
+              CDUs, dry coolers) before the compute RFP closes, sized for the
+              generation after the one you are buying.
+            </li>
+            <li>
+              Write facility acceptance criteria into the compute contract:
+              supported water temperature range, coolant chemistry, flow and
+              pressure-drop per rack, leak detection integration, and who
+              commissions the TCS.
+            </li>
+            <li>
+              Require the vendor's facility requirements document (every major
+              OEM has one) as a contract deliverable, and hold a joint review
+              with campus facilities and your mechanical and electrical
+              engineers.
+            </li>
+            <li>
+              Budget for filling, flushing and water-quality testing. Lenovo
+              offers a service kit with a flow meter, bleed hose, pressure gauge
+              and vent valve for on-site setup.<a href="#src-7">[7]</a>
+            </li>
+          </ul>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> The most common schedule failure I
+              see is not late GPUs, it is a finished room waiting on a
+              switchboard, or racks sitting on the dock waiting for the CDU
+              commissioning crew. Put the facilities milestones on the same
+              project plan as the compute delivery, with named owners.
+            </p>
+          </blockquote>
+
+          <h2 id="sustainability-and-green500">
+            Sustainability and the Green500
+          </h2>
+
+          <p>
+            The Green500 ranks TOP500 systems by HPL performance per watt. The
+            June 2026 list is instructive for anyone arguing that efficiency and
+            performance are at odds:<a href="#src-28">[28]</a>
+          </p>
+          <ul>
+            <li>
+              The top three are identical-architecture BullSequana XH3000
+              systems using NVIDIA GH200 Grace Hopper Superchips with quad-rail
+              InfiniBand NDR200: KAIROS (CALMIP / University of Toulouse) at
+              73.28 GFlops/W, ROMEO-2025 at 70.91 GFlops/W, and the Levante GPU
+              extension at DKRZ at 69.43 GFlops/W.
+            </li>
+            <li>
+              TOP500 notes that efficiency tends to decrease slightly with
+              system size, which gives smaller systems of the same technology an
+              advantage.
+            </li>
+          </ul>
+          <p>
+            On the June 2026 TOP500, El Capitan (No. 2) achieves 60.94 GFlops/W
+            while delivering 1.809 EFlop/s on HPL, and JUPITER Booster (No. 5)
+            uses Eviden's direct liquid-cooled BullSequana XH3000
+            architecture.<a href="#src-29">[29]</a> The pattern across the top
+            of both lists is the same: liquid-cooled, accelerator-dense systems.
+          </p>
+
+          <p>
+            For a campus, sustainability work that actually moves the needle
+            includes: warm-water cooling to eliminate chiller hours, heat reuse,
+            measuring and publishing PUE and WUE for the research computing
+            facility, sourcing renewable electricity, and, most of all, keeping
+            the GPUs busy with useful work. The cheapest kilowatt-hour is the
+            one an idle GPU did not burn.
+          </p>
+
+          <h2 id="planning-checklist">
+            Planning Checklist: A University's First Liquid-Cooled GPU Racks
+          </h2>
+
+          <p>
+            Use this as a starting agenda for the first meeting between research
+            computing, facilities, and your engineering consultants. Items are
+            ordered roughly by lead time.
+          </p>
+
+          <h3 id="checklist-scope-and-site">Scope and site</h3>
+          <ol>
+            <li>
+              Define the target: number of racks, platform family (for example
+              GB300 NVL72 or Vera Rubin NVL72), and growth for the next two
+              generations.
+            </li>
+            <li>
+              Collect the OEM facility requirements document for the exact
+              configuration, including nominal, peak and
+              recommended-provisioning power per rack.<a href="#src-6">[6]</a
+              ><a href="#src-7">[7]</a>
+            </li>
+            <li>
+              Decide campus vs. colocation vs. cloud for each workload class
+              before committing capital.
+            </li>
+            <li>
+              Pick the room. Confirm structural capacity for roughly 3,000+ lb
+              racks (about 470 lbs/ft2 under the footprint in the HPE example),
+              the delivery path, and door heights.
+            </li>
+          </ol>
+
+          <h3 id="checklist-electrical">Electrical</h3>
+          <ol>
+            <li>
+              Request a utility capacity study early; if a new service or
+              transformer is needed, assume multi-year lead time.<a
+                href="#src-27"
+                >[27]</a
+              >
+            </li>
+            <li>
+              Design three-phase distribution (415/240 V or 480/277 V) on
+              overhead busway with tap-offs matching the rack's power shelf
+              whips (for example, one 60 A IEC 60309 5-wire whip per 33 kW
+              shelf).<a href="#src-7">[7]</a>
+            </li>
+            <li>
+              Decide redundancy: 6 vs. 8 power shelves per rack (non-redundant
+              vs. redundant in Lenovo's GB300 configurations)<a href="#src-7"
+                >[7]</a
+              >, and A/B feeds.
+            </li>
+            <li>
+              Decide what rides on UPS and generator. At minimum: storage,
+              network, management, CDU pumps and controls.
+            </li>
+            <li>
+              Tell the utility the load is synchronized and fast-changing; ask
+              about ramp-rate limits.<a href="#src-14">[14]</a>
+            </li>
+            <li>
+              Leave physical space and conduit paths for a future higher-voltage
+              DC distribution retrofit.
+            </li>
+          </ol>
+
+          <h3 id="checklist-mechanical">Mechanical and water</h3>
+          <ol>
+            <li>
+              Choose the facility water class. Target W32 to W45 so dry coolers
+              or towers can carry most hours without chillers.<a href="#src-15"
+                >[15]</a
+              >
+            </li>
+            <li>
+              Select CDU form factor (in-rack, in-row, or liquid-to-air sidecar)
+              and redundancy; confirm capacity per rack and per CDU.<a
+                href="#src-18"
+                >[18]</a
+              ><a href="#src-6">[6]</a>
+            </li>
+            <li>
+              Specify TCS coolant (DI water or PG25 per vendor support),
+              filtration, water-quality testing schedule and who owns it.<a
+                href="#src-7"
+                >[7]</a
+              >
+            </li>
+            <li>
+              Size room air cooling for the residual air-side heat (about 10% of
+              rack power for GB300 NVL72 per Lenovo) plus all air-cooled
+              racks.<a href="#src-7">[7]</a>
+            </li>
+            <li>
+              Plan leak detection and integrate alarms with your monitoring and
+              building management system.<a href="#src-4">[4]</a>
+            </li>
+            <li>Evaluate heat reuse with the campus energy office.</li>
+            <li>
+              Estimate annual water use for the chosen heat-rejection method and
+              report WUE alongside PUE.<a href="#src-23">[23]</a>
+            </li>
+          </ol>
+
+          <h3 id="checklist-operations">Operations and procurement</h3>
+          <ol>
+            <li>
+              Put facility acceptance criteria and commissioning
+              responsibilities in the compute contract.
+            </li>
+            <li>
+              Train facilities and research computing staff on CDU operation,
+              quick disconnects, fill and drain, and leak response.
+            </li>
+            <li>
+              Stock onsite spares; Lenovo recommends about 2% of order quantity
+              for compute and switch trays to support next-business-day service
+              targets.<a href="#src-7">[7]</a>
+            </li>
+            <li>
+              Instrument everything: rack power, CDU supply and return
+              temperatures, flow, and GPU telemetry, feeding the same monitoring
+              stack (see
+              <a href="observability.html"
+                >Observability, Performance and Efficiency</a
+              >).
+            </li>
+            <li>
+              Write an incident runbook for loss of facility water, loss of CDU,
+              leak detection, and utility outage.
+            </li>
+          </ol>
+
+          <h2 id="key-takeaways">Key Takeaways</h2>
+          <ul>
+            <li>
+              Typical enterprise racks still average around 8 kW; rack-scale GPU
+              systems such as GB200/GB300 NVL72 are rated around 132 kW to 135
+              kW nominal, with peaks well above that.<a href="#src-1">[1]</a
+              ><a href="#src-6">[6]</a><a href="#src-7">[7]</a>
+            </li>
+            <li>
+              Provision power for the vendor's peak or recommended figure, not
+              nameplate average, and expect synchronized load swings.
+            </li>
+            <li>
+              Three-phase AC to in-rack 48-54 V busbars is today's design;
+              +/-400 VDC and 800 VDC distribution are roadmap items aimed at
+              2027 and later.<a href="#src-9">[9]</a><a href="#src-10">[10]</a>
+            </li>
+            <li>
+              Direct-to-chip liquid cooling with a CDU is mandatory for
+              rack-scale GPU systems; warm facility water (W32 to W45) enables
+              chiller-free operation and heat reuse.<a href="#src-15">[15]</a
+              ><a href="#src-11">[11]</a>
+            </li>
+            <li>
+              Weight, door heights and floor structure are real constraints:
+              about 3,245 lbs per GB200 NVL72 rack.<a href="#src-6">[6]</a>
+            </li>
+            <li>
+              Electrical gear, not GPUs, often sets the schedule; large power
+              transformer lead times have reached 30-36 months.<a href="#src-27"
+                >[27]</a
+              >
+            </li>
+            <li>
+              Report PUE and WUE, pursue heat reuse, and remember that idle GPUs
+              waste more energy than any cooling inefficiency.
+            </li>
+          </ul>
+
+          <h2 id="sources">Sources</h2>
+          <ol class="sources">
+            <li id="src-1">
+              <a
+                href="https://datacenter.uptimeinstitute.com/rs/711-RIA-145/images/2024.GlobalDataCenterSurvey.Report.pdf"
+                target="_blank"
+                rel="noopener"
+                >Uptime Institute Global Data Center Survey 2024 (Uptime
+                Institute, 2024)</a
+              >
+            </li>
+            <li id="src-2">
+              <a
+                href="https://uptimeinstitute.com/about-ui/press-releases/uptimes-15th-annual-global-data-center-survey-results-shows-both-commitment-and-hesitancy"
+                target="_blank"
+                rel="noopener"
+                >Uptime's 15th Annual Global Data Center Survey Results (Uptime
+                Institute press release, 2025)</a
+              >
+            </li>
+            <li id="src-3">
+              <a
+                href="https://techcommunity.microsoft.com/blog/azureinfrastructureblog/mt-diablo---disaggregated-power-fueling-the-next-wave-of-ai-platforms/4268799"
+                target="_blank"
+                rel="noopener"
+                >Mt Diablo - Disaggregated Power Fueling the Next Wave of AI
+                Platforms (Microsoft Azure Infrastructure Blog, 2024)</a
+              >
+            </li>
+            <li id="src-4">
+              <a
+                href="https://docs.nvidia.com/dgx/dgxgb200-user-guide/hardware.html"
+                target="_blank"
+                rel="noopener"
+                >Hardware - NVIDIA DGX GB Rack Scale Systems User Guide
+                (NVIDIA)</a
+              >
+            </li>
+            <li id="src-5">
+              <a
+                href="https://www.supermicro.com/en/products/system/gpu/48u/srs-gb200-nvl72"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA GB200 NVL72 48U Rack Solution specifications
+                (Supermicro)</a
+              >
+            </li>
+            <li id="src-6">
+              <a
+                href="https://www.hpe.com/us/en/collaterals/collateral.a50009224enw.html"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA GB200 NVL72 by HPE QuickSpecs (HPE)</a
+              >
+            </li>
+            <li id="src-7">
+              <a
+                href="https://lenovopress.lenovo.com/lp2357.pdf"
+                target="_blank"
+                rel="noopener"
+                >Lenovo NVIDIA GB300 NVL72 Rack Scale AI Product Guide LP2357
+                (Lenovo Press)</a
+              >
+            </li>
+            <li id="src-8">
+              <a
+                href="https://blogs.nvidia.com/blog/blackwell-platform-water-efficiency-liquid-cooling-data-centers-ai-factories/"
+                target="_blank"
+                rel="noopener"
+                >Chill Factor: NVIDIA Blackwell Platform Boosts Water Efficiency
+                (NVIDIA Blog, 2025)</a
+              >
+            </li>
+            <li id="src-9">
+              <a
+                href="https://cloud.google.com/blog/topics/systems/enabling-1-mw-it-racks-and-liquid-cooling-at-ocp-emea-summit"
+                target="_blank"
+                rel="noopener"
+                >AI infrastructure is hot: new power distribution and liquid
+                cooling infrastructure (Google Cloud Blog, 2025)</a
+              >
+            </li>
+            <li id="src-10">
+              <a
+                href="https://developer.nvidia.com/blog/nvidia-800-v-hvdc-architecture-will-power-the-next-generation-of-ai-factories/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA 800 VDC Architecture Will Power the Next Generation of
+                AI Factories (NVIDIA Technical Blog, 2025)</a
+              >
+            </li>
+            <li id="src-11">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/vera-rubin-nvl72/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA Vera Rubin NVL72 product page and specifications
+                (NVIDIA, 2026)</a
+              >
+            </li>
+            <li id="src-12">
+              <a
+                href="https://developer.nvidia.com/blog?p=121508"
+                target="_blank"
+                rel="noopener"
+                >Maximizing AI Factory Performance per Watt with NVIDIA DSX
+                MaxLPS (NVIDIA Technical Blog, 2026)</a
+              >
+            </li>
+            <li id="src-13">
+              <a
+                href="https://blogs.nvidia.com/blog/gigawatt-ai-factories-ocp-vera-rubin/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA, Partners Drive Next-Gen Efficient Gigawatt AI Factories
+                in Buildup for Vera Rubin (NVIDIA Blog, 2025)</a
+              >
+            </li>
+            <li id="src-14">
+              <a
+                href="https://developer.nvidia.com/blog/how-new-gb300-nvl72-features-provide-steady-power-for-ai"
+                target="_blank"
+                rel="noopener"
+                >How New GB300 NVL72 Features Provide Steady Power for AI
+                (NVIDIA Technical Blog, 2025)</a
+              >
+            </li>
+            <li id="src-15">
+              <a
+                href="https://www.ashrae.org/file%20library/technical%20resources/bookstore/supplemental%20files/therm-gdlns-5th-r-e-refcard.pdf"
+                target="_blank"
+                rel="noopener"
+                >2021 Equipment Thermal Guidelines for Data Processing
+                Environments, reference card (ASHRAE TC 9.9, 2021/2024)</a
+              >
+            </li>
+            <li id="src-16">
+              <a
+                href="https://docs.nvidia.com/dgx-superpod/design-guides/dgx-superpod-data-center-design-h100/latest/cooling.html"
+                target="_blank"
+                rel="noopener"
+                >Cooling and Airflow Optimization - NVIDIA DGX SuperPOD Data
+                Center Design (NVIDIA)</a
+              >
+            </li>
+            <li id="src-17">
+              <a
+                href="https://www.motivaircorp.com/uploads/files/brochures/ChilledDoor%20brochure_2023.pdf"
+                target="_blank"
+                rel="noopener"
+                >Motivair ChilledDoor Rack Cooling System brochure (Motivair,
+                2023)</a
+              >
+            </li>
+            <li id="src-18">
+              <a
+                href="https://www.supermicro.com/en/products/rack/srs-gb300-nvl72"
+                target="_blank"
+                rel="noopener"
+                >SuperServer SRS-GB300-NVL72 specifications (Supermicro)</a
+              >
+            </li>
+            <li id="src-19">
+              <a
+                href="https://www.ashrae.org/technical-resources/ai-data-center-framework/introduction-and-purpose"
+                target="_blank"
+                rel="noopener"
+                >AI Data Center Energy Performance Framework: Introduction and
+                Purpose (ASHRAE)</a
+              >
+            </li>
+            <li id="src-20">
+              <a
+                href="https://www.opencompute.org/documents/ocp-acs-immersion-requirements-rev-2-1-pdf"
+                target="_blank"
+                rel="noopener"
+                >OCP Immersion Requirements Rev. 2 (Open Compute Project)</a
+              >
+            </li>
+            <li id="src-21">
+              <a
+                href="https://datacenters.google/efficiency/"
+                target="_blank"
+                rel="noopener"
+                >Power usage effectiveness (Google Data Centers)</a
+              >
+            </li>
+            <li id="src-22">
+              <a
+                href="https://www.nlr.gov/computational-science/hpc-data-center"
+                target="_blank"
+                rel="noopener"
+                >High-Performance Computing Data Center (National Laboratory of
+                the Rockies, 2026)</a
+              >
+            </li>
+            <li id="src-23">
+              <a
+                href="https://www.thegreengrid.org/system/files/store/WUE_v1.pdf"
+                target="_blank"
+                rel="noopener"
+                >Water Usage Effectiveness (WUE): A Green Grid Data Center
+                Sustainability Metric (The Green Grid, 2011)</a
+              >
+            </li>
+            <li id="src-24">
+              <a
+                href="https://blogs.microsoft.com/blog/2026/06/24/inside-microsofts-two-decade-push-to-cut-water-intensity-while-scaling-for-growth/"
+                target="_blank"
+                rel="noopener"
+                >Inside Microsoft's two-decade push to cut water intensity while
+                scaling for growth (Microsoft, 2026)</a
+              >
+            </li>
+            <li id="src-25">
+              <a
+                href="https://csc.fi/en/our-expertise/data-center-ecosystem/"
+                target="_blank"
+                rel="noopener"
+                >Energy-efficient Kajaani data center (CSC - IT Center for
+                Science)</a
+              >
+            </li>
+            <li id="src-26">
+              <a
+                href="https://intelligence.uptimeinstitute.com/sites/default/files/2025-12/UI%20Field%20189_Supply%20chains%20show%20signs%20of%20stability_0.pdf"
+                target="_blank"
+                rel="noopener"
+                >Supply chains show signs of stability, but delays persist,
+                Field Report 189 (Uptime Institute, 2025)</a
+              >
+            </li>
+            <li id="src-27">
+              <a
+                href="https://docs.nlr.gov/docs/fy26osti/96742.pdf"
+                target="_blank"
+                rel="noopener"
+                >Large Power Transformer Supply Chain Gap Analysis and Domestic
+                Content Strategies for Hydropower Rehabilitation (National
+                Laboratory of the Rockies, 2026)</a
+              >
+            </li>
+            <li id="src-28">
+              <a
+                href="https://top500.org/lists/green500/green500-june-2026/"
+                target="_blank"
+                rel="noopener"
+                >Green500 June 2026 (TOP500, 2026)</a
+              >
+            </li>
+            <li id="src-29">
+              <a
+                href="https://top500.org/lists/top500/2026/06/"
+                target="_blank"
+                rel="noopener"
+                >TOP500 June 2026 (TOP500, 2026)</a
+              >
+            </li>
+          </ol>
+          <nav class="doc-pager" aria-label="Chapter navigation">
+            <a class="pager-prev" href="interconnects.html"
+              ><span>Previous</span>Interconnects: Scale-Up and Scale-Out</a
+            ><a class="pager-next" href="systems-software.html"
+              ><span>Next</span>Systems Software and Provisioning</a
+            >
+          </nav>
+        </article>
+      </div>
+    </main>
+
+    <footer class="section-dark">
+      <div class="container text-center">
+        <p class="footer-note">
+          2026 edition |
+          <a href="index.html" class="subtle-link">Field Manual</a> |
+          <a href="../index.html" class="subtle-link"
+            >charles-forsyth.github.io</a
+          >
+        </p>
+      </div>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+      document.querySelectorAll('pre code').forEach(function (el) {
+        if (el.className === 'c++') el.className = 'language-cpp';
+        else if (el.className && el.className.indexOf('language-') !== 0)
+          el.className = 'language-' + el.className;
+        hljs.highlightElement(el);
+      });
+    </script>
+  </body>
+</html>

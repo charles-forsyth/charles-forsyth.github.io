@@ -1,0 +1,1916 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Systems Software and Provisioning | Field Manual</title>
+    <meta
+      name="description"
+      content="How a 2026 AI + HPC cluster gets from powered-off hardware to a usable, secure software environment: OS choices after CentOS, Warewulf and friends, Redfish, the NVIDIA and AMD GPU stacks and their compatibility rules, Spack, EasyBuild, Lmod, Python tooling, containers and identity."
+    />
+    <link
+      rel="canonical"
+      href="https://charles-forsyth.github.io/handbook/systems-software.html"
+    />
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="handbook.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
+    />
+  </head>
+  <body>
+    <header class="hero doc-hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="doc-kicker">
+            <i class="fas fa-layer-group"></i> AI + HPC Field Manual
+          </p>
+          <h1>Systems Software and Provisioning</h1>
+          <h2>
+            From bare metal to a working GPU software stack: OS, provisioning,
+            drivers, CUDA and ROCm, modules, containers and identity
+          </h2>
+          <div class="cta-buttons">
+            <a href="index.html" class="btn btn-secondary"
+              ><i class="fas fa-book-open"></i> Field Manual</a
+            >
+            <a href="../index.html" class="btn btn-secondary"
+              ><i class="fas fa-arrow-left"></i> Main Site</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+    <nav class="doc-nav" aria-label="Field manual chapters">
+      <div class="container">
+        <a href="convergence.html">Convergence</a
+        ><a href="accelerators.html">Accelerators</a
+        ><a href="memory-storage.html">Memory &amp; Storage</a
+        ><a href="interconnects.html">Interconnects</a
+        ><a href="facilities.html">Facilities</a
+        ><a href="systems-software.html" class="active" aria-current="page"
+          >Systems Software</a
+        ><a href="scheduling.html">Scheduling</a
+        ><a href="observability.html">Observability</a
+        ><a href="operations.html">Operations</a
+        ><a href="training.html">Training</a
+        ><a href="inference.html">Inference</a
+        ><a href="scientific-computing.html">Scientific Computing</a
+        ><a href="cloud.html">Cloud</a><a href="linux.html">Linux</a
+        ><a href="glossary.html">Glossary</a>
+      </div>
+    </nav>
+    <main class="section-light">
+      <div class="container doc-layout">
+        <aside class="doc-toc">
+          <h4><i class="fas fa-list"></i> On this page</h4>
+          <ul>
+            <li>
+              <a href="#what-changed-since-2018">What Changed Since 2018</a>
+            </li>
+            <li>
+              <a href="#choosing-the-operating-system"
+                >Choosing the Operating System</a
+              >
+            </li>
+            <li>
+              <a href="#bare-metal-provisioning">Bare-Metal Provisioning</a>
+            </li>
+            <li>
+              <a href="#configuration-management">Configuration Management</a>
+            </li>
+            <li>
+              <a href="#the-gpu-software-stack">The GPU Software Stack</a>
+            </li>
+            <li><a href="#user-software-stacks">User Software Stacks</a></li>
+            <li>
+              <a href="#containers-for-hpc-and-ai">Containers for HPC and AI</a>
+            </li>
+            <li><a href="#identity-and-access">Identity and Access</a></li>
+            <li>
+              <a href="#security-hardening-basics">Security Hardening Basics</a>
+            </li>
+            <li><a href="#key-takeaways">Key Takeaways</a></li>
+          </ul>
+        </aside>
+        <article class="doc-content">
+          <p>
+            The 2018 version of this chapter was about PXE, TFTP, IPMI, ROCKS,
+            Cobbler and NIS. PXE is still there, but CentOS, ROCKS and Warewulf
+            3 are gone, and the hard part of bringing up a node is no longer the
+            OS image. It is the GPU driver, the NVSwitch fabric daemon, the RDMA
+            stack, the CUDA or ROCm toolkits, and the modules, Python
+            environments and containers that must line up with all of it. This
+            chapter walks the stack from the baseboard management controller to
+            the user's <code>module load</code>, with current versions as of
+            September 2026 and the compatibility rules that decide whether a job
+            runs or fails with a cryptic driver error. For the hardware
+            underneath see <a href="accelerators.html">Accelerators</a> and
+            <a href="interconnects.html">Interconnects</a>; for Slurm and
+            Kubernetes on top see
+            <a href="scheduling.html">Scheduling and Orchestration</a>.
+          </p>
+
+          <h2 id="what-changed-since-2018">What Changed Since 2018</h2>
+          <p>A quick map from the old chapter to the current equivalents.</p>
+          <table>
+            <thead>
+              <tr>
+                <th>2018 approach</th>
+                <th>2026 equivalent</th>
+                <th>Why it changed</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>CentOS 7</td>
+                <td>Rocky Linux, AlmaLinux, RHEL 9/10, Ubuntu LTS</td>
+                <td>CentOS Linux ended; rebuilds and Ubuntu filled the gap</td>
+              </tr>
+              <tr>
+                <td>ROCKS, Warewulf 3, Cobbler</td>
+                <td>
+                  Warewulf 4, Confluent, OpenCHAMI, NVIDIA Base Command Manager,
+                  MAAS
+                </td>
+                <td>OpenHPC 4.0 retired Warewulf 3<a href="#src-1">[1]</a></td>
+              </tr>
+              <tr>
+                <td>IPMI (ipmitool)</td>
+                <td>Redfish REST API (IPMI still present as fallback)</td>
+                <td>
+                  DMTF standard with a schema-based data model<a href="#src-2"
+                    >[2]</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>Kickstart plus post-install scripts</td>
+                <td>
+                  Stateless images built from OCI containers, plus overlays and
+                  Ansible
+                </td>
+                <td>Reproducible images, fast rollback</td>
+              </tr>
+              <tr>
+                <td>Environment Modules, hand-built software</td>
+                <td>Lmod plus Spack or EasyBuild</td>
+                <td>Hundreds of packages, many toolchains, GPU variants</td>
+              </tr>
+              <tr>
+                <td>Anaconda for Python</td>
+                <td>conda-forge/Miniforge, uv, pixi, containers</td>
+                <td>Licensing and reproducibility<a href="#src-3">[3]</a></td>
+              </tr>
+              <tr>
+                <td>Singularity 2.x, Docker on laptops</td>
+                <td>Apptainer, Enroot + Pyxis, Podman, Charliecloud</td>
+                <td>Unprivileged containers are now routine</td>
+              </tr>
+              <tr>
+                <td>MLNX_OFED</td>
+                <td>DOCA-OFED</td>
+                <td>
+                  MLNX_OFED is in its final long-term support window<a
+                    href="#src-4"
+                    >[4]</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>NIS, local LDAP</td>
+                <td>FreeIPA or AD via SSSD, federated SSO, SSH certificates</td>
+                <td>Central policy, MFA, federation</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h2 id="choosing-the-operating-system">
+            Choosing the Operating System
+          </h2>
+
+          <h3 id="enterprise-linux-after-centos">
+            Enterprise Linux after CentOS
+          </h3>
+          <p>
+            Many former CentOS sites moved to RHEL or one of the RHEL-compatible
+            rebuilds, which track RHEL minor releases:
+          </p>
+          <ul>
+            <li>
+              <strong>RHEL</strong> itself. RHEL 8, 9 and 10 each have a
+              ten-year life cycle across Full Support and Maintenance Support,
+              followed by an Extended Life Phase; Red Hat's Extended Life Cycle
+              Premium add-on now replaces the old EUS offerings for pinning to a
+              minor release<a href="#src-5">[5]</a>. The current minor release
+              is RHEL 10.2, which adds ML-KEM post-quantum key exchange to
+              OpenSSH in FIPS mode<a href="#src-6">[6]</a>.
+            </li>
+            <li>
+              <strong>Rocky Linux</strong>. Rocky Linux 10.2 went GA on May 28,
+              2026, and Rocky Linux 9.8 is the current EL9 release<a
+                href="#src-7"
+                >[7]</a
+              ><a href="#src-8">[8]</a>. In 10.2 the image builder gained a
+              <code>pxe-tar-xz</code> output format for stateless PXE images for
+              HPC and diskless systems, and the default
+              <code>/boot</code> partition grew from 1 GiB to 2 GiB to fit
+              larger initramfs images<a href="#src-7">[7]</a>.
+            </li>
+            <li>
+              <strong>AlmaLinux</strong>. AlmaLinux 10.2 ("Lavender Lion") ships
+              kernel 6.12.0-211.7.3.el10_2<a href="#src-9">[9]</a>. Its most
+              useful deviation from RHEL for clusters with older nodes: RHEL 10
+              raised the x86 baseline to x86-64-v3, and AlmaLinux also builds an
+              x86-64-v2 architecture for older hardware<a href="#src-9">[9]</a>.
+              AlmaLinux 10.3 and 9.9 were in beta in September 2026<a
+                href="#src-10"
+                >[10]</a
+              >.
+            </li>
+          </ul>
+          <p>
+            The EL10 transition is the live issue in 2026. Rocky 10.2 ships GCC
+            14.3 as the system compiler plus GCC Toolset 15 and Python 3.14<a
+              href="#src-7"
+              >[7]</a
+            >, but the ecosystem is still catching up. OpenHPC 4.x targets
+            EL10<a href="#src-11">[11]</a>, Warewulf added EL10 support in
+            4.6.4<a href="#src-12">[12]</a>, and xCAT's EL10 support is still
+            described as "coming"<a href="#src-13">[13]</a>.
+          </p>
+
+          <h3 id="ubuntu-lts">Ubuntu LTS</h3>
+          <p>
+            Ubuntu is common on GPU systems, partly because vendor AI containers
+            are Ubuntu-based (the NGC PyTorch 26.08 image is built on Ubuntu
+            24.04)<a href="#src-14">[14]</a>. Ubuntu 26.04 LTS ("Resolute
+            Raccoon") was released April 23, 2026, with five years of standard
+            security updates (to April 2031) and ten years with an Ubuntu Pro
+            subscription<a href="#src-15">[15]</a><a href="#src-16">[16]</a>. It
+            also ships <code>authd</code>, a service for authenticating against
+            cloud identity providers, in the official repositories<a
+              href="#src-15"
+              >[15]</a
+            >. Ubuntu 24.04 LTS remains the conservative choice while vendor
+            support for 26.04 fills in.
+          </p>
+
+          <h3 id="support-matrices-decide">Let the Support Matrices Decide</h3>
+          <p>
+            Pick the newest OS release that appears on every support matrix you
+            depend on. They do not agree:
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Component</th>
+                <th>What its current documentation lists</th>
+                <th>Source</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>NVIDIA driver (open kernel modules)</td>
+                <td>
+                  Package instructions for RHEL/Rocky/Alma 8, 9 and 10; Ubuntu
+                  22.04, 24.04, 26.04
+                </td>
+                <td><a href="#src-17">[17]</a></td>
+              </tr>
+              <tr>
+                <td>AMD ROCm 7.14</td>
+                <td>
+                  Ubuntu 24.04.4 and 22.04.5; RHEL 10.1, 10.0, 9.7, 9.6, 9.4,
+                  8.10; Rocky Linux 9; SLES 15 SP7; Debian 12/13; Oracle Linux
+                  8/9/10
+                </td>
+                <td><a href="#src-18">[18]</a></td>
+              </tr>
+              <tr>
+                <td>NVIDIA Base Command Manager 11</td>
+                <td>
+                  Rocky 8/9, SLES 15, Ubuntu 22.04/24.04 at release; Ubuntu
+                  26.04 and SLES 15 SP7 added in 11.34.0 (September 2026)
+                </td>
+                <td><a href="#src-19">[19]</a><a href="#src-20">[20]</a></td>
+              </tr>
+              <tr>
+                <td>OpenHPC 4.1</td>
+                <td>EL 10 and openEuler 24.03</td>
+                <td><a href="#src-11">[11]</a></td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Note the gaps: the ROCm 7.14 table lists Rocky Linux 9 but not 10,
+            and RHEL 10 but not Ubuntu 26.04<a href="#src-18">[18]</a>. ROCm on
+            Rocky 10 may work fine, but it is your problem when it does not.
+          </p>
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Check the OS support table for the
+              GPU driver, the ROCm or CUDA release, the network stack
+              (DOCA-OFED), the parallel file system client and the cluster
+              manager before you pick an OS. The file system client is usually
+              the one that lags. The distribution with the most features is
+              irrelevant if your Lustre or GPFS client will not build against
+              its kernel.
+            </p>
+          </blockquote>
+
+          <h2 id="bare-metal-provisioning">Bare-Metal Provisioning</h2>
+
+          <h3 id="redfish-replaces-ipmi">
+            Out-of-Band Management: Redfish Replaces IPMI
+          </h3>
+          <p>
+            IPMI was the old workhorse for remote power and console. Its
+            replacement is DMTF's <strong>Redfish</strong>, which "uses RESTful
+            interface semantics to access a schema-based data model to conduct
+            management operations," and covers servers plus most other data
+            center equipment, in-band and out-of-band<a href="#src-2">[2]</a>.
+            The current specification is DSP0266 version 1.23.0 (September
+            2025)<a href="#src-2">[2]</a>. You can drive it with
+            <code>curl</code>:
+          </p>
+          <pre><code class="language-bash"># Example only: BMC address, credentials and the system ID ("1") vary by vendor.
+# List the systems managed by this BMC
+curl -sk -u admin:"$BMC_PASS" https://bmc-node001.example.edu/redfish/v1/Systems
+
+# Force a restart (the ResetType values a BMC accepts are listed in
+# ResetType@Redfish.AllowableValues on the ComputerSystem resource)
+curl -sk -u admin:"$BMC_PASS" -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"ResetType": "ForceRestart"}' \
+  https://bmc-node001.example.edu/redfish/v1/Systems/1/Actions/ComputerSystem.Reset</code></pre>
+          <p>
+            The URI structure and the reset action with its allowable values
+            (<code>On</code>, <code>ForceOff</code>,
+            <code>ForceRestart</code> and others) come straight from the
+            specification's examples<a href="#src-2">[2]</a>. Redfish matters
+            more on GPU racks than it did on CPU clusters: NVIDIA Base Command
+            Manager 11 talks to the BMCs of GB200 compute and switch trays over
+            Redfish to fetch metrics and detect leaks<a href="#src-19">[19]</a>.
+            IPMI has not vanished, though; BCM 11.34.0 still added an IPMI
+            plugin to Slurm<a href="#src-20">[20]</a>.
+          </p>
+
+          <h3 id="warewulf-4">Warewulf 4</h3>
+          <p>
+            Warewulf is a widely used open-source provisioner for stateless HPC
+            nodes. Warewulf 4 was rewritten around two ideas: node images are
+            built from OCI container images, and per-node configuration is
+            rendered from templated <strong>overlays</strong> driven by node and
+            profile settings. The current feature release is v4.7.0, which added
+            server TLS support, a new <code>wwctl unset</code> command and
+            refactored server routes; the 4.6.x series added EL10 support
+            (4.6.4) and a preview of provisioning images to local disk instead
+            of RAM (4.6.2)<a href="#src-12">[12]</a>. The Enterprise Linux
+            quickstart shows how short the basic flow is<a href="#src-21"
+              >[21]</a
+            >:
+          </p>
+          <pre><code class="language-bash"># From the Warewulf EL quickstart (addresses are examples)
+wwctl configure --all
+wwctl image import docker://ghcr.io/warewulf/warewulf-rockylinux:9 rockylinux-9 --build
+wwctl profile set default --image rockylinux-9
+wwctl profile set -y default --netmask=255.255.252.0 --gateway=10.0.0.1
+wwctl node add n1 --ipaddr=10.0.2.1 --discoverable=true
+wwctl overlay build</code></pre>
+          <p>
+            Because the image is a container image, you can build and test the
+            GPU node image in a normal container workflow, then import it: the
+            biggest operational improvement over Warewulf 3.
+          </p>
+
+          <h3 id="openhpc-4">OpenHPC 4</h3>
+          <p>
+            OpenHPC remains the community "building blocks" repository:
+            pre-built RPMs for provisioning, Slurm, compilers, MPI stacks and
+            scientific libraries, plus install recipes. OpenHPC v4.0 (October
+            2025) targets EL 10 and openEuler 24.03, retired Warewulf 3 after
+            more than ten years, and supports three provisioners: Confluent,
+            OpenCHAMI and Warewulf 4<a href="#src-1">[1]</a>. Components are
+            built with GCC 15.1, and 4.x is intended for fresh installs, not
+            upgrades from 3.x<a href="#src-1">[1]</a>. The current release is
+            4.1, with 480 packages for EL 10<a href="#src-11">[11]</a>. The 3.x
+            branch continues with release 3.5<a href="#src-22">[22]</a>.
+          </p>
+
+          <h3 id="confluent-and-xcat">Confluent and the xCAT Reversal</h3>
+          <p>
+            xCAT, the other long-time open provisioner, was announced for end of
+            life, then un-sunset. The current README says VersatusHPC has joined
+            the xCAT Consortium, EL10 support is coming, updates will continue
+            "while there is community and user demand," and the Consortium still
+            recommends <strong>Confluent</strong> as the long-term successor<a
+              href="#src-13"
+              >[13]</a
+            >. Confluent describes itself as "the modern successor of xCAT,"
+            supports x86_64 and aarch64, and provisions both stateful and
+            stateless images<a href="#src-23">[23]</a>. Existing xCAT sites are
+            not forced off it, but new deployments should start elsewhere.
+          </p>
+          <p>
+            <strong>OpenCHAMI</strong> (Open Composable Heterogeneous Adaptable
+            Management Infrastructure) is the newer, cloud-style option aimed at
+            "cloud engineers and HPC sysadmins"<a href="#src-24">[24]</a>. It is
+            worth a look for large sites that want microservice-style system
+            management, and it is one of OpenHPC 4's supported provisioners<a
+              href="#src-1"
+              >[1]</a
+            >.
+          </p>
+
+          <h3 id="nvidia-base-command-manager">NVIDIA Base Command Manager</h3>
+          <p>
+            Base Command Manager (BCM) is NVIDIA's commercial cluster manager
+            and the path of least resistance for DGX and large NVIDIA systems.
+            BCM 11 installs the head node OS and creates a default compute image
+            from the same distribution; it is also included in NVIDIA Mission
+            Control, which adds DGX GB200 rack features such as provisioning
+            compute trays and switch trays<a href="#src-19">[19]</a>. BCM
+            11.34.0 (September 11, 2026) added Slurm 26.05, CUDA 13.2 packages,
+            Ubuntu 26.04, Vera Rubin NVL72 bring-up, Pyxis 0.24.0 and Enroot
+            4.2.0, and cluster-wide SSH multi-factor authentication<a
+              href="#src-20"
+              >[20]</a
+            >. The trade-off: a license and lock-in for a tested, integrated
+            stack.
+          </p>
+
+          <h3 id="maas-metal3">MAAS and Metal3: Cloud-Style Bare Metal</h3>
+          <p>
+            Two tools come from the cloud side. Canonical's
+            <strong>MAAS</strong> (Metal as a Service) makes "physical servers
+            behave like cloud instances," with hardware discovery, API-driven OS
+            deployment and integrated DHCP, DNS and image management<a
+              href="#src-25"
+              >[25]</a
+            >. <strong>Metal3</strong> manages bare-metal hosts through
+            Kubernetes, using OpenStack Ironic under a Bare Metal Operator and
+            Cluster API integration<a href="#src-26">[26]</a>. Both fit best
+            when GPU nodes run Kubernetes rather than Slurm (see
+            <a href="scheduling.html">Scheduling and Orchestration</a>).
+          </p>
+
+          <h3 id="stateless-or-stateful">Stateless or Stateful?</h3>
+          <p>
+            Stateless (RAM-booted) images remain the right compute-node default.
+            Two GPU-era complications: first, GPU node images are large (driver,
+            DOCA-OFED, Fabric Manager) and sit in RAM that jobs could use.
+            Warewulf 4.7.0 documents moving the image to swap to reclaim RAM<a
+              href="#src-27"
+              >[27]</a
+            >, and 4.6.2 previewed provisioning to local disk<a href="#src-12"
+              >[12]</a
+            >. Second, local NVMe on GPU nodes is valuable for scratch and
+            checkpoint staging; do not let a diskless mindset waste it.
+          </p>
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Treat the node image like software:
+              definition in git, built in CI, booted on one canary node, burned
+              in (NCCL tests, a short MPI job, GPU health checks), then rolled
+              out. Keep the previous image so rollback is a profile change and a
+              reboot.
+            </p>
+          </blockquote>
+
+          <h2 id="configuration-management">Configuration Management</h2>
+          <p>
+            With stateless nodes, configuration management splits into three
+            layers:
+          </p>
+          <ol>
+            <li>
+              <strong>The image</strong>: packages, drivers, kernel modules.
+              Changes require a rebuild and reboot. Build from a Containerfile
+              or Warewulf/BCM image tooling.
+            </li>
+            <li>
+              <strong>Overlays or templates</strong>: per-node files rendered at
+              boot (network config, hostnames, <code>slurm.conf</code>, SSSD
+              config, SSH host keys and certificates). Warewulf's overlays and
+              BCM's categories live here.
+            </li>
+            <li>
+              <strong>Runtime configuration</strong>: things that change without
+              a reboot. <strong>Ansible</strong> is the de facto tool for this
+              and for the stateful servers (head nodes, login nodes, storage and
+              identity servers)<a href="#src-28">[28]</a>.
+            </li>
+          </ol>
+          <p>
+            Clusters get into trouble when all three layers edit the same file.
+            Fold one-off Ansible changes back into the image.
+          </p>
+
+          <h2 id="the-gpu-software-stack">The GPU Software Stack</h2>
+          <p>The stack, from the bottom up:</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Layer</th>
+                <th>NVIDIA</th>
+                <th>AMD</th>
+                <th>Installed where</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Kernel driver</td>
+                <td>nvidia.ko and related modules (open, MIT/GPLv2)</td>
+                <td>amdgpu</td>
+                <td>Node image</td>
+              </tr>
+              <tr>
+                <td>Fabric daemon (NVSwitch systems)</td>
+                <td>nvidia-fabricmanager (+ NVLSM on Blackwell HGX/DGX)</td>
+                <td>n/a</td>
+                <td>Node image</td>
+              </tr>
+              <tr>
+                <td>RDMA stack</td>
+                <td>DOCA-OFED or inbox rdma-core; nvidia-peermem or dma-buf</td>
+                <td>Same NIC stacks</td>
+                <td>Node image</td>
+              </tr>
+              <tr>
+                <td>User-space driver</td>
+                <td>libcuda.so (ships with the driver)</td>
+                <td>ROCm runtime pieces</td>
+                <td>Node image, injected into containers</td>
+              </tr>
+              <tr>
+                <td>Toolkit</td>
+                <td>CUDA toolkit (nvcc, cudart, cuBLAS...)</td>
+                <td>ROCm Core SDK (HIP, rocBLAS...)</td>
+                <td>Modules or containers</td>
+              </tr>
+              <tr>
+                <td>Libraries</td>
+                <td>cuDNN, NCCL, TensorRT</td>
+                <td>MIOpen, RCCL</td>
+                <td>Modules, pip wheels or containers</td>
+              </tr>
+              <tr>
+                <td>Frameworks</td>
+                <td>PyTorch, JAX, etc.</td>
+                <td>PyTorch, JAX on ROCm</td>
+                <td>User environments or containers</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Only the first four rows belong to the administrator. Toolkits,
+            libraries and frameworks can coexist in many versions, provided each
+            is compatible with the node's one driver.
+          </p>
+
+          <h3 id="nvidia-kernel-driver">The NVIDIA Kernel Driver</h3>
+          <p>
+            The NVIDIA Linux driver is a set of kernel modules:
+            <code>nvidia.ko</code>, <code>nvidia-modeset.ko</code>,
+            <code>nvidia-uvm.ko</code>, <code>nvidia-drm.ko</code> and
+            <code>nvidia-peermem.ko</code>. They are now open source, dual
+            licensed MIT/GPLv2, with source published for every release, and for
+            releases after driver 570 the package names follow the "open"
+            convention<a href="#src-17">[17]</a>. The installation guide shows
+            the per-distribution commands, including how to pin a driver branch
+            so a routine <code>dnf update</code> does not move you to a new
+            one<a href="#src-17">[17]</a>:
+          </p>
+          <pre><code class="language-bash"># RHEL/Rocky/Alma 8 or 9: pin to the R580 branch with a DNF module stream
+dnf module enable nvidia-driver:580-open
+dnf install nvidia-open
+
+# Ubuntu 22.04 / 24.04 / 26.04: pin to R580, then install
+apt install nvidia-driver-pinning-580
+apt install nvidia-open</code></pre>
+          <p>
+            Which branch should you pin? The CUDA release notes map each toolkit
+            to a driver branch: CUDA 13.0 -&gt; R580, 13.1 -&gt; R590, 13.2
+            -&gt; R595, 13.3 -&gt; R610, 13.4 -&gt; R615<a href="#src-29"
+              >[29]</a
+            >. Also note a packaging change: starting with CUDA 13.4, the Linux
+            CUDA toolkit no longer bundles the driver<a href="#src-29">[29]</a>.
+            That formalizes what good clusters already did: install the driver
+            in the node image and the toolkit separately.
+          </p>
+
+          <h3 id="cuda-compatibility-rules">CUDA Compatibility Rules</h3>
+          <p>
+            Most "CUDA doesn't work" tickets are compatibility problems. Teach
+            these three rules to users as well as staff.
+          </p>
+          <ol>
+            <li>
+              <strong>Backward compatibility.</strong> An application built with
+              an older toolkit runs on a newer driver. Always true<a
+                href="#src-29"
+                >[29]</a
+              >.
+            </li>
+            <li>
+              <strong>Minor version compatibility.</strong> Since CUDA 11, an
+              application built with any toolkit in a major family runs on any
+              driver at or above that family's minimum, "with limited
+              feature-set"<a href="#src-30">[30]</a>. For CUDA 13.x the minimum
+              is driver 580; for 12.x it is 525 (with drivers below 580); for
+              11.x, 450<a href="#src-29">[29]</a>. So a node on an R580 driver
+              can run applications built with CUDA 13.4, but features new in
+              13.4 need an R615 or later driver<a href="#src-29">[29]</a>.
+              Documented limits: device code compiled to PTX will not run on
+              older drivers, and builds need an explicit target such as
+              <code>nvcc -arch=sm_xx</code><a href="#src-30">[30]</a>.
+            </li>
+            <li>
+              <strong>Forward compatibility.</strong> To run an application
+              built with a newer major CUDA version on an older driver branch,
+              install the
+              <code>cuda-compat-&lt;major&gt;-&lt;minor&gt;</code> package,
+              which puts newer user-space driver libraries in
+              <code>/usr/local/cuda-X.Y/compat/</code>. It does not configure
+              anything; you must add that directory to
+              <code>LD_LIBRARY_PATH</code>. And it works only on NVIDIA data
+              center GPUs, select NGC Server Ready RTX SKUs and Jetson boards,
+              not consumer GeForce cards<a href="#src-31">[31]</a>.
+            </li>
+          </ol>
+          <pre><code class="language-bash"># Forward compatibility example (data center GPUs only)
+dnf install cuda-compat-12-8           # user-space driver libs from the R570 driver
+export LD_LIBRARY_PATH=/usr/local/cuda-12.8/compat:$LD_LIBRARY_PATH</code></pre>
+          <p>
+            The practical policy: run one recent production driver branch on all
+            GPU nodes, upgrade it a few times a year, and let users choose
+            toolkits freely within the major family.
+          </p>
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> The "CUDA Version" at the top right
+              of <code>nvidia-smi</code> is the CUDA version that matches the
+              installed driver, not the toolkit anyone is using; NVIDIA's own
+              example shows a driver reporting CUDA 13.0 running a CUDA 13.4
+              application<a href="#src-30">[30]</a>. Users read it as "the
+              cluster has CUDA 13.0" and then install the wrong wheels. Put a
+              one-paragraph explanation in your user docs.
+            </p>
+          </blockquote>
+
+          <h3 id="fabric-manager-and-nvswitch">
+            Fabric Manager for NVSwitch Systems
+          </h3>
+          <p>
+            On HGX and DGX baseboards where the GPUs talk through NVSwitch
+            chips, NVLink does not work until the
+            <code>nvidia-fabricmanager</code> service has configured the
+            switches. The package installs the systemd unit, but the
+            administrator must enable and start it<a href="#src-32">[32]</a>.
+            Two details bite in practice:
+          </p>
+          <ul>
+            <li>
+              <strong>Version lockstep.</strong> At startup Fabric Manager
+              checks the loaded kernel driver stack and aborts if the versions
+              are incompatible<a href="#src-32">[32]</a>. Install Fabric Manager
+              from the same driver branch as the kernel driver, in the same
+              image build, and pin both.
+            </li>
+            <li>
+              <strong>Blackwell adds NVLSM.</strong> On DGX and HGX B200/B300
+              and HGX B100 and later, Fabric Manager depends on the NVLink
+              Subnet Manager (NVLSM), derived from the InfiniBand subnet
+              manager, which programs the NVSwitch routing tables. These systems
+              also need an OFED driver plus the <code>libibumad3</code> and
+              <code>infiniband-diags</code> packages<a href="#src-32">[32]</a>.
+              Minimum driver versions are 525 for HGX H100 and 570 for HGX
+              B200/B300<a href="#src-32">[32]</a>.
+            </li>
+          </ul>
+          <pre><code class="language-bash">sudo systemctl enable nvidia-fabricmanager
+sudo systemctl start nvidia-fabricmanager
+sudo systemctl status nvidia-fabricmanager</code></pre>
+          <p>
+            On rack-scale NVLink systems such as DGX GB200, the NVLink switches
+            sit in separate switch trays, which BCM with a Mission Control
+            license provisions and manages alongside the compute trays<a
+              href="#src-19"
+              >[19]</a
+            >. See <a href="interconnects.html">Interconnects</a> for the NVLink
+            topology itself.
+          </p>
+
+          <h3 id="gpudirect-rdma-and-doca-ofed">
+            GPUDirect RDMA, nvidia-peermem and DOCA-OFED
+          </h3>
+          <p>
+            GPUDirect RDMA lets a NIC read and write GPU memory directly, which
+            multi-node NCCL and CUDA-aware MPI need. Two mechanisms:
+          </p>
+          <ul>
+            <li>
+              <strong>nvidia-peermem</strong>, a kernel module shipped with the
+              driver since CUDA 11.4, which gives NVIDIA InfiniBand HCAs peer
+              access to GPU memory and replaced the old out-of-tree
+              <code>nv_peer_mem</code> module<a href="#src-33">[33]</a>. Load it
+              with <code>modprobe nvidia-peermem</code>. Ordering matters: if
+              the GPU driver was installed before MLNX_OFED, reinstall the
+              driver so nvidia-peermem is built against the OFED RDMA APIs<a
+                href="#src-33"
+                >[33]</a
+              >.
+            </li>
+            <li>
+              <strong>Linux dma-buf</strong>. NCCL has supported dma-buf
+              registration since 2.13 through <code>NCCL_DMABUF_ENABLE</code>,
+              enabled by default and turned off automatically if the kernel or
+              drivers do not support it<a href="#src-34">[34]</a>. It is an
+              alternative registration path to nvidia-peermem where the kernel
+              and drivers support it.
+            </li>
+          </ul>
+          <p>
+            On the network side, NVIDIA's host driver stack is now
+            <strong>DOCA-OFED</strong>, described as "a 1-to-1 substitute for
+            MLNX_OFED." The last standalone MLNX_OFED release was October 2024;
+            it receives only critical bug and security fixes until October 2027,
+            when it reaches end of life<a href="#src-4">[4]</a>. DOCA-Host is
+            packaged in profiles (<code>doca-all</code>,
+            <code>doca-networking</code>, <code>doca-ofed</code>,
+            <code>doca-roce</code>), and the switch is an ordinary package
+            install once the repository is configured:
+            <code>dnf -y install doca-ofed</code><a href="#src-4">[4]</a>. Plan
+            the switch now.
+          </p>
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Test GPUDirect RDMA explicitly on
+              every new image. Run the NCCL all-reduce test across two nodes
+              with <code>NCCL_DEBUG=INFO</code> and confirm the log shows GPU
+              Direct RDMA in use. A missing module or wrong load order does not
+              cause an error; NCCL quietly falls back to staging through host
+              memory and your multi-node bandwidth drops. Repeat the test inside
+              your recommended container: a missing RDMA provider library there
+              causes the same silent fallback.
+            </p>
+          </blockquote>
+
+          <h3 id="nccl-cudnn-and-libraries">
+            NCCL, cuDNN and the Library Layer
+          </h3>
+          <p>
+            <strong>NCCL</strong> is NVIDIA's topology-aware collective
+            communication library; the current GitHub release is 2.32.3<a
+              href="#src-35"
+              >[35]</a
+            >. <strong>cuDNN</strong> 9.26.0 adds support for CUDA 13.4 and for
+            Rubin-architecture GPUs (compute capability 10.7)<a href="#src-36"
+              >[36]</a
+            >. Neither needs a system-wide install: framework wheels and NGC
+            containers bundle their own. The system's job is a new enough driver
+            and a working RDMA path; where sites build software against these
+            libraries, provide them as modules.
+          </p>
+          <h3 id="the-rocm-stack">The ROCm Stack</h3>
+          <p>
+            AMD's ROCm has two release lines in 2026. The
+            <strong>7.2.x</strong> line continued with maintenance releases
+            through 7.2.4 (May 29, 2026)<a href="#src-37">[37]</a>.
+            <strong>ROCm Core SDK 7.14.0</strong> (July 15, 2026) moved ROCm to
+            "TheRock," a modular build and release system with a leaner core SDK
+            plus optional domain-specific SDKs for AI, data science and HPC; its
+            version number follows a gap from the 7.9 through 7.13 preview
+            releases<a href="#src-38">[38]</a>. 7.14.1 (September 2, 2026) fixed
+            a regression in which fault-injection instrumentation compiled into
+            RCCL cut collective performance on InfiniBand for MI300X<a
+              href="#src-38"
+              >[38]</a
+            >.
+          </p>
+          <p>
+            Supported data center GPUs in the current system requirements
+            include the MI355X and MI350X (CDNA4, LLVM target gfx950), MI325X,
+            MI300X and MI300A (CDNA3, gfx942) and the MI200 series (gfx90a)<a
+              href="#src-18"
+              >[18]</a
+            >. Spack's <code>amdgpu_target</code> variant and HIP compiler flags
+            use these gfx targets. <strong>RCCL</strong> is AMD's collective
+            library, implementing the same collectives as NCCL over PCIe, xGMI
+            and networks<a href="#src-39">[39]</a>, and frameworks call it
+            through the same NCCL-style APIs.
+          </p>
+
+          <h2 id="user-software-stacks">User Software Stacks</h2>
+
+          <h3 id="spack">Spack</h3>
+          <p>
+            Spack reached <strong>v1.0</strong> on July 20, 2025, after almost
+            seven years of work on compiler dependencies. It split the package
+            repository from the tool and introduced a stable, separately
+            versioned package API<a href="#src-40">[40]</a>.
+            <strong>v1.2.0</strong> (June 21, 2026) made a new parallel
+            installer the default and added concretization groups, experimental
+            build sandboxing and SBOM generation<a href="#src-41">[41]</a>.
+            Spack's spec syntax expresses versions, variants, compilers, targets
+            and dependencies in one line<a href="#src-42">[42]</a>:
+          </p>
+          <pre><code class="language-bash"># Get Spack
+git clone --depth=2 https://github.com/spack/spack.git
+. spack/share/spack/setup-env.sh
+
+# One-off install with a full spec (example from the Spack docs)
+spack install mpileaks@1.2:1.4 +debug ~qt target=x86_64_v3 %gcc@15 ^libelf@1.1 %clang@20
+
+# Environments are the recommended way to manage a stack
+spack env create myenv
+spack env activate myenv
+spack add curl @8 python py-numpy py-scipy py-matplotlib
+spack concretize
+spack install</code></pre>
+          <p>
+            The environment commands are from the Spack environments guide<a
+              href="#src-43"
+              >[43]</a
+            >. For GPU stacks, many packages have <code>+cuda</code> or
+            <code>+rocm</code> variants, and you should usually point Spack at
+            the system CUDA or ROCm installation instead of letting it download
+            its own. The documented pattern is an external in
+            <code>packages.yaml</code><a href="#src-44">[44]</a>:
+          </p>
+          <pre><code class="language-yaml"># packages.yaml (example values: set cuda_arch for your GPUs and the real prefix)
+packages:
+  all:
+    variants:
+      - cuda_arch=90
+  cuda:
+    buildable: false
+    externals:
+      - spec: cuda@13.0.2
+        prefix: /usr/local/cuda-13.0</code></pre>
+          <p>
+            Spack generates Lmod (hierarchical) or Tcl module files;
+            <code>spack module lmod refresh</code> regenerates them<a
+              href="#src-45"
+              >[45]</a
+            >. Note that Spack 1.0 made breaking changes to spec semantics
+            (including the meaning of <code>%</code>) and to package
+            repositories, with migration commands provided<a href="#src-40"
+              >[40]</a
+            >, so recipes and site configs written for 0.x need review.
+          </p>
+
+          <h3 id="easybuild">EasyBuild</h3>
+          <p>
+            EasyBuild takes a different approach: curated recipes
+            ("easyconfigs") built on a small set of versioned compiler
+            toolchains such as <code>foss</code> and <code>intel</code
+            ><a href="#src-46">[46]</a>. The current release, 5.4.0 (August 9,
+            2026), supports 3,091 software packages and 31 toolchains<a
+              href="#src-47"
+              >[47]</a
+            >. EasyBuild 5.0 enabled RPATH linking by default and requires Lmod
+            8.0 or newer when Lmod is the modules tool<a href="#src-48">[48]</a
+            >. Installation with dependency resolution is one command<a
+              href="#src-46"
+              >[46]</a
+            >:
+          </p>
+          <pre><code class="language-bash">eb -S ^GCC-14                      # search available easyconfigs
+eb HPL-2.3-foss-2021b.eb --robot   # build HPL and everything it needs (example from the docs)</code></pre>
+          <p>
+            Spack offers maximum flexibility; EasyBuild a curated stack
+            organized by toolchain generation. Pick one; running both doubles
+            the module tree users must learn.
+          </p>
+
+          <h3 id="lmod">Lmod</h3>
+          <p>
+            Lmod's documentation is at version 9.3<a href="#src-49">[49]</a>.
+            Users need five commands: <code>module avail</code>,
+            <code>module spider</code> (searches all modules, including those
+            hidden behind a hierarchy), <code>module load</code>,
+            <code>module swap</code> and <code>module purge</code
+            ><a href="#src-49">[49]</a>. A typical GPU job preamble:
+          </p>
+          <pre><code class="language-bash"># Module names and versions are site-specific examples
+module purge
+module load gcc/14.3.0 cuda/13.0 openmpi/5.0
+module list</code></pre>
+          <p>
+            Use Lmod's compiler -&gt; MPI hierarchy: it stops users from mixing
+            libraries built against different MPIs.
+          </p>
+
+          <h3 id="the-python-problem">The Python Environment Problem</h3>
+          <p>
+            Python is where most AI users live and what staff control least:
+            thousands of small files in home directories that hammer the
+            metadata server, pip wheels that bundle their own CUDA libraries,
+            and <code>conda init</code> editing everyone's <code>.bashrc</code>.
+            In 2026 there are also licensing and tooling shifts.
+          </p>
+          <p>
+            <strong>Anaconda licensing.</strong> The conda tool is free and open
+            source, but Anaconda's <code>defaults</code> channel packages
+            require a paid license for organizations of 200 or more people not
+            using them for educational purposes, and because conda points at
+            <code>defaults</code> unless configured otherwise, users can incur
+            license exposure without knowing it. LLNL is phasing out Anaconda
+            and will block its paid channels site-wide in February 2027,
+            recommending conda-forge with Miniforge as a drop-in replacement<a
+              href="#src-3"
+              >[3]</a
+            >. Read Anaconda's current terms yourself<a href="#src-50">[50]</a>
+            and at minimum set conda-forge as the default channel in a
+            system-wide <code>.condarc</code>.
+          </p>
+          <p>
+            <strong>uv.</strong> Astral's uv is a Rust-based Python package and
+            project manager with a global cache for deduplication; it can create
+            virtual environments with a specific Python version (<code
+              >uv venv --python 3.12</code
+            >)<a href="#src-51">[51]</a><a href="#src-52">[52]</a>. On clusters,
+            the key detail is its cache: uv links files from the cache into
+            environments, and if the cache is on a different file system than
+            the environment it falls back to slow copies<a href="#src-53"
+              >[53]</a
+            >. Set <code>UV_CACHE_DIR</code> to a directory on the same file
+            system as the environments (for example project space rather than a
+            small home quota).
+          </p>
+          <p>
+            <strong>pixi.</strong> prefix.dev's pixi manages conda-ecosystem
+            packages per project with a manifest, lock file and multiple
+            environments<a href="#src-54">[54]</a>, a good fit when a project
+            needs non-Python binaries that pip cannot provide.
+          </p>
+          <pre><code class="language-bash"># uv: per-project venv on project storage, cache on the same file system (paths are examples)
+export UV_CACHE_DIR=/project/mylab/.cache/uv
+cd /project/mylab/myproject
+uv venv --python 3.12
+source .venv/bin/activate
+uv pip install torch numpy</code></pre>
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Publish one recommended Python
+              workflow: where environments live (not home), which tool (uv for
+              pure Python, pixi or Miniforge when binaries are needed, a
+              container for large frameworks) and how to load CUDA for
+              extensions. Users follow a clear default; they do not read tool
+              comparisons.
+            </p>
+          </blockquote>
+
+          <h2 id="containers-for-hpc-and-ai">Containers for HPC and AI</h2>
+          <p>
+            For large AI frameworks, containers have won: a PyTorch stack with
+            matching CUDA, cuDNN and NCCL is easier to consume as a vendor image
+            than to rebuild. For MPI codes, containers need care at the MPI and
+            network boundary. HPC runtimes differ from Docker in one key way:
+            containers run as the user, not through a root daemon.
+          </p>
+
+          <h3 id="apptainer">Apptainer</h3>
+          <p>
+            Apptainer, the continuation of Singularity, is the familiar HPC
+            runtime at most centers; version 1.5.0 was released May 6, 2026<a
+              href="#src-55"
+              >[55]</a
+            >. It runs single-file SIF images and pulls directly from OCI
+            registries. The <code>--nv</code> flag exposes
+            <code>/dev/nvidia*</code> devices and binds the host's CUDA driver
+            libraries into the container; <code>--rocm</code> does the same for
+            AMD GPUs; and Apptainer also supports the Container Device Interface
+            (CDI) and an experimental <code>--nvccli</code> mode using NVIDIA's
+            container CLI<a href="#src-56">[56]</a>.
+          </p>
+          <pre><code class="language-bash"># Pull an NGC PyTorch image into a SIF file (tag is an example; see the NGC catalog)
+apptainer pull pytorch-26.08.sif docker://nvcr.io/nvidia/pytorch:26.08-py3
+
+# Run with NVIDIA GPUs
+apptainer exec --nv pytorch-26.08.sif python -c 'import torch; print(torch.cuda.is_available())'
+
+# AMD GPUs use --rocm instead of --nv
+apptainer exec --rocm rocm-pytorch.sif python -c 'import torch; print(torch.cuda.is_available())'</code></pre>
+          <p>
+            The <code>pull</code> syntax follows the Apptainer command
+            reference<a href="#src-57">[57]</a>. Because <code>--nv</code> binds
+            the host's user-space driver into the container, the CUDA
+            compatibility rules above apply between the container's toolkit and
+            the node's driver. The NGC PyTorch 26.08 container, for instance, is
+            Ubuntu 24.04-based and built on CUDA 13.4.1<a href="#src-14">[14]</a
+            >, so under minor version compatibility it needs at least an R580
+            driver, with R615 needed for 13.4-specific features<a href="#src-29"
+              >[29]</a
+            >. Host libraries are bound in, so the container's libc must not be
+            too far from the host's<a href="#src-56">[56]</a>.
+          </p>
+
+          <h3 id="enroot-and-pyxis">Enroot and Pyxis</h3>
+          <p>
+            NVIDIA's <strong>Enroot</strong> is "an enhanced unprivileged
+            chroot" with no daemon, no setuid binary and deliberately little
+            isolation<a href="#src-58">[58]</a>. <strong>Pyxis</strong> is a
+            Slurm SPANK plugin that adds container options directly to
+            <code>srun</code>, pulling Docker images with layer caching and
+            supporting multi-node MPI through PMI2 or PMIx<a href="#src-59"
+              >[59]</a
+            >. NVIDIA's own cluster manager ships both (BCM 11.34.0 updated them
+            to Pyxis 0.24.0 and Enroot 4.2.0)<a href="#src-20">[20]</a>, and
+            many AI users expect this workflow.
+          </p>
+          <pre><code class="language-bash"># Run a command inside a container on a compute node
+srun --container-image=nvcr.io\#nvidia/pytorch:26.08-py3 \
+     --container-mounts=/scratch/$USER:/data \
+     python -c 'import torch; print(torch.__version__)'
+
+# Multi-node job: PMIx wires up the ranks, Pyxis supplies the container (example sizes)
+srun -N 2 --ntasks-per-node=8 --gpus-per-node=8 --mpi=pmix \
+     --container-image=nvcr.io\#nvidia/pytorch:26.08-py3 \
+     --container-name=pt2608 \
+     python train.py</code></pre>
+          <p>
+            In the image URI, <code>#</code> separates the registry from the
+            image; it must be escaped in
+            <code>#SBATCH --container-image</code> lines, where
+            <code>#</code> starts a comment, and escaping it on the command line
+            as above is harmless<a href="#src-59">[59]</a>.
+            <code>--container-name</code> keeps the unpacked container on the
+            node so later steps skip the import<a href="#src-59">[59]</a>. For
+            admins, one gotcha: since Slurm 21.08, Pyxis must be compiled
+            against the exact Slurm release you deploy, or Slurm refuses to load
+            it with "Incompatible plugin version"<a href="#src-59">[59]</a>.
+            Rebuild Pyxis as part of every Slurm upgrade.
+          </p>
+
+          <h3 id="podman-and-charliecloud">Podman, Charliecloud and CDI</h3>
+          <p>
+            <strong>Podman</strong> in rootless mode is the closest thing to
+            Docker that is safe on a shared cluster. NERSC worked with Red Hat
+            to adapt it for HPC as <code>podman-hpc</code>, which lets
+            Perlmutter users build images on the system and run them at scale,
+            with support for Cray MPI and CUDA<a href="#src-60">[60]</a>.
+            <strong>Charliecloud</strong> is a "lightweight, fully unprivileged"
+            implementation that uses user namespaces and can build images, push
+            and pull to registries, and use GPUs<a href="#src-61">[61]</a>.
+            Underneath many of these, the
+            <strong>Container Device Interface</strong> is replacing
+            runtime-specific GPU hooks: since v1.12.0 the NVIDIA Container
+            Toolkit can generate CDI specifications (<code
+              >nvidia-ctk cdi generate</code
+            >) that any CDI-aware runtime can consume<a href="#src-62">[62]</a>.
+          </p>
+
+          <h3 id="vendor-images">Vendor Images: NGC and ROCm</h3>
+          <p>
+            NVIDIA's NGC catalog publishes framework containers on a regular
+            cadence (tags like <code>26.08-py3</code>) with release notes
+            listing the exact CUDA, PyTorch and library versions<a
+              href="#src-14"
+              >[14]</a
+            >. AMD publishes validated <code>rocm/pytorch</code> images on
+            Docker Hub with tags that encode ROCm, OS, Python and PyTorch
+            versions, for example
+            <code
+              >rocm/pytorch:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.9.1</code
+            ><a href="#src-63">[63]</a>. Use full tags or digests, never
+            <code>latest</code>.
+          </p>
+
+          <h3 id="mpi-and-gpus-in-containers">
+            MPI, GPUs and the Network in Containers
+          </h3>
+          <p>
+            Multi-node container jobs have to reach the host's network and
+            cooperate with Slurm's process launch. Apptainer documents two
+            models<a href="#src-64">[64]</a>:
+          </p>
+          <ul>
+            <li>
+              <strong>Hybrid model</strong>: MPI is installed in the container
+              and launched by the host's Slurm or <code>mpirun</code>. It is
+              simple, but the MPI in the container must be compatible with the
+              host's, and must be configured for the host's network to perform
+              well.
+            </li>
+            <li>
+              <strong>Bind model</strong>: the container has no MPI; the host's
+              MPI is bind-mounted in. This guarantees the tuned host MPI is
+              used, but requires ABI compatibility and permission to bind host
+              paths.
+            </li>
+          </ul>
+          <p>
+            With Slurm, launch through <code>srun --mpi=pmix</code> (native in
+            Open MPI since 3.1) so Slurm starts the ranks<a href="#src-65"
+              >[65]</a
+            >. NCCL jobs also need the RDMA user-space libraries in the
+            container and, in the cloud, the right NCCL network plugin. The NGC
+            PyTorch 26.08 image, for example, now includes Google Cloud's NCCL
+            plugins and activates them automatically on supported GCP machine
+            types<a href="#src-14">[14]</a>. See
+            <a href="cloud.html">Cloud and Hybrid</a> for the cloud side.
+          </p>
+          <h2 id="identity-and-access">Identity and Access</h2>
+
+          <h3 id="freeipa-sssd-kerberos">FreeIPA, SSSD and Kerberos</h3>
+          <p>
+            <strong>FreeIPA</strong> combines the 389 Directory Server, MIT
+            Kerberos, DNS, the Dogtag certificate system and SSSD into one
+            managed service. It defines Kerberos authentication and
+            authorization policies, controls services such as DNS, sudo, SELinux
+            and autofs, and can establish trusts with Active Directory<a
+              href="#src-66"
+              >[66]</a
+            >. That AD trust is the common campus pattern: users keep their
+            campus AD credentials, while cluster-specific groups, POSIX
+            attributes and sudo policy live in FreeIPA. <strong>SSSD</strong> is
+            the client side on every node, enrolling machines into AD, FreeIPA
+            or LDAP domains and caching identities and credentials<a
+              href="#src-67"
+              >[67]</a
+            >. Kerberos remains the SSO backbone inside the realm and underpins
+            Kerberized NFS.
+          </p>
+
+          <h3 id="federated-sso">Federated SSO and CILogon</h3>
+          <p>
+            Research collaborations span institutions, and nobody wants to issue
+            local accounts to every collaborator by hand.
+            <strong>CILogon</strong> provides an identity and access management
+            platform for research, combining federated identity (InCommon and
+            eduGAIN) with COmanage collaborative organization management and
+            OpenID Connect for applications<a href="#src-68">[68]</a>. Typical
+            uses are OIDC login for web portals and issuing short-lived SSH
+            credentials after federated login. BCM 11.34.0's cluster-wide SSH
+            MFA setup<a href="#src-20">[20]</a> and Ubuntu 26.04's
+            <code>authd</code> for cloud identity providers<a href="#src-15"
+              >[15]</a
+            >
+            show that MFA and IdP-backed login are now expected features, not
+            add-ons.
+          </p>
+
+          <h3 id="ssh-certificates">SSH Certificates</h3>
+          <p>
+            SSH certificates replace sprawling <code>authorized_keys</code> and
+            <code>known_hosts</code> files with a CA that signs user keys (with
+            principals and a validity period) and host keys. Servers trust the
+            CA via <code>TrustedUserCAKeys</code>, present signed host keys via
+            <code>HostCertificate</code>, and can map principals with
+            <code>AuthorizedPrincipalsFile</code><a href="#src-69">[69]</a>. The
+            OpenSSH tooling is built in<a href="#src-70">[70]</a>:
+          </p>
+          <pre><code class="language-bash"># Sign a user key valid for 12 hours for principal "jdoe" (names are examples)
+ssh-keygen -s user_ca -I jdoe@example.edu -n jdoe -V +12h id_ed25519.pub
+
+# Sign a host key for a login node
+ssh-keygen -s host_ca -I login01 -h -n login01.hpc.example.edu ssh_host_ed25519_key.pub
+
+# sshd_config on cluster nodes
+#   TrustedUserCAKeys /etc/ssh/user_ca.pub
+#   HostCertificate   /etc/ssh/ssh_host_ed25519_key-cert.pub</code></pre>
+          <p>
+            Short-lived user certificates give you revocation by expiry, and
+            host certificates end the "host key changed" warnings after every
+            reprovision of a stateless node.
+          </p>
+
+          <h2 id="security-hardening-basics">Security Hardening Basics</h2>
+          <p>
+            NIST has now published two HPC-specific documents: SP 800-223 (final
+            February 2024) defines an HPC system reference architecture, threat
+            analysis and security posture<a href="#src-71">[71]</a>, and SP
+            800-234 (final May 2026) is an HPC security overlay built on the
+            moderate control baseline<a href="#src-72">[72]</a>. Start there for
+            regulated data (see
+            <a href="operations.html">Research Computing Operations</a>). The
+            basics everywhere:
+          </p>
+          <ul>
+            <li>
+              <strong>Patch kernels promptly, GPU nodes included.</strong> For
+              example, GhostLock (CVE-2026-43499), a use-after-free that lets an
+              unprivileged local user become root and escape containers,
+              affected every supported AlmaLinux release when disclosed in
+              July<a href="#src-10">[10]</a>. Unprivileged containers do not
+              protect against kernel bugs. Rebuild the GPU driver against the
+              new kernel in the same image build.
+            </li>
+            <li>
+              <strong>Isolate the management plane.</strong> BMCs, provisioning
+              services and switch management belong on networks users cannot
+              reach. Warewulf 4.7.0 added TLS for its server<a href="#src-12"
+                >[12]</a
+              >; use it.
+            </li>
+            <li>
+              <strong>Mind Secure Boot certificate transitions.</strong>
+              Microsoft's 2011 UEFI Secure Boot certificates have expired;
+              AlmaLinux 10.2's x86_64 shim is dual-signed with both the 2011 and
+              2023 certificates<a href="#src-9">[9]</a
+              ><a href="#src-10">[10]</a>. With Secure Boot on, test new shims
+              and firmware on a canary node and sign any out-of-tree kernel
+              modules.
+            </li>
+            <li>
+              <strong>Watch crypto policy changes.</strong> On Rocky Linux 10.2
+              the <code>FUTURE</code> system-wide crypto policy now allows only
+              hybrid ML-KEM key exchange, which will break connections to
+              endpoints that do not support post-quantum algorithms<a
+                href="#src-7"
+                >[7]</a
+              >. Test policy changes against license servers, storage appliances
+              and BMCs first.
+            </li>
+            <li>
+              <strong>Keep SELinux or AppArmor on where you can.</strong> Rocky
+              10.2's SELinux policy now confines the
+              <code>redfish-finder</code> service<a href="#src-7">[7]</a>;
+              distribution policies increasingly cover HPC-adjacent services.
+            </li>
+            <li>
+              <strong>Track the supply chain.</strong> Pin image digests, prefer
+              signed images, and try Spack 1.2 SBOM generation<a href="#src-41"
+                >[41]</a
+              >.
+            </li>
+          </ul>
+
+          <h2 id="key-takeaways">Key Takeaways</h2>
+          <ul>
+            <li>
+              Pick the OS from the intersection of your vendors' support
+              matrices. In 2026 that is usually Rocky/Alma/RHEL 9 or 10, or
+              Ubuntu 24.04/26.04, and not every matrix includes EL10 or 26.04
+              yet.
+            </li>
+            <li>
+              Warewulf 4, Confluent and OpenCHAMI are the open provisioners; BCM
+              is the commercial path for large NVIDIA systems. Drive BMCs
+              through Redfish.
+            </li>
+            <li>
+              Build node images like software: container-based definitions in
+              git, a canary node, a GPU and fabric burn-in, and an easy
+              rollback.
+            </li>
+            <li>
+              Install the NVIDIA driver, Fabric Manager (plus NVLSM on Blackwell
+              HGX), DOCA-OFED and nvidia-peermem together in the image and pin
+              the driver branch. Let users choose CUDA toolkits within the major
+              family through minor version compatibility.
+            </li>
+            <li>
+              MLNX_OFED reaches end of life in October 2027; move to DOCA-OFED
+              now. ROCm moved to the modular TheRock-based Core SDK with 7.14.
+            </li>
+            <li>
+              Use Spack or EasyBuild with Lmod for compiled software, and
+              publish one clear Python workflow (conda-forge rather than
+              Anaconda defaults, uv or pixi, environments off home directories).
+            </li>
+            <li>
+              Deliver AI frameworks as containers (Apptainer, or Enroot + Pyxis
+              with Slurm) and verify multi-node NCCL bandwidth inside the
+              container, not just on bare metal.
+            </li>
+            <li>
+              Centralize identity (FreeIPA or AD via SSSD), federate external
+              users (CILogon, OIDC), and move to short-lived SSH certificates
+              with MFA.
+            </li>
+          </ul>
+
+          <h2 id="sources">Sources</h2>
+          <ol class="sources">
+            <li id="src-1">
+              <a
+                href="https://openhpc.community/news/2025/openhpc-v4-0-release-major-os-support-and-new-provisioning-systems/"
+                target="_blank"
+                rel="noopener"
+                >OpenHPC v4.0 Release: Major OS Support and New Provisioning
+                Systems (OpenHPC, 2025)</a
+              >
+            </li>
+            <li id="src-2">
+              <a
+                href="https://www.dmtf.org/sites/default/files/standards/documents/DSP0266_1.23.0.pdf"
+                target="_blank"
+                rel="noopener"
+                >Redfish Specification DSP0266 version 1.23.0 (DMTF, 2025)</a
+              >
+            </li>
+            <li id="src-3">
+              <a
+                href="https://hpc.llnl.gov/technical-bulletins/bulletin-602"
+                target="_blank"
+                rel="noopener"
+                >Technical Bulletin 602: LLNL is phasing out support for
+                Anaconda (LLNL, 2026)</a
+              >
+            </li>
+            <li id="src-4">
+              <a
+                href="https://docs.nvidia.com/doca/sdk/doca-profiles.pdf"
+                target="_blank"
+                rel="noopener"
+                >DOCA Profiles and MLNX_OFED to DOCA-OFED Transition Guide
+                (NVIDIA, 2026)</a
+              >
+            </li>
+            <li id="src-5">
+              <a
+                href="https://access.redhat.com/support/policy/updates/errata"
+                target="_blank"
+                rel="noopener"
+                >Red Hat Enterprise Linux Life Cycle (Red Hat, 2026)</a
+              >
+            </li>
+            <li id="src-6">
+              <a
+                href="https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/10/html/10.2_release_notes/overview"
+                target="_blank"
+                rel="noopener"
+                >Overview of Red Hat Enterprise Linux 10.2, 10.2 Release Notes
+                (Red Hat, 2026)</a
+              >
+            </li>
+            <li id="src-7">
+              <a
+                href="https://rockylinux.org/news/rocky-linux-10-2-ga-release"
+                target="_blank"
+                rel="noopener"
+                >Rocky Linux 10.2 Available Now (Rocky Linux, 2026)</a
+              >
+            </li>
+            <li id="src-8">
+              <a
+                href="https://rockylinux.org/news/rocky-linux-9-8-ga-release"
+                target="_blank"
+                rel="noopener"
+                >Rocky Linux 9.8 Available Now (Rocky Linux, 2026)</a
+              >
+            </li>
+            <li id="src-9">
+              <a
+                href="https://wiki.almalinux.org/release-notes/10.2.html"
+                target="_blank"
+                rel="noopener"
+                >AlmaLinux 10.2 Release Notes (AlmaLinux, 2026)</a
+              >
+            </li>
+            <li id="src-10">
+              <a
+                href="https://almalinux.org/blog/"
+                target="_blank"
+                rel="noopener"
+                >AlmaLinux Blog: 10.3 and 9.9 betas, Secure Boot certificates,
+                GhostLock (AlmaLinux, 2026)</a
+              >
+            </li>
+            <li id="src-11">
+              <a
+                href="https://github.com/openhpc/ohpc/wiki/4.x"
+                target="_blank"
+                rel="noopener"
+                >OpenHPC 4.x wiki: Community building blocks for HPC systems
+                (4.1) (OpenHPC, 2026)</a
+              >
+            </li>
+            <li id="src-12">
+              <a
+                href="https://github.com/warewulf/warewulf/releases"
+                target="_blank"
+                rel="noopener"
+                >Warewulf releases v4.6.2 through v4.7.0 (Warewulf,
+                2025-2026)</a
+              >
+            </li>
+            <li id="src-13">
+              <a
+                href="https://github.com/xcat2/xcat-core/blob/master/README.md"
+                target="_blank"
+                rel="noopener"
+                >xCAT README: The xCAT sunset was only a quick eclipse (xCAT
+                Consortium, 2026)</a
+              >
+            </li>
+            <li id="src-14">
+              <a
+                href="https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/rel-26-08.html"
+                target="_blank"
+                rel="noopener"
+                >PyTorch Release 26.08, NVIDIA Frameworks Release Notes (NVIDIA,
+                2026)</a
+              >
+            </li>
+            <li id="src-15">
+              <a
+                href="https://canonical.com/blog/canonical-releases-ubuntu-26-04-lts-resolute-raccoon"
+                target="_blank"
+                rel="noopener"
+                >Canonical releases Ubuntu 26.04 LTS Resolute Raccoon
+                (Canonical, 2026)</a
+              >
+            </li>
+            <li id="src-16">
+              <a
+                href="https://documentation.ubuntu.com/release-notes/26.04/"
+                target="_blank"
+                rel="noopener"
+                >Ubuntu 26.04 LTS release notes (Canonical, 2026)</a
+              >
+            </li>
+            <li id="src-17">
+              <a
+                href="https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/latest/kernel-modules.html"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA Driver Installation Guide: Kernel Modules (NVIDIA,
+                2026)</a
+              >
+            </li>
+            <li id="src-18">
+              <a
+                href="https://rocm.docs.amd.com/projects/install-on-linux/en/latest/reference/system-requirements.html"
+                target="_blank"
+                rel="noopener"
+                >ROCm System requirements (Linux), ROCm 7.14 (AMD, 2026)</a
+              >
+            </li>
+            <li id="src-19">
+              <a
+                href="https://docs.nvidia.com/base-command-manager/bcm-11-release-notes/overview.html"
+                target="_blank"
+                rel="noopener"
+                >Base Command Manager 11 Release Notes: Overview (NVIDIA,
+                2025)</a
+              >
+            </li>
+            <li id="src-20">
+              <a
+                href="https://docs.nvidia.com/base-command-manager/bcm-11-release-notes/bcm11-34-0.html"
+                target="_blank"
+                rel="noopener"
+                >Release notes for NVIDIA Base Command Manager 11.34.0 (NVIDIA,
+                2026)</a
+              >
+            </li>
+            <li id="src-21">
+              <a
+                href="https://github.com/warewulf/warewulf/blob/main/userdocs/getting-started/el-quickstart.rst"
+                target="_blank"
+                rel="noopener"
+                >Warewulf Enterprise Linux Quickstart (Warewulf, 2026)</a
+              >
+            </li>
+            <li id="src-22">
+              <a
+                href="https://github.com/openhpc/ohpc/wiki/3.x"
+                target="_blank"
+                rel="noopener"
+                >OpenHPC 3.x wiki (3.5) (OpenHPC, 2026)</a
+              >
+            </li>
+            <li id="src-23">
+              <a
+                href="https://xcat2.github.io/confluent-docs/"
+                target="_blank"
+                rel="noopener"
+                >Confluent documentation (xCAT Consortium, 2026)</a
+              >
+            </li>
+            <li id="src-24">
+              <a href="https://openchami.org/" target="_blank" rel="noopener"
+                >OpenCHAMI: Secure, Scalable HPC System Management (OpenCHAMI,
+                2026)</a
+              >
+            </li>
+            <li id="src-25">
+              <a
+                href="https://canonical.com/maas/docs"
+                target="_blank"
+                rel="noopener"
+                >MAAS documentation (Canonical, 2026)</a
+              >
+            </li>
+            <li id="src-26">
+              <a href="https://metal3.io/" target="_blank" rel="noopener"
+                >Metal3: bare metal host management with Kubernetes (Metal3
+                project, 2026)</a
+              >
+            </li>
+            <li id="src-27">
+              <a
+                href="https://warewulf.org/docs/main/release/v4.7.0.html"
+                target="_blank"
+                rel="noopener"
+                >Warewulf v4.7.0 Release Notes (Warewulf, 2026)</a
+              >
+            </li>
+            <li id="src-28">
+              <a
+                href="https://docs.ansible.com/projects/ansible/latest/getting_started/index.html"
+                target="_blank"
+                rel="noopener"
+                >Getting started with Ansible (Ansible Community Documentation,
+                2026)</a
+              >
+            </li>
+            <li id="src-29">
+              <a
+                href="https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/"
+                target="_blank"
+                rel="noopener"
+                >CUDA Toolkit 13.4 Update 1 Release Notes (NVIDIA, 2026)</a
+              >
+            </li>
+            <li id="src-30">
+              <a
+                href="https://docs.nvidia.com/deploy/cuda-compatibility/minor-version-compatibility.html"
+                target="_blank"
+                rel="noopener"
+                >CUDA Compatibility: Minor Version Compatibility (NVIDIA,
+                2026)</a
+              >
+            </li>
+            <li id="src-31">
+              <a
+                href="https://docs.nvidia.com/deploy/cuda-compatibility/forward-compatibility.html"
+                target="_blank"
+                rel="noopener"
+                >CUDA Compatibility: Forward Compatibility (NVIDIA, 2026)</a
+              >
+            </li>
+            <li id="src-32">
+              <a
+                href="https://docs.nvidia.com/datacenter/tesla/fabric-manager-user-guide/index.html"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA Fabric Manager User Guide (NVIDIA, 2025)</a
+              >
+            </li>
+            <li id="src-33">
+              <a
+                href="https://docs.nvidia.com/cuda/gpudirect-rdma/index.html"
+                target="_blank"
+                rel="noopener"
+                >Developing a Linux Kernel Module using GPUDirect RDMA (NVIDIA,
+                2026)</a
+              >
+            </li>
+            <li id="src-34">
+              <a
+                href="https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/env.html"
+                target="_blank"
+                rel="noopener"
+                >NCCL User Guide: Environment Variables (NVIDIA, 2026)</a
+              >
+            </li>
+            <li id="src-35">
+              <a
+                href="https://github.com/NVIDIA/nccl/releases"
+                target="_blank"
+                rel="noopener"
+                >NCCL releases (NVIDIA, GitHub, 2026)</a
+              >
+            </li>
+            <li id="src-36">
+              <a
+                href="https://docs.nvidia.com/deeplearning/cudnn/backend/latest/release-notes.html"
+                target="_blank"
+                rel="noopener"
+                >cuDNN Backend Release Notes, 9.26.0 (NVIDIA, 2026)</a
+              >
+            </li>
+            <li id="src-37">
+              <a
+                href="https://rocm.docs.amd.com/en/latest/release/versions.html"
+                target="_blank"
+                rel="noopener"
+                >ROCm release history (AMD, 2026)</a
+              >
+            </li>
+            <li id="src-38">
+              <a
+                href="https://rocm.docs.amd.com/en/docs-7.14.1/about/release-notes.html"
+                target="_blank"
+                rel="noopener"
+                >ROCm Core SDK 7.14.1 and 7.14.0 release notes (AMD, 2026)</a
+              >
+            </li>
+            <li id="src-39">
+              <a
+                href="https://github.com/ROCm/rccl"
+                target="_blank"
+                rel="noopener"
+                >RCCL: ROCm Communication Collectives Library (AMD, GitHub,
+                2026)</a
+              >
+            </li>
+            <li id="src-40">
+              <a
+                href="https://github.com/spack/spack/releases/tag/v1.0.0"
+                target="_blank"
+                rel="noopener"
+                >Spack v1.0.0 release notes (Spack, 2025)</a
+              >
+            </li>
+            <li id="src-41">
+              <a
+                href="https://github.com/spack/spack/blob/develop/CHANGELOG.md"
+                target="_blank"
+                rel="noopener"
+                >Spack CHANGELOG, v1.2.0 (Spack, 2026)</a
+              >
+            </li>
+            <li id="src-42">
+              <a
+                href="https://spack.readthedocs.io/en/latest/spec_syntax.html"
+                target="_blank"
+                rel="noopener"
+                >Spack documentation: Spec Syntax (Spack, 2026)</a
+              >
+            </li>
+            <li id="src-43">
+              <a
+                href="https://spack.readthedocs.io/en/latest/environments_basics.html"
+                target="_blank"
+                rel="noopener"
+                >Spack documentation: Environments basics (Spack, 2026)</a
+              >
+            </li>
+            <li id="src-44">
+              <a
+                href="https://spack.readthedocs.io/en/latest/gpu_configuration.html"
+                target="_blank"
+                rel="noopener"
+                >Spack documentation: Using External GPU Support (Spack,
+                2026)</a
+              >
+            </li>
+            <li id="src-45">
+              <a
+                href="https://spack.readthedocs.io/en/latest/module_file_support.html"
+                target="_blank"
+                rel="noopener"
+                >Spack documentation: Modules (Spack, 2026)</a
+              >
+            </li>
+            <li id="src-46">
+              <a
+                href="https://docs.easybuild.io/using-easybuild/"
+                target="_blank"
+                rel="noopener"
+                >Using EasyBuild (EasyBuild, 2026)</a
+              >
+            </li>
+            <li id="src-47">
+              <a
+                href="https://docs.easybuild.io/release-notes/"
+                target="_blank"
+                rel="noopener"
+                >EasyBuild release notes, v5.4.0 (EasyBuild, 2026)</a
+              >
+            </li>
+            <li id="src-48">
+              <a
+                href="https://docs.easybuild.io/easybuild-v5/"
+                target="_blank"
+                rel="noopener"
+                >EasyBuild v5.0 overview of changes (EasyBuild, 2025)</a
+              >
+            </li>
+            <li id="src-49">
+              <a
+                href="https://lmod.readthedocs.io/en/latest/010_user.html"
+                target="_blank"
+                rel="noopener"
+                >User Guide for Lmod, Lmod 9.3 documentation (Lmod project,
+                2026)</a
+              >
+            </li>
+            <li id="src-50">
+              <a
+                href="https://www.anaconda.com/legal/terms/terms-of-service"
+                target="_blank"
+                rel="noopener"
+                >Anaconda Terms of Service (Anaconda, 2025)</a
+              >
+            </li>
+            <li id="src-51">
+              <a
+                href="https://docs.astral.sh/uv/"
+                target="_blank"
+                rel="noopener"
+                >uv documentation (Astral, 2026)</a
+              >
+            </li>
+            <li id="src-52">
+              <a
+                href="https://docs.astral.sh/uv/pip/environments/"
+                target="_blank"
+                rel="noopener"
+                >uv: Using Python environments (Astral, 2026)</a
+              >
+            </li>
+            <li id="src-53">
+              <a
+                href="https://docs.astral.sh/uv/concepts/cache/"
+                target="_blank"
+                rel="noopener"
+                >uv: Caching (Astral, 2026)</a
+              >
+            </li>
+            <li id="src-54">
+              <a
+                href="https://pixi.prefix.dev/latest/getting_started/"
+                target="_blank"
+                rel="noopener"
+                >Basic usage of Pixi (prefix.dev, 2026)</a
+              >
+            </li>
+            <li id="src-55">
+              <a
+                href="https://apptainer.org/news/"
+                target="_blank"
+                rel="noopener"
+                >Apptainer News: Announcing Apptainer release 1.5.0 (Apptainer,
+                2026)</a
+              >
+            </li>
+            <li id="src-56">
+              <a
+                href="https://apptainer.org/docs/user/latest/gpu.html"
+                target="_blank"
+                rel="noopener"
+                >Apptainer User Guide: GPU and other Device Support (Apptainer,
+                2026)</a
+              >
+            </li>
+            <li id="src-57">
+              <a
+                href="https://apptainer.org/docs/user/latest/cli/apptainer_pull.html"
+                target="_blank"
+                rel="noopener"
+                >Apptainer User Guide: apptainer pull (Apptainer, 2026)</a
+              >
+            </li>
+            <li id="src-58">
+              <a
+                href="https://github.com/NVIDIA/enroot"
+                target="_blank"
+                rel="noopener"
+                >Enroot (NVIDIA, GitHub, 2026)</a
+              >
+            </li>
+            <li id="src-59">
+              <a
+                href="https://github.com/NVIDIA/pyxis"
+                target="_blank"
+                rel="noopener"
+                >Pyxis: container plugin for Slurm (NVIDIA, GitHub, 2026)</a
+              >
+            </li>
+            <li id="src-60">
+              <a
+                href="https://docs.nersc.gov/development/containers/podman-hpc/overview/"
+                target="_blank"
+                rel="noopener"
+                >Using Podman-hpc at NERSC (NERSC, 2026)</a
+              >
+            </li>
+            <li id="src-61">
+              <a
+                href="https://charliecloud.io/latest/index.html"
+                target="_blank"
+                rel="noopener"
+                >Charliecloud Overview (Charliecloud, 2026)</a
+              >
+            </li>
+            <li id="src-62">
+              <a
+                href="https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/cdi-support.html"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA Container Toolkit: Support for Container Device
+                Interface (NVIDIA, 2026)</a
+              >
+            </li>
+            <li id="src-63">
+              <a
+                href="https://rocm.docs.amd.com/projects/install-on-linux/en/latest/install/3rd-party/pytorch-install.html"
+                target="_blank"
+                rel="noopener"
+                >PyTorch on ROCm installation and Docker images (AMD, 2026)</a
+              >
+            </li>
+            <li id="src-64">
+              <a
+                href="https://apptainer.org/docs/user/latest/mpi.html"
+                target="_blank"
+                rel="noopener"
+                >Apptainer and MPI applications (Apptainer, 2026)</a
+              >
+            </li>
+            <li id="src-65">
+              <a
+                href="https://slurm.schedmd.com/mpi_guide.html"
+                target="_blank"
+                rel="noopener"
+                >Slurm MPI Users Guide (SchedMD, 2026)</a
+              >
+            </li>
+            <li id="src-66">
+              <a href="https://www.freeipa.org/" target="_blank" rel="noopener"
+                >FreeIPA - Identity, Policy, Audit (FreeIPA project, 2026)</a
+              >
+            </li>
+            <li id="src-67">
+              <a href="https://sssd.io/" target="_blank" rel="noopener"
+                >SSSD - System Security Services Daemon (SSSD project, 2026)</a
+              >
+            </li>
+            <li id="src-68">
+              <a href="https://www.cilogon.org/" target="_blank" rel="noopener"
+                >CILogon: An Integrated Identity and Access Management Platform
+                for Science (CILogon, 2026)</a
+              >
+            </li>
+            <li id="src-69">
+              <a
+                href="https://man.openbsd.org/sshd_config"
+                target="_blank"
+                rel="noopener"
+                >sshd_config(5) manual page (OpenBSD/OpenSSH, 2026)</a
+              >
+            </li>
+            <li id="src-70">
+              <a
+                href="https://man.openbsd.org/ssh-keygen"
+                target="_blank"
+                rel="noopener"
+                >ssh-keygen(1) manual page (OpenBSD/OpenSSH, 2026)</a
+              >
+            </li>
+            <li id="src-71">
+              <a
+                href="https://csrc.nist.gov/pubs/sp/800/223/final"
+                target="_blank"
+                rel="noopener"
+                >NIST SP 800-223, High-Performance Computing Security:
+                Architecture, Threat Analysis, and Security Posture (NIST,
+                2024)</a
+              >
+            </li>
+            <li id="src-72">
+              <a
+                href="https://csrc.nist.gov/pubs/sp/800/234/final"
+                target="_blank"
+                rel="noopener"
+                >NIST SP 800-234, High-Performance Computing (HPC) Security
+                Overlay (NIST, 2026)</a
+              >
+            </li>
+          </ol>
+          <nav class="doc-pager" aria-label="Chapter navigation">
+            <a class="pager-prev" href="facilities.html"
+              ><span>Previous</span>Power, Cooling and Facilities</a
+            ><a class="pager-next" href="scheduling.html"
+              ><span>Next</span>Scheduling and Orchestration</a
+            >
+          </nav>
+        </article>
+      </div>
+    </main>
+
+    <footer class="section-dark">
+      <div class="container text-center">
+        <p class="footer-note">
+          2026 edition |
+          <a href="index.html" class="subtle-link">Field Manual</a> |
+          <a href="../index.html" class="subtle-link"
+            >charles-forsyth.github.io</a
+          >
+        </p>
+      </div>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+      document.querySelectorAll('pre code').forEach(function (el) {
+        if (el.className === 'c++') el.className = 'language-cpp';
+        else if (el.className && el.className.indexOf('language-') !== 0)
+          el.className = 'language-' + el.className;
+        hljs.highlightElement(el);
+      });
+    </script>
+  </body>
+</html>

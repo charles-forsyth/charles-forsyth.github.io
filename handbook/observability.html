@@ -1,0 +1,1816 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Observability, Performance and Efficiency | Field Manual</title>
+    <meta
+      name="description"
+      content="GPU telemetry, job accounting, health checks, fabric monitoring, profilers, the metrics that matter (MFU, SM activity, TTFT), energy accounting, benchmarks and reliability at scale, with working commands."
+    />
+    <link
+      rel="canonical"
+      href="https://charles-forsyth.github.io/handbook/observability.html"
+    />
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="handbook.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
+    />
+  </head>
+  <body>
+    <header class="hero doc-hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="doc-kicker">
+            <i class="fas fa-chart-line"></i> AI + HPC Field Manual
+          </p>
+          <h1>Observability, Performance and Efficiency</h1>
+          <h2>
+            Measure what your GPUs are really doing, find the waste, and keep
+            large jobs healthy
+          </h2>
+          <div class="cta-buttons">
+            <a href="index.html" class="btn btn-secondary"
+              ><i class="fas fa-book-open"></i> Field Manual</a
+            >
+            <a href="../index.html" class="btn btn-secondary"
+              ><i class="fas fa-arrow-left"></i> Main Site</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+    <nav class="doc-nav" aria-label="Field manual chapters">
+      <div class="container">
+        <a href="convergence.html">Convergence</a
+        ><a href="accelerators.html">Accelerators</a
+        ><a href="memory-storage.html">Memory &amp; Storage</a
+        ><a href="interconnects.html">Interconnects</a
+        ><a href="facilities.html">Facilities</a
+        ><a href="systems-software.html">Systems Software</a
+        ><a href="scheduling.html">Scheduling</a
+        ><a href="observability.html" class="active" aria-current="page"
+          >Observability</a
+        ><a href="operations.html">Operations</a
+        ><a href="training.html">Training</a
+        ><a href="inference.html">Inference</a
+        ><a href="scientific-computing.html">Scientific Computing</a
+        ><a href="cloud.html">Cloud</a><a href="linux.html">Linux</a
+        ><a href="glossary.html">Glossary</a>
+      </div>
+    </nav>
+    <main class="section-light">
+      <div class="container doc-layout">
+        <aside class="doc-toc">
+          <h4><i class="fas fa-list"></i> On this page</h4>
+          <ul>
+            <li>
+              <a href="#gpu-telemetry">GPU Telemetry: The Ground Truth</a>
+            </li>
+            <li>
+              <a href="#prometheus-and-grafana">Prometheus and Grafana</a>
+            </li>
+            <li><a href="#job-level-accounting">Job-Level Accounting</a></li>
+            <li><a href="#node-health-checks">Node Health Checks</a></li>
+            <li><a href="#fabric-monitoring">Fabric Monitoring</a></li>
+            <li><a href="#profilers">Profilers: From Timeline to Kernel</a></li>
+            <li><a href="#metrics-that-matter">Metrics That Matter</a></li>
+            <li><a href="#finding-waste">Finding Waste</a></li>
+            <li>
+              <a href="#power-capping-and-energy-accounting"
+                >Power Capping and Energy Accounting</a
+              >
+            </li>
+            <li><a href="#benchmarking">Benchmarking</a></li>
+            <li><a href="#reliability-at-scale">Reliability at Scale</a></li>
+            <li><a href="#key-takeaways">Key Takeaways</a></li>
+          </ul>
+        </aside>
+        <article class="doc-content">
+          <p>
+            A GPU cluster costs far more per hour than the CPU clusters this
+            manual was first written for, and it fails in more interesting ways.
+            The old habit of watching load averages in Ganglia and reading the
+            Slurm logs when someone complains will not cut it. You need to know,
+            per job and per GPU, whether the silicon is doing useful work, how
+            much energy it burned, and whether a marginal GPU, cable or NIC is
+            dragging a thousand-GPU job to a crawl. This chapter covers the
+            telemetry stack (driver tools, DCGM, Prometheus and Grafana),
+            job-level accounting in Slurm and Open XDMoD, node and fabric
+            health, the profilers you will actually use, the efficiency metrics
+            that matter for AI and HPC, power capping and energy accounting, the
+            standard benchmarks, and what reliability looks like at scale.
+            Facilities-side metering (PUE, rack power) is covered in
+            <a href="facilities.html">Power, Cooling and Facilities</a>;
+            scheduler configuration is in
+            <a href="scheduling.html">Scheduling and Orchestration</a>.
+          </p>
+
+          <h2 id="gpu-telemetry">GPU Telemetry: The Ground Truth</h2>
+
+          <p>
+            Every useful observability stack starts with the vendor management
+            library on each node: NVML for NVIDIA GPUs, AMD SMI (the library
+            behind <code>amd-smi</code>) for AMD GPUs. The command-line tools
+            are thin wrappers around those libraries, and so are the Prometheus
+            exporters and the Slurm plugins.
+          </p>
+
+          <h3 id="nvidia-smi">nvidia-smi</h3>
+
+          <p>
+            <code>nvidia-smi</code> is the first thing to run on any NVIDIA
+            node. Beyond the default summary, three modes matter for operations:
+            machine-readable queries, streaming device monitoring, and detailed
+            per-subsystem reports.
+          </p>
+
+          <pre><code class="language-bash"># CSV snapshot every 5 seconds: utilization, memory, power, temperature
+nvidia-smi --query-gpu=timestamp,index,utilization.gpu,utilization.memory,memory.used,power.draw,temperature.gpu \
+           --format=csv -l 5
+
+# Stream power/temp (p), utilization (u), clocks (c), violations (v), memory (m)
+nvidia-smi dmon -s pucvm
+
+# Detailed reports for ECC, power, clock event reasons and row remapping
+nvidia-smi -q -d ECC,POWER
+nvidia-smi -q -d PERFORMANCE
+nvidia-smi -q -d ROW_REMAPPER</code></pre>
+
+          <p>
+            The <code>--query-gpu</code> field names above appear in vendor
+            documentation<a href="#src-1">[1]</a>; the
+            <code>dmon -s</code> metric groups and the
+            <code>-q -d</code> display sections are documented in the nvidia-smi
+            manual.<a href="#src-2">[2]</a> Run
+            <code>nvidia-smi --help-query-gpu</code> for the full field list on
+            your driver version.
+          </p>
+
+          <p>
+            Understand what "utilization" means before you put it on a
+            dashboard. The nvidia-smi documentation defines GPU utilization as
+            the "percent of time over the past sample period during which one or
+            more kernels was executing on the GPU", with a sample period between
+            1 second and 1/6 second depending on the product.<a href="#src-2"
+              >[2]</a
+            >
+            A single tiny kernel that occupies one SM out of more than a hundred
+            still counts as 100% for that interval. We return to this in
+            <a href="#metrics-that-matter">Metrics That Matter</a>.
+          </p>
+
+          <h3 id="rocm-smi-and-amd-smi">rocm-smi and amd-smi</h3>
+
+          <p>
+            On AMD Instinct systems, <code>amd-smi</code> is the current tool
+            and <code>rocm-smi</code> is on its way out. AMD's own tooling notes
+            that rocm-smi is deprecated in ROCm 7.0<a href="#src-3">[3]</a>, and
+            AMD positions amd-smi as its replacement, with
+            <code>amd-smi list</code>, <code>amd-smi monitor</code> and
+            <code>amd-smi static</code> covering the common rocm-smi tasks.<a
+              href="#src-4"
+              >[4]</a
+            >
+            Useful commands from the AMD SMI CLI documentation:<a href="#src-5"
+              >[5]</a
+            >
+          </p>
+
+          <pre><code class="language-bash"># Live table, refreshed every second
+amd-smi monitor --watch 1
+
+# Selected columns: power and temperature; ECC and VRAM
+amd-smi monitor --power-usage --temperature
+amd-smi monitor --vram-usage --ecc
+
+# Point-in-time metrics: engine usage, power, ECC totals
+amd-smi metric --usage --power
+amd-smi metric --ecc
+
+# Retired memory pages (a leading indicator of failing HBM)
+amd-smi bad-pages --retired
+
+# Machine-readable output for scripts
+amd-smi metric --usage --power --json</code></pre>
+
+          <p>
+            AMD's documentation warns that fields sourced from the driver's
+            versioned <code>gpu_metrics</code> structure read N/A when the
+            driver is newer than the installed AMD SMI release; if power or
+            usage suddenly shows N/A after a driver update, upgrade AMD SMI or
+            ROCm to match.<a href="#src-5">[5]</a>
+          </p>
+
+          <h3 id="dcgm-and-dcgm-exporter">DCGM and dcgm-exporter</h3>
+
+          <p>
+            NVIDIA Data Center GPU Manager (DCGM) is the fleet-grade layer: a
+            host engine (<code>nv-hostengine</code>) that watches fields
+            continuously, a CLI (<code>dcgmi</code>), health checks, active
+            diagnostics, per-job statistics and low-overhead hardware profiling
+            counters.<a href="#src-6">[6]</a> The profiling fields are what make
+            DCGM worth deploying even if you already scrape nvidia-smi. By
+            default DCGM samples them at 1 Hz, with a minimum configurable
+            interval of 100 ms.<a href="#src-6">[6]</a>
+          </p>
+
+          <pre><code class="language-bash"># Which profiling fields does this GPU support, and which can be collected together?
+dcgmi profile --list --entity-id gpu:0
+
+# Stream SM activity (1002) and DRAM activity (1005) once per second
+dcgmi dmon --entity-id gpu:0 --field-id 1002,1005 --delay 1000
+
+# Graphics engine active (1001), tensor pipe active (1004), DRAM active (1005)
+dcgmi dmon -e 1001,1004,1005</code></pre>
+
+          <p>
+            DCGM's documentation defines SM activity as "the fraction of time at
+            least one warp was active on an SM, averaged over all SMs", and DRAM
+            activity as the fraction of cycles with device-memory traffic.<a
+              href="#src-6"
+              >[6]</a
+            >
+            Hardware limits mean some counters cannot be collected together;
+            DCGM multiplexes automatically, and sampling too fast while
+            multiplexing can return zeroes.<a href="#src-6">[6]</a>
+          </p>
+
+          <p>
+            <strong>dcgm-exporter</strong> publishes DCGM fields in Prometheus
+            text format. NVIDIA's install guide gives the container quick start
+            (the <code>SYS_ADMIN</code> capability is needed for the
+            <code>DCGM_FI_PROF_*</code> profiling fields), and the default
+            listener is port 9400.<a href="#src-7">[7]</a
+            ><a href="#src-8">[8]</a>
+          </p>
+
+          <pre><code class="language-bash">docker run -d --rm --name dcgm-exporter \
+  --gpus all --cap-add SYS_ADMIN -p 9400:9400 \
+  nvcr.io/nvidia/k8s/dcgm-exporter:${DCGM_EXPORTER_TAG}
+
+curl --fail http://localhost:9400/metrics | grep -E 'DCGM_FI_(DEV_GPU_UTIL|PROF_GR_ENGINE_ACTIVE|DEV_POWER_USAGE)'</code></pre>
+
+          <p>
+            The shipped default collector list includes clocks, temperatures,
+            <code>DCGM_FI_DEV_POWER_USAGE</code>,
+            <code>DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION</code> (a counter in
+            millijoules since driver load), <code>DCGM_FI_DEV_GPU_UTIL</code>,
+            framebuffer usage, NVLink bandwidth, row-remap counters, Xid errors,
+            and the profiling fields <code>DCGM_FI_PROF_GR_ENGINE_ACTIVE</code>,
+            <code>DCGM_FI_PROF_PIPE_TENSOR_ACTIVE</code> and
+            <code>DCGM_FI_PROF_DRAM_ACTIVE</code>.<a href="#src-9">[9]</a> Note
+            that <code>DCGM_FI_PROF_SM_ACTIVE</code> ships commented out; enable
+            it with a custom collector CSV passed via
+            <code>--collectors</code>.<a href="#src-9">[9]</a
+            ><a href="#src-7">[7]</a> For HPC sites the most useful option is
+            <code>--hpc-job-mapping-dir</code>, which reads scheduler-created
+            GPU-to-job mapping files and adds an <code>hpc_job</code> label to
+            each GPU's metrics.<a href="#src-8">[8]</a
+            ><a href="#src-10">[10]</a> That one label turns a node dashboard
+            into a job dashboard.
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> DCGM profiling counters and developer
+              profilers (Nsight Systems, Nsight Compute) compete for the same
+              hardware. When a user needs to profile, run
+              <code>dcgmi profile --pause</code> on the node and
+              <code>dcgmi profile --resume</code> afterward. Pause is
+              host-engine-wide, and paused fields read as blank, so make sure
+              your dashboards and alerts tolerate gaps.<a href="#src-6">[6]</a>
+            </p>
+          </blockquote>
+
+          <h2 id="prometheus-and-grafana">Prometheus and Grafana</h2>
+
+          <p>
+            The de facto open stack is Prometheus scraping exporters on every
+            node, Grafana for dashboards, and Alertmanager for paging. A minimal
+            scrape configuration for GPU nodes (hostnames are examples):
+          </p>
+
+          <pre><code class="language-yaml"># prometheus.yml (excerpt) - example hostnames
+scrape_configs:
+  - job_name: dcgm
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+          - gpu001:9400
+          - gpu002:9400
+  - job_name: node
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+          - gpu001:9100
+          - gpu002:9100</code></pre>
+
+          <p>
+            The <code>node</code> job scrapes a host-metrics exporter such as
+            node_exporter (the port shown is an example; use whatever your
+            exporter listens on). dcgm-exporter's own default collection
+            interval is 30,000 ms, so scraping faster than that just returns
+            repeated samples unless you lower <code>--collect-interval</code>.<a
+              href="#src-8"
+              >[8]</a
+            >
+            NVIDIA publishes a Grafana dashboard for dcgm-exporter (Grafana
+            dashboard 12239) and a checked-in JSON version in the repository.<a
+              href="#src-10"
+              >[10]</a
+            >
+          </p>
+
+          <p>
+            Useful PromQL starting points, assuming
+            <code>--hpc-job-mapping-dir</code> is enabled so metrics carry an
+            <code>hpc_job</code> label:
+          </p>
+
+          <pre><code class="language-plaintext"># Average graphics-engine activity per job over the last hour
+avg by (hpc_job) (avg_over_time(DCGM_FI_PROF_GR_ENGINE_ACTIVE[1h]))
+
+# Allocated GPUs that have been essentially idle for an hour (utilization below 5%)
+avg_over_time(DCGM_FI_DEV_GPU_UTIL{hpc_job!=""}[1h]) &lt; 5
+
+# Energy per job over the last 24 hours, in kWh (counter is in millijoules)
+sum by (hpc_job) (increase(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION[24h])) / 3.6e9</code></pre>
+
+          <p>
+            Treat the thresholds as examples to tune for your workload mix. Keep
+            long-term storage in mind: per-GPU metrics at 30-second resolution
+            add up quickly on a large cluster, and most sites downsample or push
+            to a long-term store (Thanos, Mimir, VictoriaMetrics or similar) for
+            year-over-year reporting.
+          </p>
+
+          <h2 id="job-level-accounting">Job-Level Accounting</h2>
+
+          <p>
+            Node dashboards tell you the cluster is busy. Job accounting tells
+            you who used it, how well, and what it cost. For the scheduler side
+            of this, see
+            <a href="scheduling.html">Scheduling and Orchestration</a>.
+          </p>
+
+          <h3 id="slurm-accounting-for-gpus">Slurm accounting for GPUs</h3>
+
+          <p>
+            Slurm tracks consumable resources as TRES. Adding
+            <code>gres/gpu</code> to <code>AccountingStorageTRES</code> records
+            GPU allocations, and per the Slurm documentation also enables
+            <code>gres/gpumem</code> and <code>gres/gpuutil</code>.<a
+              href="#src-11"
+              >[11]</a
+            >
+            Those two utilization TRES are only available for NVIDIA GPUs with
+            <code>AutoDetect=nvml</code> and AMD GPUs with
+            <code>AutoDetect=rsmi</code>, and are not provided for MIG devices
+            because NVML does not support utilization metrics for MIG.<a
+              href="#src-12"
+              >[12]</a
+            >
+          </p>
+
+          <pre><code class="language-plaintext"># slurm.conf (excerpt)
+AccountingStorageTRES=gres/gpu
+JobAcctGatherType=jobacct_gather/cgroup
+
+# gres.conf (excerpt)
+AutoDetect=nvml</code></pre>
+
+          <pre><code class="language-bash"># GPUs allocated, elapsed time and energy for a user's jobs since Monday
+sacct -u alice -S 2026-09-21 -X \
+      --format=JobID,JobName%20,Elapsed,AllocTRES%60,ConsumedEnergy,State
+
+# Per-step GPU memory high-water mark and utilization averaged across tasks
+sacct -j 1277.0 --format=TRESUsageInAve -p
+sacct -j 1277.0 --format=TRESUsageInTot -p
+
+# Cluster-wide GPU hours by account for last month
+sreport cluster AccountUtilizationByUser start=2026-08-01 end=2026-09-01 --tres=gres/gpu</code></pre>
+
+          <p>
+            The Slurm GRES documentation shows exactly this kind of output, for
+            example <code>gres/gpumem=36266M,gres/gpuutil=100</code> in
+            <code>TRESUsageInAve</code>.<a href="#src-12">[12]</a>
+            <code>ConsumedEnergy</code> is reported in joules.<a href="#src-13"
+              >[13]</a
+            >
+            Use <code>sreport</code> with <code>--tres=</code> to report GPU
+            hours rather than CPU hours.<a href="#src-11">[11]</a>
+          </p>
+
+          <h3 id="open-xdmod-with-gpu-metrics">Open XDMoD with GPU metrics</h3>
+
+          <p>
+            Open XDMoD, from the University at Buffalo's Center for
+            Computational Research, is the standard tool for center-level usage
+            reporting in the US academic community. It has tracked GPUs in its
+            Jobs realm since version 9.0.0, taking the GPU count for Slurm jobs
+            from the <code>gres/gpu</code> entry of the
+            <code>AllocTRES</code> accounting field; if GPU data is missing or
+            unparsable it reports zero GPU hours.<a href="#src-14">[14]</a> The
+            Job Performance (SUPReMM) module adds per-job performance data: it
+            gained GPU usage and GPU memory metrics in version 8.1.0 and an
+            Efficiency tab with total GPU usage statistics in version 10.0.0.<a
+              href="#src-15"
+              >[15]</a
+            >
+            That combination (allocation from Slurm, actual usage from node
+            telemetry) is what lets you tell a PI "your group used 40,000 GPU
+            hours and the median job kept its GPUs busy X% of the time".
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> The Open XDMoD documentation carries
+              a security warning about vulnerabilities in versions 11.0.3 and
+              earlier and recommends upgrading to 11.0.4.<a href="#src-14"
+                >[14]</a
+              >
+              Usage portals often sit on a web server nobody patches after the
+              grant ends; put yours on the same patch cycle as everything else.
+            </p>
+          </blockquote>
+
+          <h3 id="dcgm-job-statistics">DCGM job statistics</h3>
+
+          <p>
+            DCGM can record per-job GPU statistics bracketed by scheduler prolog
+            and epilog scripts: create a GPU group, enable stats, start
+            recording with the job ID as the label, stop at job end, and
+            retrieve a summary.<a href="#src-16">[16]</a
+            ><a href="#src-17">[17]</a>
+          </p>
+
+          <pre><code class="language-bash"># One-time: create a group of GPUs and enable watches (group ID returned is used below)
+dcgmi group -c allgpus -a 0,1,2,3
+dcgmi stats -g 1 --enable
+
+# Prolog: start recording for this job
+dcgmi stats -g 1 -s "$SLURM_JOB_ID"
+
+# Epilog: stop recording and dump a verbose report
+dcgmi stats -x "$SLURM_JOB_ID"
+dcgmi stats -j "$SLURM_JOB_ID" -v &gt; /var/log/dcgm-jobs/"$SLURM_JOB_ID".txt</code></pre>
+
+          <p>
+            Note that in <code>dcgmi stats</code>, <code>-j</code> means
+            <code>--job</code>, not JSON output.<a href="#src-17">[17]</a>
+            NVIDIA's example report includes energy consumed in joules, average
+            power, and average SM and memory utilization.<a href="#src-16"
+              >[16]</a
+            >
+          </p>
+
+          <h2 id="node-health-checks">Node Health Checks</h2>
+
+          <p>
+            The cheapest outage is the one where a bad node drains itself before
+            a job lands on it.
+          </p>
+
+          <h3 id="lbnl-node-health-check">LBNL Node Health Check (NHC)</h3>
+
+          <p>
+            NHC is the long-standing framework for periodic node checks under
+            Slurm and other schedulers. Its README gives the Slurm integration
+            directly:<a href="#src-18">[18]</a>
+          </p>
+
+          <pre><code class="language-plaintext"># slurm.conf
+HealthCheckProgram=/usr/sbin/nhc
+HealthCheckInterval=300
+
+# /etc/nhc/nhc.conf (examples; adjust to your hardware)
+* || check_fs_mount_rw /
+* || check_fs_mount_rw /scratch
+* || check_ps_service -u root -S sshd
+* || check_hw_ib 400</code></pre>
+
+          <p>
+            <code>check_hw_ib</code> verifies an active InfiniBand link at the
+            specified rate in Gb/s (the README's own example is
+            <code>check_hw_ib 40</code> for QDR, which dates the project
+            nicely); set the value to your actual link rate.<a href="#src-18"
+              >[18]</a
+            >
+            NHC's built-in GPU check targets the old
+            <code>nvidia-healthmon</code> tool, so for current GPUs call DCGM
+            from a custom check or a separate script.<a href="#src-18">[18]</a>
+          </p>
+
+          <h3 id="dcgm-diagnostics">DCGM diagnostics</h3>
+
+          <p>
+            <code>dcgmi diag</code> runs active tests at four levels: level 1 is
+            quick deployment checks lasting seconds, level 2 is medium
+            validation of about two minutes, level 3 is long hardware
+            diagnostics of about 15 minutes, and level 4 is extended. The
+            aliases <code>quick</code>, <code>short</code>, <code>medium</code>,
+            <code>long</code> and <code>xlong</code> map to these levels.<a
+              href="#src-19"
+              >[19]</a
+            >
+            Diagnostics consume substantial GPU, power and fabric resources, so
+            never run level 3 or 4 on a node with a user job.<a href="#src-19"
+              >[19]</a
+            >
+          </p>
+
+          <pre><code class="language-bash">#!/bin/bash
+# gpu-quickcheck.sh - example health gate for epilog or cron; drains node on failure
+NODE=$(hostname -s)
+if ! dcgmi diag -r 1 -j &gt; /tmp/dcgm-diag.json 2&gt;&amp;1; then
+    scontrol update NodeName="$NODE" State=DRAIN Reason="dcgmi diag r1 failed"
+    exit 1
+fi
+# Fail if the expected number of GPUs is not visible (8 is an example)
+if [ "$(nvidia-smi -L | wc -l)" -ne 8 ]; then
+    scontrol update NodeName="$NODE" State=DRAIN Reason="GPU count mismatch"
+    exit 1
+fi</code></pre>
+
+          <p>
+            <code>dcgmi diag</code> also supports
+            <code>--expectedNumEntities gpu:N</code> to fail fast when a GPU has
+            fallen off the bus, and <code>--fail-early</code> for long stress
+            tests.<a href="#src-19">[19]</a> A common pattern is level 1 in the
+            epilog after every job, level 3 weekly or after any hardware
+            service, and level 4 during acceptance testing.
+          </p>
+
+          <h2 id="fabric-monitoring">Fabric Monitoring</h2>
+
+          <p>
+            At scale, the network is where performance problems hide. A single
+            link flapping or running at high bit error rate slows every
+            collective that crosses it. For fabric design see
+            <a href="interconnects.html">Interconnects</a>.
+          </p>
+
+          <h3 id="ufm-and-infiniband-telemetry">
+            UFM and InfiniBand telemetry
+          </h3>
+
+          <p>
+            NVIDIA Unified Fabric Manager (UFM) Telemetry collects over 120
+            counters per port across an InfiniBand fabric, including bit error
+            rate, temperature, histograms and retransmissions, and NVIDIA's
+            cluster bring-up procedure uses it to find marginal cables before
+            they fail.<a href="#src-20">[20]</a> The bring-up guide shows
+            pulling link-quality counters as CSV (the IP address is a
+            placeholder):
+          </p>
+
+          <pre><code class="language-bash">curl http://{machine_ip}:9002/csv/xcset/low_freq_debug &gt;&gt; my_telemetry_file.csv</code></pre>
+
+          <p>
+            The same guide gives evaluation criteria: physical link state must
+            be up, post-FEC and symbol error rates are compared against
+            normal/warning/error thresholds that depend on cable type and FEC
+            mode, any increase in the involuntary link-down counter should be
+            traced, and two link-downs on the same port within 24 hours call for
+            investigation. It also notes a minimum port up time of 125 minutes
+            for a valid BER measurement.<a href="#src-20">[20]</a>
+          </p>
+
+          <h3 id="host-side-network-counters">
+            Host-side counters in job accounting
+          </h3>
+
+          <p>
+            Slurm can attribute InfiniBand traffic to jobs with
+            <code>AcctGatherInterconnectType=acct_gather_interconnect/ofed</code
+            >, which provides PacketsIn, PacketsOut, InMB and OutMB per job.<a
+              href="#src-21"
+              >[21]</a
+            >
+            This is coarse, but it quickly answers "is this job actually using
+            the fabric, or is it eight independent single-node jobs pretending
+            to be one?"
+          </p>
+
+          <h3 id="collective-benchmarks-as-health-checks">
+            Collective benchmarks as health checks
+          </h3>
+
+          <p>
+            The simplest end-to-end fabric check is a collective benchmark.
+            NVIDIA's nccl-tests give the canonical commands:<a href="#src-22"
+              >[22]</a
+            >
+          </p>
+
+          <pre><code class="language-bash"># Single node, 8 GPUs, message sizes from 8 bytes to 128 MiB
+./build/all_reduce_perf -b 8 -e 128M -f 2 -g 8
+
+# 64 GPUs across 8 nodes (binaries built with MPI=1)
+mpirun -np 64 -N 8 ./build/all_reduce_perf -b 8 -e 8G -f 2 -g 1</code></pre>
+
+          <p>
+            Record the bus bandwidth ("busbw") at large message sizes for every
+            node pair or rack at acceptance, then rerun after maintenance. A
+            node or rail that falls well below its peers is your straggler
+            candidate. AMD's equivalent is rccl-tests.
+          </p>
+
+          <h2 id="profilers">Profilers: From Timeline to Kernel</h2>
+
+          <p>
+            Telemetry tells you <em>that</em> a job is inefficient. Profilers
+            tell you <em>why</em>. Use them in order: a timeline tool first to
+            find where time goes, then a kernel tool on the few kernels that
+            matter. DCGM's own documentation recommends exactly this workflow:
+            locate an underused device with DCGM, then use Nsight Systems or
+            Nsight Compute for attribution.<a href="#src-6">[6]</a>
+          </p>
+
+          <h3 id="nsight-systems">Nsight Systems</h3>
+
+          <p>
+            Nsight Systems produces a system-wide timeline of CPU threads, CUDA
+            API calls, kernels, memory copies, NVTX ranges, MPI and more.
+            Typical use under Slurm:
+          </p>
+
+          <pre><code class="language-bash">srun -n 8 nsys profile -t cuda,nvtx,mpi --stats=true \
+     -o /scratch/$USER/nsys/run_%q{SLURM_PROCID} python train.py</code></pre>
+
+          <p>
+            The <code>-t cuda,nvtx,mpi</code> trace selection appears in
+            NVIDIA's own Slurm container example, and
+            <code>--stats=true</code> generates summary statistics (and an
+            SQLite database) after collection.<a href="#src-23">[23]</a> The
+            user guide notes that Nsight Systems does not officially support
+            runs longer than 5 minutes<a href="#src-23">[23]</a>, so for long
+            training jobs use <code>--capture-range</code> with the CUDA
+            profiler API or NVTX to capture a handful of steady-state iterations
+            rather than the whole run.
+          </p>
+
+          <h3 id="nsight-compute">Nsight Compute</h3>
+
+          <p>
+            Nsight Compute (<code>ncu</code>) profiles individual kernels in
+            depth: occupancy, memory throughput, instruction mix, roofline
+            position. It replays kernels to collect counters, so it is slow;
+            always filter.
+          </p>
+
+          <pre><code class="language-bash"># Full metric set for one launch of kernels matching a regex
+ncu --set full -k regex:gemm -c 1 -o gemm_report ./app
+
+# MPI: one report per rank
+mpirun -np 4 ncu -o report_%q{OMPI_COMM_WORLD_RANK} ./app</code></pre>
+
+          <p>
+            If no <code>--set</code> is given, <code>ncu</code> collects the
+            basic set; <code>--set full</code> collects all sections.
+            <code>-k</code> filters by kernel name and <code>-c</code> limits
+            the launch count.<a href="#src-24">[24]</a>
+          </p>
+
+          <h3 id="rocprofv3">rocprofv3</h3>
+
+          <p>
+            On AMD GPUs, <code>rocprofv3</code> (from ROCprofiler-SDK) is the
+            current command-line tracer and profiler. Commands from the ROCm
+            documentation:<a href="#src-25">[25]</a>
+          </p>
+
+          <pre><code class="language-bash"># Kernel dispatch trace to CSV
+rocprofv3 --kernel-trace --output-format csv -- ./app
+
+# HIP API trace with summary statistics
+rocprofv3 --stats --hip-trace --output-format csv -- ./app
+
+# Full system trace viewable in Perfetto
+rocprofv3 --sys-trace --output-format pftrace -- ./app</code></pre>
+
+          <p>
+            The default output format is a rocpd SQLite database, convertible to
+            CSV, Perfetto or OTF2 with <code>rocpd convert</code>.<a
+              href="#src-25"
+              >[25]</a
+            >
+          </p>
+
+          <h3 id="pytorch-profiler">PyTorch profiler</h3>
+
+          <p>
+            For AI workloads, start inside the framework.
+            <code>torch.profiler</code> records operator-level CPU and GPU
+            activity, input shapes and memory, and exports traces for
+            TensorBoard or Perfetto.<a href="#src-26">[26]</a> Use a schedule so
+            you capture a few steady-state steps, not the warm-up:
+          </p>
+
+          <pre><code class="language-python">import torch
+from torch.profiler import profile, schedule, ProfilerActivity, tensorboard_trace_handler
+
+prof_schedule = schedule(wait=1, warmup=1, active=3, repeat=1)
+
+with profile(
+    activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+    schedule=prof_schedule,
+    on_trace_ready=tensorboard_trace_handler("./tb_logs"),
+    record_shapes=True,
+    profile_memory=True,
+) as prof:
+    for step, batch in enumerate(loader):
+        train_step(model, batch)   # your training step
+        prof.step()
+        if step &gt;= 6:
+            break
+
+print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=15))</code></pre>
+
+          <p>
+            For training-specific tuning see
+            <a href="training.html">Training at Scale</a>.
+          </p>
+
+          <h3 id="hpctoolkit-and-tau">HPCToolkit and TAU</h3>
+
+          <p>
+            For MPI and OpenMP simulation codes, and for mixed CPU/GPU codes
+            where you need call-path attribution across thousands of ranks, the
+            DOE-supported open tools remain the best option:
+          </p>
+          <ul>
+            <li>
+              <strong>HPCToolkit</strong> uses sampling for low overhead and
+              supports CUDA, ROCm and Level Zero. The <code>hpcrun</code> event
+              <code>-e gpu=cuda</code> gives coarse-grain profiling of GPU
+              operations, <code>-e gpu=cuda,pc</code> adds PC sampling inside
+              kernels, and <code>-e gpu=rocm</code> and
+              <code>-e gpu=level0</code> cover AMD and Intel GPUs. CPU and GPU
+              events can be combined in one run.<a href="#src-27">[27]</a>
+            </li>
+            <li>
+              <strong>TAU</strong> can profile an unmodified binary by
+              prepending <code>tau_exec</code>, which preloads an
+              instrumentation library; OLCF documents
+              <code>tau_exec -T serial,rocm</code> for ROCm and
+              <code>pprof</code> or <code>paraprof</code> for viewing results,
+              with OTF2 trace output for Vampir.<a href="#src-28">[28]</a>
+            </li>
+          </ul>
+
+          <pre><code class="language-bash"># HPCToolkit: profile GPU operations in an MPI job
+srun -n 16 hpcrun -e gpu=cuda ./sim input.nml
+
+# TAU: profile without recompiling, then view
+srun -n 4 tau_exec ./sim input.nml
+pprof</code></pre>
+
+          <p>
+            For guidance on porting and tuning simulation codes see
+            <a href="scientific-computing.html"
+              >Scientific Computing in the AI Era</a
+            >.
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Most users never profile because
+              nobody showed them how. A one-hour "profile your own job" clinic,
+              where each attendee brings a real job and leaves with an Nsight
+              Systems or PyTorch profiler trace, finds more waste than any
+              dashboard. The usual culprits are data loading on the CPU,
+              host-device copies in the training loop, and tiny kernels launched
+              one at a time.
+            </p>
+          </blockquote>
+
+          <h2 id="metrics-that-matter">Metrics That Matter</h2>
+
+          <h3 id="gpu-utilization-vs-sm-activity">
+            GPU utilization vs. SM activity
+          </h3>
+
+          <p>
+            The most common mistake in GPU reporting is treating "GPU
+            utilization" as efficiency. As defined above, it only means some
+            kernel was running.<a href="#src-2">[2]</a> DCGM's profiling fields
+            are more honest:
+          </p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Metric</th>
+                <th>Source</th>
+                <th>What it actually measures</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>GPU utilization</td>
+                <td>nvidia-smi, <code>DCGM_FI_DEV_GPU_UTIL</code></td>
+                <td>
+                  Fraction of time one or more kernels was executing<a
+                    href="#src-2"
+                    >[2]</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>Graphics engine active</td>
+                <td><code>DCGM_FI_PROF_GR_ENGINE_ACTIVE</code></td>
+                <td>
+                  Ratio of time the graphics/compute engine is active<a
+                    href="#src-9"
+                    >[9]</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>SM active</td>
+                <td><code>DCGM_FI_PROF_SM_ACTIVE</code> (field 1002)</td>
+                <td>
+                  Fraction of time at least one warp was active on an SM,
+                  averaged over all SMs<a href="#src-6">[6]</a>
+                </td>
+              </tr>
+              <tr>
+                <td>Tensor pipe active</td>
+                <td><code>DCGM_FI_PROF_PIPE_TENSOR_ACTIVE</code></td>
+                <td>
+                  Ratio of cycles the tensor (HMMA) pipe is active<a
+                    href="#src-9"
+                    >[9]</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>DRAM active</td>
+                <td><code>DCGM_FI_PROF_DRAM_ACTIVE</code> (field 1005)</td>
+                <td>
+                  Fraction of cycles device memory was sending or receiving
+                  data<a href="#src-6">[6]</a><a href="#src-9">[9]</a>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <p>
+            A job at 100% GPU utilization but 15% SM activity is launching
+            kernels too small to fill the device. A dense-matrix AI training job
+            with low tensor-pipe activity is probably not using mixed precision,
+            or is bottlenecked elsewhere. DCGM itself cautions that no single
+            field proves a job is compute- or memory-bound; compare several and
+            correlate with application throughput.<a href="#src-6">[6]</a>
+          </p>
+
+          <h3 id="model-flops-utilization">Model FLOPs utilization (MFU)</h3>
+
+          <p>
+            For training, the metric that maps directly to money is MFU,
+            introduced in the PaLM paper: the ratio of observed throughput
+            (tokens per second) to the theoretical maximum throughput of the
+            system at peak FLOPs, counting only the FLOPs the model requires for
+            the forward and backward passes, not rematerialization.<a
+              href="#src-29"
+              >[29]</a
+            >
+            The PaLM paper's approximation for an N-parameter decoder-only model
+            is 6N matmul FLOPs per token (2N forward, 4N backward), plus an
+            attention term of 12LHQT (layers, heads, head dimension, sequence
+            length).<a href="#src-29">[29]</a>
+          </p>
+
+          <pre><code class="language-plaintext">MFU = (tokens_per_second x (6N + 12LHQT)) / (num_gpus x peak_flops_per_gpu)</code></pre>
+
+          <p>
+            Published reference points: PaLM 540B reached 46.2% MFU on 6144 TPU
+            v4 chips (57.8% hardware FLOPs utilization), and the same paper
+            computed 21.3% for GPT-3 and 30.2% for Megatron-Turing NLG.<a
+              href="#src-29"
+              >[29]</a
+            >
+            Meta reports 38-43% BF16 MFU for Llama 3 405B pre-training on up to
+            16K GPUs.<a href="#src-30">[30]</a> Use the dense (not sparse) peak
+            for the precision actually used, and state which one you used; see
+            <a href="accelerators.html">Accelerators</a> for peak figures and
+            <a href="convergence.html">The Convergence</a> for precision.
+          </p>
+
+          <h3 id="inference-metrics">Inference metrics: tokens/s, TTFT, ITL</h3>
+
+          <p>
+            For serving, NVIDIA's benchmarking guide defines the standard
+            latency and throughput metrics:<a href="#src-31">[31]</a>
+          </p>
+          <ul>
+            <li>
+              <strong>Time to first token (TTFT):</strong> time until the first
+              output token, including tokenization and detokenization. It is
+              dominated by prefill and queueing, and is what users perceive as
+              responsiveness.
+            </li>
+            <li>
+              <strong
+                >Inter-token latency (ITL), also called time per output token
+                (TPOT):</strong
+              >
+              the average time between consecutive tokens, excluding the first.
+              It characterizes the decode phase.
+            </li>
+            <li>
+              <strong>End-to-end request latency</strong> and
+              <strong>requests per second</strong>.
+            </li>
+            <li>
+              <strong>Tokens per second:</strong> both system-wide and per user.
+              As concurrency rises, total system tokens/s increases while
+              tokens/s per user decreases.
+            </li>
+          </ul>
+          <p>
+            The guide cautions that tools implement these differently, so only
+            compare results when definitions align.<a href="#src-31">[31]</a>
+            Report throughput at a stated latency target (for example, maximum
+            tokens/s with p99 TTFT under a threshold), never throughput alone.
+            See <a href="inference.html">Inference at Scale</a>.
+          </p>
+
+          <h2 id="finding-waste">Finding Waste</h2>
+
+          <p>
+            Every GPU cluster has three kinds of waste: allocated-but-idle GPUs,
+            jobs that run but use a small fraction of the device, and jobs that
+            fail late and must be rerun. You can measure all three.
+          </p>
+
+          <h3 id="idle-and-low-utilization-jobs">
+            Idle and low-utilization jobs
+          </h3>
+
+          <pre><code class="language-bash"># Completed GPU jobs from the last week with their average GPU utilization TRES
+sacct -a -S now-7days -E now --state=COMPLETED,TIMEOUT \
+      --format=JobID,User,Account,AllocTRES%50,Elapsed,TRESUsageInAve%80 -p \
+  | grep 'gres/gpu='</code></pre>
+
+          <p>
+            Parse <code>gres/gpuutil</code> out of
+            <code>TRESUsageInAve</code> and rank users by GPU hours spent below
+            a threshold. On the live side, the PromQL query in the Prometheus
+            section finds jobs holding idle GPUs right now. Typical patterns and
+            fixes:
+          </p>
+          <ul>
+            <li>
+              <strong>Interactive sessions left open overnight</strong>
+              (Jupyter, VS Code): enforce idle timeouts or short wall-time
+              limits on interactive partitions.
+            </li>
+            <li>
+              <strong>One GPU busy, the rest idle</strong> because the code is
+              not actually multi-GPU: show users per-GPU dashboards and default
+              new users to a single GPU.
+            </li>
+            <li>
+              <strong>Small models on large GPUs:</strong> offer MIG or
+              shared-GPU partitions (see
+              <a href="scheduling.html">Scheduling and Orchestration</a>).
+            </li>
+            <li>
+              <strong>Data-starved training:</strong> low SM activity with high
+              CPU iowait usually means the input pipeline cannot keep up (see
+              <a href="memory-storage.html">Memory and Storage</a>).
+            </li>
+          </ul>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Publish efficiency, do not police it.
+              A weekly email to each PI showing their group's GPU hours and
+              median GPU activity, next to the cluster median, changes behavior
+              faster than any automated job killer and does not generate angry
+              tickets. Save automatic cancellation for truly idle allocations
+              (for example, zero kernel activity for hours).
+            </p>
+          </blockquote>
+
+          <h2 id="power-capping-and-energy-accounting">
+            Power Capping and Energy Accounting
+          </h2>
+
+          <h3 id="setting-power-limits">Setting power limits</h3>
+
+          <p>
+            Both vendors let administrators cap board power, which is useful
+            when a facility is power-constrained or when a workload is
+            memory-bound and gains little from the last few hundred watts.
+          </p>
+
+          <pre><code class="language-bash"># NVIDIA: show limits, then set a cap in watts (example value; must be within the reported min/max; root)
+nvidia-smi -q -d POWER
+sudo nvidia-smi -i 0 -pl 500
+
+# AMD: show limits, then set a power cap in watts (example value; sudo)
+amd-smi static --limit
+sudo amd-smi set --gpu 0 --power-cap 450</code></pre>
+
+          <p>
+            The nvidia-smi <code>-pl</code> (<code>--power-limit</code>) option
+            takes watts, must be between the reported minimum and maximum limit,
+            requires root, and on multi-component modules accepts a
+            <code>--scope</code> argument for GPU-only or whole-module limits.<a
+              href="#src-2"
+              >[2]</a
+            >
+            The amd-smi <code>set --power-cap</code> option takes watts and
+            requires sudo.<a href="#src-5">[5]</a> Neither setting persists
+            across a driver reload or reboot, so apply caps from a boot-time
+            service or the scheduler prolog. At rack scale, NVIDIA's GB300 NVL72
+            uses programmable power caps plus energy storage to smooth the
+            synchronized power swings of training jobs; see
+            <a href="facilities.html">Power, Cooling and Facilities</a>.
+          </p>
+
+          <p>
+            Measure before you cap: run the actual workload at several limits
+            and plot time-to-solution and energy-to-solution. Codes limited by
+            memory bandwidth or communication may lose little performance under
+            a moderate cap, while compute-bound codes are more sensitive; only
+            measurement on your workload tells you which case you are in.
+          </p>
+
+          <h3 id="energy-per-job">Energy per job</h3>
+
+          <p>
+            There are three practical routes to per-job energy on GPU clusters:
+          </p>
+          <ol>
+            <li>
+              <strong>Slurm energy accounting.</strong>
+              <code>AcctGatherEnergyType=acct_gather_energy/gpu</code> collects
+              energy from the GPU management library, but the Slurm
+              documentation states it is only available for rsmi (AMD) at
+              present. The <code>ipmi</code> plugin collects node-level power
+              from the BMC, and Slurm notes that node-level energy only reflects
+              a job's real consumption when the job has the node exclusively.<a
+                href="#src-32"
+                >[32]</a
+              >
+              Results appear in <code>sacct</code> as
+              <code>ConsumedEnergy</code> in joules.<a href="#src-13">[13]</a>
+            </li>
+            <li>
+              <strong>DCGM job statistics</strong> on NVIDIA systems, recorded
+              via prolog/epilog as shown above, report energy consumed per job
+              in joules.<a href="#src-16">[16]</a>
+            </li>
+            <li>
+              <strong>Prometheus.</strong> Integrate
+              <code>DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION</code> by the
+              <code>hpc_job</code> label, as in the PromQL example earlier.<a
+                href="#src-9"
+                >[9]</a
+              ><a href="#src-8">[8]</a>
+            </li>
+          </ol>
+
+          <pre><code class="language-plaintext"># slurm.conf (excerpt) - node-level energy from the BMC every 30 s (example interval)
+AcctGatherEnergyType=acct_gather_energy/ipmi
+AcctGatherNodeFreq=30</code></pre>
+
+          <p>
+            GPU-only energy understates the true cost, since CPUs, memory, NICs,
+            fans (on air-cooled nodes) and facility overhead all add to it. For
+            chargeback or carbon reporting, multiply node-level energy by your
+            facility PUE, and say so in the report.
+          </p>
+
+          <h2 id="benchmarking">Benchmarking</h2>
+
+          <p>
+            Benchmarks serve three purposes for a center: acceptance testing
+            (does the system meet the contract), regression testing (did the
+            last driver update break something), and external comparison
+            (TOP500, MLPerf). Know what each one measures.
+          </p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Benchmark</th>
+                <th>What it measures</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>HPL</td>
+                <td>Dense linear solve, FP64, LU with partial pivoting</td>
+                <td>
+                  Basis of the TOP500; reports Rmax and Rpeak<a href="#src-33"
+                    >[33]</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>HPL-MxP</td>
+                <td>
+                  Mixed-precision LU factorization plus FP64 iterative
+                  refinement to full accuracy
+                </td>
+                <td>
+                  Lowest allowed precision is 16-bit floating point for results
+                  after June 2025<a href="#src-34">[34]</a>
+                </td>
+              </tr>
+              <tr>
+                <td>HPCG</td>
+                <td>Conjugate gradient; memory- and network-bound</td>
+                <td>Complement to HPL<a href="#src-35">[35]</a></td>
+              </tr>
+              <tr>
+                <td>MLPerf Training</td>
+                <td>Time to train models to a target quality</td>
+                <td>
+                  v6.0 includes DeepSeek v3, GPT-OSS 20B, Llama 3.1 405B and
+                  FLUX.1 benchmarks<a href="#src-36">[36]</a>
+                </td>
+              </tr>
+              <tr>
+                <td>MLPerf Inference</td>
+                <td>Throughput and latency under defined scenarios</td>
+                <td>v6.0 released April 2026<a href="#src-37">[37]</a></td>
+              </tr>
+              <tr>
+                <td>MLPerf HPC</td>
+                <td>Scientific ML training (strong and weak scaling)</td>
+                <td>
+                  Retired as of January 2025; past results remain available<a
+                    href="#src-38"
+                    >[38]</a
+                  >
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3 id="hpl-hpl-mxp-and-hpcg">HPL, HPL-MxP and HPCG</h3>
+
+          <p>
+            HPL solves a dense system with LU factorization and partial
+            pivoting, and its operation count must be 2/3 n^3 + O(n^2)
+            double-precision operations; the TOP500 rules exclude
+            lower-precision solve-and-refine methods.<a href="#src-33">[33]</a>
+            HPL-MxP exists precisely to measure those methods: factor in low
+            precision, then use an FP64 iterative method such as GMRES with the
+            low-precision LU factors as a preconditioner. A run is invalid if
+            the scaled backward error exceeds 16 or if the iterative method
+            needs more than 50 iterations.<a href="#src-34">[34]</a> HPCG is a
+            conjugate gradient benchmark designed as a complement to HPL.<a
+              href="#src-35"
+              >[35]</a
+            >
+          </p>
+
+          <p>
+            The June 2026 lists show why you should look at all three.
+            LineShine, the new No. 1 at 2.198 EFlop/s on HPL, also leads HPCG at
+            22.00 PFlop/s but places fourth on HPL-MxP at 7.92 EFlop/s with a
+            3.6x speedup, consistent with its CPU-only design; El Capitan
+            records 1.809 EFlop/s on HPL and 17.41 PFlop/s on HPCG.<a
+              href="#src-39"
+              >[39]</a
+            >
+            HPCG results roughly two orders of magnitude below HPL are normal,
+            and they are a better predictor of many simulation codes than HPL.
+            For your own acceptance tests, the relative numbers matter more than
+            the absolute: run HPL per node and per rack, flag any node more than
+            a few percent below the median, and keep the results as a baseline.
+          </p>
+
+          <h3 id="mlperf">MLPerf</h3>
+
+          <p>
+            MLPerf Training measures wall-clock time to train a reference model
+            to a target quality. The current benchmark table lists v6.0
+            large-language-model benchmarks based on DeepSeek v3, GPT-OSS 20B
+            and Llama 3.1 405B, plus FLUX.1 image generation.<a href="#src-36"
+              >[36]</a
+            >
+            MLPerf Inference v6.0 (April 1, 2026) was described by MLCommons as
+            its most significant revision, adding GPT-OSS 120B, an expanded
+            DeepSeek-R1 benchmark with an interactive scenario, DLRMv3, a
+            text-to-video test, a vision-language model test and a YOLOv11 edge
+            test; the largest submitted system had 72 nodes and 288
+            accelerators.<a href="#src-37">[37]</a> MLPerf results are split
+            into Closed division (same model and optimizer as the reference, for
+            apples-to-apples hardware comparison) and Open division, and into
+            Available, Preview and Research categories.<a href="#src-38"
+              >[38]</a
+            >
+            When a vendor quotes MLPerf in a proposal, check the division,
+            category, system size and benchmark version, and ask for the
+            submission link.
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Write benchmark requirements into the
+              RFP as "vendor will demonstrate on the delivered system", not
+              "vendor has published". Include HPL per node, nccl-tests bus
+              bandwidth across the full fabric, a storage benchmark, and one or
+              two of your own users' real applications. Rerun the same suite
+              after every major driver, firmware or OS update.
+            </p>
+          </blockquote>
+
+          <h2 id="reliability-at-scale">Reliability at Scale</h2>
+
+          <p>
+            The larger the job, the more often something breaks during it.
+            Meta's Llama 3 paper is the best public data point: during a 54-day
+            snapshot of pre-training on up to 16K GPUs, there were 466 job
+            interruptions, 419 of them unexpected. About 78% of unexpected
+            interruptions were attributed to confirmed or suspected hardware
+            issues, and GPU issues were the largest category at 58.7%. Meta
+            still achieved more than 90% effective training time.<a
+              href="#src-30"
+              >[30]</a
+            >
+            The lesson for a university: at a few hundred GPUs failures are
+            occasional; at thousands they are daily, and your tooling and your
+            users' checkpointing (see
+            <a href="training.html">Training at Scale</a>) must assume it.
+          </p>
+
+          <h3 id="xid-errors">Xid errors</h3>
+
+          <p>
+            The NVIDIA driver logs GPU errors to the kernel log as Xid events.
+            NVIDIA publishes an Xid catalog giving each code's meaning and a
+            recommended recovery action.<a href="#src-40">[40]</a> Some you will
+            see regularly:
+          </p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Xid</th>
+                <th>Catalog description</th>
+                <th>Catalog recovery action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>13</td>
+                <td>
+                  Graphics engine exception (general user application fault)
+                </td>
+                <td>Restart application</td>
+              </tr>
+              <tr>
+                <td>31</td>
+                <td>GPU memory page fault (MMU fault, e.g. illegal address)</td>
+                <td>Restart application</td>
+              </tr>
+              <tr>
+                <td>43</td>
+                <td>
+                  GPU stopped processing (application hit a software-induced
+                  fault; GPU remains healthy)
+                </td>
+                <td>Ignore</td>
+              </tr>
+              <tr>
+                <td>48</td>
+                <td>Double bit ECC error (uncorrectable)</td>
+                <td>Follow Xid 48 workflow</td>
+              </tr>
+              <tr>
+                <td>94</td>
+                <td>Contained memory error</td>
+                <td>Restart application</td>
+              </tr>
+              <tr>
+                <td>95</td>
+                <td>Uncontained memory error</td>
+                <td>Reset GPU</td>
+              </tr>
+              <tr>
+                <td>136</td>
+                <td>Link training failed</td>
+                <td>Reset GPU; investigate link signal integrity</td>
+              </tr>
+              <tr>
+                <td>140</td>
+                <td>ECC unrecovered error</td>
+                <td>Reset GPU</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>All rows from the NVIDIA Xid catalog.<a href="#src-40">[40]</a></p>
+
+          <p>
+            Operationally: alert on Xid events (dcgm-exporter exposes
+            <code>DCGM_FI_DEV_XID_ERRORS</code> by default and an exporter-owned
+            counter <code>DCGM_EXP_XID_ERRORS_TOTAL</code>)<a href="#src-9"
+              >[9]</a
+            >, classify them as user-caused (13, 31, 43) or hardware (48, 95,
+            140, link errors), and drain nodes automatically for the hardware
+            class. Watching Xid 13 and 31 by user is also a good way to find
+            people who need help debugging.
+          </p>
+
+          <pre><code class="language-bash"># Recent Xid events on a node
+journalctl -k --since "24 hours ago" | grep -i xid</code></pre>
+
+          <h3 id="ecc-and-memory-health">ECC and memory health</h3>
+
+          <p>
+            nvidia-smi reports volatile and aggregate ECC counts; single-bit
+            errors are corrected by hardware, while double-bit errors are
+            detected but not corrected.<a href="#src-2">[2]</a> Current NVIDIA
+            GPUs handle failing HBM rows by row remapping, and dcgm-exporter's
+            default metrics include correctable and uncorrectable remapped-row
+            counts and a row-remap-failure flag.<a href="#src-9">[9]</a> On AMD,
+            <code>amd-smi bad-pages</code> lists pending and retired pages, and
+            <code>amd-smi monitor --ecc</code> reports single-bit, double-bit
+            and PCIe replay counts.<a href="#src-5">[5]</a> A rising count on
+            one GPU is a reason to schedule a replacement before it becomes a
+            job-killing uncorrectable error.
+          </p>
+
+          <h3 id="stragglers">Stragglers</h3>
+
+          <p>
+            A straggler is a component that has not failed but is slow: a GPU
+            clocking down from a thermal problem, a NIC with a degraded link, a
+            node with a bad DIMM. In synchronous training or tightly coupled
+            MPI, everyone waits for the slowest rank. Meta observed that a
+            single straggler "can slow down thousands of other GPUs", often
+            appearing as functioning but slow communication, and also saw a
+            diurnal 1-2% throughput variation driven by mid-day temperatures.<a
+              href="#src-30"
+              >[30]</a
+            >
+            Detection techniques:
+          </p>
+          <ul>
+            <li>
+              Per-rank step timing logged by the application; the slowest rank
+              is the suspect.
+            </li>
+            <li>
+              Clock event reasons from
+              <code>nvidia-smi -q -d PERFORMANCE</code> or
+              <code>nvidia-smi dmon -s v</code> (power and thermal violations)
+              to catch throttling GPUs.<a href="#src-2">[2]</a>
+            </li>
+            <li>
+              Periodic nccl-tests across node groups, comparing bus bandwidth to
+              the acceptance baseline.<a href="#src-22">[22]</a>
+            </li>
+            <li>
+              UFM link-quality counters and link-down events on the fabric.<a
+                href="#src-20"
+                >[20]</a
+              >
+            </li>
+            <li>
+              PyTorch's NCCL flight recorder, which Meta used to capture
+              collective metadata and diagnose hangs and slow collectives.<a
+                href="#src-30"
+                >[30]</a
+              >
+            </li>
+          </ul>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Keep a "suspect list" of nodes with
+              any recent Xid, ECC, link or throttling event, and exclude them
+              from large jobs (<code>sbatch --exclude=</code>) until a level 3
+              diagnostic passes. It is cheaper to idle one node than to have it
+              slow down 500 others.
+            </p>
+          </blockquote>
+
+          <h2 id="key-takeaways">Key Takeaways</h2>
+          <ul>
+            <li>
+              Deploy DCGM and dcgm-exporter (or amd-smi based exporters) on
+              every GPU node and label metrics with job IDs; node-level
+              dashboards alone cannot answer efficiency questions.
+            </li>
+            <li>
+              "GPU utilization" only means a kernel was running. Track SM
+              activity, tensor-pipe activity and DRAM activity, and MFU for
+              training.<a href="#src-2">[2]</a><a href="#src-6">[6]</a
+              ><a href="#src-29">[29]</a>
+            </li>
+            <li>
+              Enable <code>gres/gpu</code> TRES in Slurm to get GPU hours plus
+              <code>gpuutil</code> and <code>gpumem</code> per job, and feed it
+              into Open XDMoD for center-level reporting.<a href="#src-11"
+                >[11]</a
+              ><a href="#src-14">[14]</a>
+            </li>
+            <li>
+              Automate health: NHC for basics,
+              <code>dcgmi diag -r 1</code> after jobs, deeper levels after
+              service, nccl-tests and UFM telemetry for the fabric.
+            </li>
+            <li>
+              Profile in order: PyTorch profiler or Nsight Systems/rocprofv3
+              timeline first, Nsight Compute on the few kernels that matter,
+              HPCToolkit or TAU for large MPI codes.
+            </li>
+            <li>
+              Report energy per job and test power caps against
+              time-to-solution; know that Slurm's GPU energy plugin currently
+              supports rsmi only.<a href="#src-32">[32]</a>
+            </li>
+            <li>
+              At thousands of GPUs failures are daily; alert on Xid and ECC
+              events, hunt stragglers, and drain suspect nodes before large jobs
+              land on them.<a href="#src-30">[30]</a><a href="#src-40">[40]</a>
+            </li>
+          </ul>
+
+          <h2 id="sources">Sources</h2>
+          <ol class="sources">
+            <li id="src-1">
+              <a
+                href="https://www.dell.com/support/kbdoc/en-tm/000190243/na"
+                target="_blank"
+                rel="noopener"
+                >PowerEdge: Useful NVIDIA-SMI queries for troubleshooting (Dell
+                Technologies)</a
+              >
+            </li>
+            <li id="src-2">
+              <a
+                href="https://docs.nvidia.com/deploy/nvidia-smi/index.html"
+                target="_blank"
+                rel="noopener"
+                >nvidia-smi documentation (NVIDIA)</a
+              >
+            </li>
+            <li id="src-3">
+              <a
+                href="https://github.com/ROCm/rocm-systems/commit/b4b50502e310ef6dac23de3049eb7ef8dc041b5b"
+                target="_blank"
+                rel="noopener"
+                >Remove rocm-smi for ROCm 7.1, rocm-systems commit (AMD ROCm,
+                GitHub)</a
+              >
+            </li>
+            <li id="src-4">
+              <a
+                href="https://rocm.blogs.amd.com/software-tools-optimization/amd-smi-overview/README.html"
+                target="_blank"
+                rel="noopener"
+                >Getting to Know Your GPU: A Deep Dive into AMD SMI (AMD ROCm
+                Blogs, 2024)</a
+              >
+            </li>
+            <li id="src-5">
+              <a
+                href="https://rocm.docs.amd.com/projects/amdsmi/en/latest/how-to/amdsmi-cli-tool.html"
+                target="_blank"
+                rel="noopener"
+                >AMD SMI CLI tool usage (AMD ROCm documentation)</a
+              >
+            </li>
+            <li id="src-6">
+              <a
+                href="https://docs.nvidia.com/datacenter/dcgm/latest/learn/modules/profiling.html"
+                target="_blank"
+                rel="noopener"
+                >DCGM Profiling module (NVIDIA DCGM documentation)</a
+              >
+            </li>
+            <li id="src-7">
+              <a
+                href="https://docs.nvidia.com/datacenter/dcgm/latest/installation/install-dcgm-exporter.html"
+                target="_blank"
+                rel="noopener"
+                >Install DCGM Exporter (NVIDIA DCGM documentation)</a
+              >
+            </li>
+            <li id="src-8">
+              <a
+                href="https://docs.nvidia.com/datacenter/dcgm/latest/reference/command-line-reference/dcgm-exporter.html"
+                target="_blank"
+                rel="noopener"
+                >dcgm-exporter command reference (NVIDIA DCGM documentation)</a
+              >
+            </li>
+            <li id="src-9">
+              <a
+                href="https://github.com/NVIDIA/dcgm-exporter/blob/main/etc/default-counters.csv"
+                target="_blank"
+                rel="noopener"
+                >dcgm-exporter default-counters.csv (NVIDIA, GitHub)</a
+              >
+            </li>
+            <li id="src-10">
+              <a
+                href="https://github.com/NVIDIA/dcgm-exporter"
+                target="_blank"
+                rel="noopener"
+                >DCGM Exporter repository README (NVIDIA, GitHub)</a
+              >
+            </li>
+            <li id="src-11">
+              <a
+                href="https://slurm.schedmd.com/tres.html"
+                target="_blank"
+                rel="noopener"
+                >Trackable RESources (TRES) (SchedMD Slurm documentation)</a
+              >
+            </li>
+            <li id="src-12">
+              <a
+                href="https://slurm.schedmd.com/gres.html"
+                target="_blank"
+                rel="noopener"
+                >Generic Resource (GRES) Scheduling (SchedMD Slurm
+                documentation)</a
+              >
+            </li>
+            <li id="src-13">
+              <a
+                href="https://slurm.schedmd.com/sacct.html"
+                target="_blank"
+                rel="noopener"
+                >sacct manual page (SchedMD Slurm documentation)</a
+              >
+            </li>
+            <li id="src-14">
+              <a
+                href="https://open.xdmod.org/11.0/gpu-metrics.html"
+                target="_blank"
+                rel="noopener"
+                >Open XDMoD: GPU Metrics (University at Buffalo CCR)</a
+              >
+            </li>
+            <li id="src-15">
+              <a
+                href="https://github.com/ubccr/xdmod-supremm/blob/main/CHANGELOG.md"
+                target="_blank"
+                rel="noopener"
+                >xdmod-supremm CHANGELOG (University at Buffalo CCR, GitHub)</a
+              >
+            </li>
+            <li id="src-16">
+              <a
+                href="https://developer.nvidia.com/blog/job-statistics-nvidia-data-center-gpu-manager-slurm"
+                target="_blank"
+                rel="noopener"
+                >Job Statistics with NVIDIA Data Center GPU Manager and SLURM
+                (NVIDIA Technical Blog, 2019)</a
+              >
+            </li>
+            <li id="src-17">
+              <a
+                href="https://docs.nvidia.com/datacenter/dcgm/latest/user-guide/feature-overview.html"
+                target="_blank"
+                rel="noopener"
+                >DCGM Feature Overview: job statistics (NVIDIA DCGM
+                documentation)</a
+              >
+            </li>
+            <li id="src-18">
+              <a
+                href="https://github.com/mej/nhc/blob/master/README.md"
+                target="_blank"
+                rel="noopener"
+                >LBNL Node Health Check (NHC) README (GitHub)</a
+              >
+            </li>
+            <li id="src-19">
+              <a
+                href="https://docs.nvidia.com/datacenter/dcgm/latest/reference/command-line-reference/dcgmi/dcgmi-diag.html"
+                target="_blank"
+                rel="noopener"
+                >dcgmi diag (NVIDIA DCGM documentation)</a
+              >
+            </li>
+            <li id="src-20">
+              <a
+                href="https://networking-docs.nvidia.com/ibclusterbringupproc/ufm-telemetry"
+                target="_blank"
+                rel="noopener"
+                >UFM Telemetry, InfiniBand Cluster Bring-up Procedure
+                (NVIDIA)</a
+              >
+            </li>
+            <li id="src-21">
+              <a
+                href="https://slurm.schedmd.com/acct_gather.conf.html"
+                target="_blank"
+                rel="noopener"
+                >acct_gather.conf (SchedMD Slurm documentation)</a
+              >
+            </li>
+            <li id="src-22">
+              <a
+                href="https://github.com/NVIDIA/nccl-tests"
+                target="_blank"
+                rel="noopener"
+                >nccl-tests README (NVIDIA, GitHub)</a
+              >
+            </li>
+            <li id="src-23">
+              <a
+                href="https://docs.nvidia.com/nsight-systems/UserGuide/index.html"
+                target="_blank"
+                rel="noopener"
+                >Nsight Systems User Guide (NVIDIA)</a
+              >
+            </li>
+            <li id="src-24">
+              <a
+                href="https://docs.nvidia.com/nsight-compute/NsightComputeCli/index.html"
+                target="_blank"
+                rel="noopener"
+                >Nsight Compute CLI (NVIDIA)</a
+              >
+            </li>
+            <li id="src-25">
+              <a
+                href="https://rocm.docs.amd.com/projects/rocprofiler-sdk/en/latest/how-to/using-rocprofv3.html"
+                target="_blank"
+                rel="noopener"
+                >Application tracing and profiling using rocprofv3 (AMD ROCm
+                documentation)</a
+              >
+            </li>
+            <li id="src-26">
+              <a
+                href="https://docs.pytorch.org/docs/stable/profiler.html"
+                target="_blank"
+                rel="noopener"
+                >torch.profiler (PyTorch documentation)</a
+              >
+            </li>
+            <li id="src-27">
+              <a
+                href="https://hpctoolkit.gitlab.io/hpctoolkit/2025.1.2/users/gpu/gpu.html"
+                target="_blank"
+                rel="noopener"
+                >HPCToolkit: Monitoring GPU Operations (HPCToolkit
+                documentation, 2025.1.2)</a
+              >
+            </li>
+            <li id="src-28">
+              <a
+                href="https://docs.olcf.ornl.gov/software/profiling/TAU.html"
+                target="_blank"
+                rel="noopener"
+                >Tuning and Analysis Utilities (TAU) (OLCF User
+                Documentation)</a
+              >
+            </li>
+            <li id="src-29">
+              <a
+                href="https://arxiv.org/abs/2204.02311"
+                target="_blank"
+                rel="noopener"
+                >PaLM: Scaling Language Modeling with Pathways (Chowdhery et
+                al., arXiv, 2022)</a
+              >
+            </li>
+            <li id="src-30">
+              <a
+                href="https://arxiv.org/abs/2407.21783"
+                target="_blank"
+                rel="noopener"
+                >The Llama 3 Herd of Models (Meta, arXiv, 2024)</a
+              >
+            </li>
+            <li id="src-31">
+              <a
+                href="https://docs.nvidia.com/nim/benchmarking/llm/latest/metrics.html"
+                target="_blank"
+                rel="noopener"
+                >LLM inference benchmarking metrics (NVIDIA NIM
+                documentation)</a
+              >
+            </li>
+            <li id="src-32">
+              <a
+                href="https://slurm.schedmd.com/slurm.conf.html"
+                target="_blank"
+                rel="noopener"
+                >slurm.conf manual page (SchedMD Slurm documentation)</a
+              >
+            </li>
+            <li id="src-33">
+              <a
+                href="https://www.top500.org/project/linpack/"
+                target="_blank"
+                rel="noopener"
+                >The Linpack Benchmark (TOP500)</a
+              >
+            </li>
+            <li id="src-34">
+              <a
+                href="https://hpl-mxp.org/rules.md"
+                target="_blank"
+                rel="noopener"
+                >HPL-MxP Rules (hpl-mxp.org)</a
+              >
+            </li>
+            <li id="src-35">
+              <a
+                href="https://www.hpcg-benchmark.org/"
+                target="_blank"
+                rel="noopener"
+                >HPCG Benchmark (hpcg-benchmark.org)</a
+              >
+            </li>
+            <li id="src-36">
+              <a
+                href="https://mlcommons.org/benchmarks/training/"
+                target="_blank"
+                rel="noopener"
+                >MLPerf Training benchmark suite (MLCommons)</a
+              >
+            </li>
+            <li id="src-37">
+              <a
+                href="https://mlcommons.org/2026/04/mlperf-inference-v6-0-results/"
+                target="_blank"
+                rel="noopener"
+                >MLCommons Releases New MLPerf Inference v6.0 Benchmark Results
+                (MLCommons, 2026)</a
+              >
+            </li>
+            <li id="src-38">
+              <a
+                href="https://mlcommons.org/benchmarks/training-hpc/"
+                target="_blank"
+                rel="noopener"
+                >MLPerf Training: HPC (MLCommons)</a
+              >
+            </li>
+            <li id="src-39">
+              <a
+                href="https://top500.org/lists/top500/2026/06/"
+                target="_blank"
+                rel="noopener"
+                >TOP500 June 2026 (TOP500, 2026)</a
+              >
+            </li>
+            <li id="src-40">
+              <a
+                href="https://docs.nvidia.com/deploy/xid-errors/analyzing-xid-catalog.html"
+                target="_blank"
+                rel="noopener"
+                >Analyzing Xid Errors with the Xid Catalog (NVIDIA)</a
+              >
+            </li>
+          </ol>
+          <nav class="doc-pager" aria-label="Chapter navigation">
+            <a class="pager-prev" href="scheduling.html"
+              ><span>Previous</span>Scheduling and Orchestration</a
+            ><a class="pager-next" href="operations.html"
+              ><span>Next</span>Research Computing Operations</a
+            >
+          </nav>
+        </article>
+      </div>
+    </main>
+
+    <footer class="section-dark">
+      <div class="container text-center">
+        <p class="footer-note">
+          2026 edition |
+          <a href="index.html" class="subtle-link">Field Manual</a> |
+          <a href="../index.html" class="subtle-link"
+            >charles-forsyth.github.io</a
+          >
+        </p>
+      </div>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+      document.querySelectorAll('pre code').forEach(function (el) {
+        if (el.className === 'c++') el.className = 'language-cpp';
+        else if (el.className && el.className.indexOf('language-') !== 0)
+          el.className = 'language-' + el.className;
+        hljs.highlightElement(el);
+      });
+    </script>
+  </body>
+</html>

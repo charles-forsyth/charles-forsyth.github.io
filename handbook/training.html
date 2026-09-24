@@ -1,0 +1,2101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Training at Scale | Field Manual</title>
+    <meta
+      name="description"
+      content="How large models are actually trained on GPU clusters: where the memory and time go, how DP, FSDP, TP, PP, CP and EP combine and map onto hardware, which frameworks to use, and how to survive failures at scale. Includes a tested FSDP2 skeleton and a multi-node Slurm launch script."
+    />
+    <link
+      rel="canonical"
+      href="https://charles-forsyth.github.io/handbook/training.html"
+    />
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="handbook.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
+    />
+  </head>
+  <body>
+    <header class="hero doc-hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="doc-kicker">
+            <i class="fas fa-brain"></i> AI + HPC Field Manual
+          </p>
+          <h1>Training at Scale</h1>
+          <h2>
+            Parallelism, memory math, frameworks and fault tolerance for
+            multi-node training
+          </h2>
+          <div class="cta-buttons">
+            <a href="index.html" class="btn btn-secondary"
+              ><i class="fas fa-book-open"></i> Field Manual</a
+            >
+            <a href="../index.html" class="btn btn-secondary"
+              ><i class="fas fa-arrow-left"></i> Main Site</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+    <nav class="doc-nav" aria-label="Field manual chapters">
+      <div class="container">
+        <a href="convergence.html">Convergence</a
+        ><a href="accelerators.html">Accelerators</a
+        ><a href="memory-storage.html">Memory &amp; Storage</a
+        ><a href="interconnects.html">Interconnects</a
+        ><a href="facilities.html">Facilities</a
+        ><a href="systems-software.html">Systems Software</a
+        ><a href="scheduling.html">Scheduling</a
+        ><a href="observability.html">Observability</a
+        ><a href="operations.html">Operations</a
+        ><a href="training.html" class="active" aria-current="page">Training</a
+        ><a href="inference.html">Inference</a
+        ><a href="scientific-computing.html">Scientific Computing</a
+        ><a href="cloud.html">Cloud</a><a href="linux.html">Linux</a
+        ><a href="glossary.html">Glossary</a>
+      </div>
+    </nav>
+    <main class="section-light">
+      <div class="container doc-layout">
+        <aside class="doc-toc">
+          <h4><i class="fas fa-list"></i> On this page</h4>
+          <ul>
+            <li>
+              <a href="#anatomy-of-a-training-step"
+                >Anatomy of a Training Step</a
+              >
+            </li>
+            <li>
+              <a href="#memory-accounting-for-training"
+                >Memory Accounting for Training</a
+              >
+            </li>
+            <li>
+              <a href="#parallelism-strategies">Parallelism Strategies</a>
+            </li>
+            <li>
+              <a href="#mapping-parallelism-onto-hardware"
+                >Mapping Parallelism onto Hardware</a
+              >
+            </li>
+            <li><a href="#frameworks">Frameworks</a></li>
+            <li>
+              <a href="#precision-checkpointing-and-accumulation"
+                >Precision, Activation Checkpointing and Gradient
+                Accumulation</a
+              >
+            </li>
+            <li>
+              <a href="#scaling-laws-and-compute-budgets"
+                >Scaling Laws and Compute Budgets</a
+              >
+            </li>
+            <li>
+              <a href="#fine-tuning-versus-pretraining"
+                >Fine-Tuning versus Pretraining</a
+              >
+            </li>
+            <li>
+              <a href="#checkpointing-and-fault-tolerance"
+                >Checkpointing, Fault Tolerance and Data at Scale</a
+              >
+            </li>
+            <li>
+              <a href="#launching-multi-node-fsdp2"
+                >Launching Multi-Node FSDP2 on Slurm</a
+              >
+            </li>
+            <li><a href="#key-takeaways">Key Takeaways</a></li>
+          </ul>
+        </aside>
+        <article class="doc-content">
+          <p>
+            Training is where AI hits your cluster hardest. One job can hold
+            hundreds or thousands of GPUs for weeks. It pushes HBM capacity,
+            NVLink and the scale-out fabric, the parallel file system and your
+            on-call rotation all at once. This chapter is for the people who run
+            those jobs and the people who support them. It covers what happens
+            inside a training step, how to account for memory before you ask for
+            an allocation, the parallelism strategies and how they map onto real
+            hardware, the frameworks worth knowing in 2026, and what large labs
+            have published about keeping giant jobs alive. The hardware itself
+            is covered in <a href="accelerators.html">Accelerators</a> and
+            <a href="interconnects.html">Interconnects</a>. Inference is its own
+            chapter: <a href="inference.html">Inference at Scale</a>.
+          </p>
+
+          <h2 id="anatomy-of-a-training-step">Anatomy of a Training Step</h2>
+
+          <p>
+            Every synchronous data-parallel training job runs the same loop.
+            Knowing its phases is the first step in figuring out why a job is
+            slow.
+          </p>
+
+          <ol>
+            <li>
+              <strong>Load a batch.</strong> Read pre-tokenized samples, move
+              them to the GPU, and in model-parallel setups send them to the
+              right ranks.
+            </li>
+            <li>
+              <strong>Forward pass.</strong> Compute activations layer by layer
+              and keep what the backward pass will need.
+            </li>
+            <li>
+              <strong>Loss.</strong> For language models this is cross-entropy
+              over the vocabulary. The output projection and softmax can be a
+              large share of memory.
+            </li>
+            <li>
+              <strong>Backward pass.</strong> Compute gradients. It costs about
+              twice the forward pass, which is where the "6" in the 6N
+              FLOPs-per-token rule comes from: 2N forward plus 4N backward.<a
+                href="#src-5"
+                >[5]</a
+              >
+            </li>
+            <li>
+              <strong>Gradient synchronization.</strong> All-reduce (DDP) or
+              reduce-scatter (FSDP/ZeRO) across data-parallel ranks. Good
+              implementations overlap this with the backward pass. DDP groups
+              gradients into buckets and starts an asynchronous all-reduce as
+              soon as a bucket is ready.<a href="#src-18">[18]</a>
+            </li>
+            <li>
+              <strong>Optimizer step.</strong> Update weights with AdamW or a
+              similar optimizer. This step is memory-bound and touches every
+              optimizer state byte.
+            </li>
+            <li>
+              <strong>Periodic work.</strong> Logging, evaluation and
+              checkpointing. Done badly, these stall every GPU in the job.
+            </li>
+          </ol>
+
+          <h3 id="where-the-time-goes">Where the Time Goes</h3>
+
+          <p>
+            Wall-clock time per step breaks down into four buckets. The first is
+            useful math: the big matrix multiplies on tensor cores. The second
+            is memory-bound kernels such as normalization, activations,
+            optimizer updates and attention without fused kernels. The third is
+            <em>exposed</em> communication, meaning collectives the framework
+            could not hide behind compute. The fourth is idle time: pipeline
+            bubbles, data-loader stalls, host-side launch overhead and waiting
+            on a slow rank. The standard efficiency metric is
+            <strong>Model FLOPs Utilization (MFU)</strong>: achieved model FLOPs
+            per second divided by the hardware's peak. Estimate it as 6 x N x
+            (tokens per second) / (GPU count x peak FLOP/s per GPU). For
+            calibration, Meta reports 38-43% BF16 MFU (380-430 TFLOPs per GPU)
+            for Llama 3 405B pre-training on 8,192 to 16,384 H100s.<a
+              href="#src-7"
+              >[7]</a
+            >
+            A well-tuned research job in the 30-50% range is doing fine. If you
+            are at 10%, something is exposed: communication, data loading or
+            tiny per-GPU batches.
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Before tuning parallelism, profile
+              one step with the PyTorch profiler or Nsight Systems and look for
+              gaps on the GPU compute stream. Gaps next to NCCL kernels point to
+              exposed communication. Gaps at the start of the step point to the
+              data loader. Gaps everywhere with small kernels point to host
+              overhead, which <code>torch.compile</code> or CUDA graphs often
+              fix. See <a href="observability.html">Observability</a> for
+              tooling.
+            </p>
+          </blockquote>
+
+          <h2 id="memory-accounting-for-training">
+            Memory Accounting for Training
+          </h2>
+
+          <p>
+            Most "CUDA out of memory" tickets come from people who never did
+            this arithmetic. Training memory has two parts.
+            <strong>Model states</strong> are weights, gradients and optimizer
+            states, and they scale with parameter count.
+            <strong>Residual states</strong> are activations, temporary buffers
+            and fragmentation, and they scale with batch size, sequence length
+            and model width.
+          </p>
+
+          <h3 id="the-16-bytes-per-parameter-rule">
+            The 16 Bytes per Parameter Rule
+          </h3>
+
+          <p>
+            The ZeRO paper gives the standard breakdown for mixed-precision
+            training with Adam. Call the parameter count Psi. You keep 16-bit
+            parameters (2 Psi bytes) and 16-bit gradients (2 Psi bytes). The
+            optimizer holds an FP32 master copy of the parameters, FP32 momentum
+            and FP32 variance: 4 Psi bytes each, 12 Psi bytes in total. That
+            adds up to <strong>16 bytes per parameter</strong> before a single
+            activation is stored. The paper's own example is a 1.5B-parameter
+            GPT-2, which needs at least 24 GB for model states even though the
+            16-bit weights alone are only 3 GB.<a href="#src-1">[1]</a>
+          </p>
+
+          <h3 id="worked-example-7b-and-70b">
+            Worked Example: 7B and 70B Models
+          </h3>
+
+          <p>
+            The table below applies the ZeRO formulas to 7B and 70B models:
+            plain DP, then stage 1 (P_os, shard optimizer states: 4 Psi + 12
+            Psi/N_d), stage 2 (P_os+g, also shard gradients: 2 Psi + 14 Psi/N_d)
+            and stage 3 (P_os+g+p, shard everything: 16 Psi/N_d), where N_d is
+            the data-parallel degree.<a href="#src-1">[1]</a> Values are model
+            states only, in GB (10^9 bytes), per GPU.
+          </p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th>Plain DP (16 Psi)</th>
+                <th>ZeRO-1, N_d=8</th>
+                <th>ZeRO-2, N_d=8</th>
+                <th>ZeRO-3, N_d=8</th>
+                <th>ZeRO-3, N_d=64</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>7B</td>
+                <td>112</td>
+                <td>38.5</td>
+                <td>26.3</td>
+                <td>14.0</td>
+                <td>1.8</td>
+              </tr>
+              <tr>
+                <td>70B</td>
+                <td>1,120</td>
+                <td>385</td>
+                <td>262.5</td>
+                <td>140</td>
+                <td>17.5</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            <em
+              >Note: computed from the ZeRO paper's formulas with K = 12 for
+              mixed-precision Adam.<a href="#src-1">[1]</a> Activations, buffers
+              and fragmentation are extra.</em
+            >
+          </p>
+
+          <p>
+            What this means in practice: a 7B model does not fit for full
+            training on a single 80 GB GPU (the H100s Meta used have 80 GB of
+            HBM3<a href="#src-7">[7]</a>), no matter how small the batch. Shard
+            it across one 8-GPU node with ZeRO-3/FSDP and model states drop to
+            14 GB per GPU, leaving plenty of room for activations. A 70B model
+            at 140 GB per GPU does not fit on an 8-GPU node of 80 GB parts even
+            with full sharding. You need more nodes, or tensor/pipeline
+            parallelism, or both. The ZeRO paper's Table 1 shows the same
+            pattern: a 7.5B model drops from 120 GB per device with plain DP to
+            1.88 GB with all three stages at N_d = 64.<a href="#src-1">[1]</a>
+          </p>
+
+          <h3 id="activation-memory">Activation Memory</h3>
+
+          <p>
+            Korthikanti et al. derive per-layer activation memory for a standard
+            transformer in 16-bit precision: <code>sbh(34 + 5as/h)</code> bytes,
+            where s is sequence length, b is micro-batch size, h is hidden size
+            and a is the number of attention heads.<a href="#src-4">[4]</a> Take
+            an illustrative 7B-class shape (h = 4096, 32 layers, 32 heads) at s
+            = 4096 and b = 1. The formula gives about 3.25 GB per layer and 104
+            GB for the full stack. Most of that comes from the 5as/h term, which
+            is the attention score matrix that grows quadratically with sequence
+            length. Fused attention kernels such as FlashAttention do not store
+            that large intermediate matrix for the backward pass,<a
+              href="#src-37"
+              >[37]</a
+            >
+            which removes most of the quadratic term. Without that term, the
+            formula gives 34sbh per layer (about 18 GB over 32 layers in this
+            example). From there you have three levers:
+          </p>
+
+          <ul>
+            <li>
+              <strong>Full activation recomputation</strong> keeps only each
+              layer's input (2sbhL total, about 1.1 GB here) and recomputes
+              everything else during backward. The authors measured a 30-40%
+              execution-time overhead.<a href="#src-4">[4]</a>
+            </li>
+            <li>
+              <strong>Selective recomputation</strong> recomputes only the
+              cheap-to-recompute, memory-heavy parts of attention. Combined with
+              sequence parallelism it cut activation memory 5x and cut
+              recomputation overhead by over 90% in their experiments.<a
+                href="#src-4"
+                >[4]</a
+              >
+            </li>
+            <li>
+              <strong>Tensor plus sequence parallelism</strong> divides the
+              34sbh term by the TP degree t.<a href="#src-4">[4]</a>
+            </li>
+          </ul>
+
+          <h2 id="parallelism-strategies">Parallelism Strategies</h2>
+
+          <p>
+            Every parallelism strategy cuts some dimension of the problem across
+            GPUs: the batch, the model states, the individual weight matrices,
+            the layers, the sequence, or the experts. Each cut has its own
+            communication pattern and its own bandwidth needs.
+          </p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Strategy</th>
+                <th>What is split</th>
+                <th>Main collective</th>
+                <th>Where it should run</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>DDP</td>
+                <td>Batch (full replica per GPU)</td>
+                <td>All-reduce of gradients</td>
+                <td>Anywhere; tolerant of scale-out links</td>
+              </tr>
+              <tr>
+                <td>ZeRO / FSDP</td>
+                <td>Batch + model states</td>
+                <td>All-gather params, reduce-scatter grads</td>
+                <td>Within and across nodes</td>
+              </tr>
+              <tr>
+                <td>Tensor (TP)</td>
+                <td>Individual weight matrices</td>
+                <td>All-reduce / all-gather per layer</td>
+                <td>Inside the NVLink domain</td>
+              </tr>
+              <tr>
+                <td>Sequence / Context (SP/CP)</td>
+                <td>Sequence dimension</td>
+                <td>All-gather / ring exchange of KV</td>
+                <td>High-bandwidth links</td>
+              </tr>
+              <tr>
+                <td>Pipeline (PP)</td>
+                <td>Layers (model depth)</td>
+                <td>Point-to-point activations</td>
+                <td>Across nodes</td>
+              </tr>
+              <tr>
+                <td>Expert (EP)</td>
+                <td>MoE experts</td>
+                <td>All-to-all token dispatch</td>
+                <td>NVLink domain or fast fabric</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3 id="distributed-data-parallel">
+            Distributed Data Parallel (DDP)
+          </h3>
+
+          <p>
+            Each rank holds a full replica of the model and processes its own
+            slice of the global batch. Gradients are averaged with all-reduce,
+            bucketed and overlapped with the backward pass.<a href="#src-18"
+              >[18]</a
+            >
+            DDP is simple, robust and fast, and it only works if the full
+            16-bytes-per-parameter model state plus activations fits on one GPU.
+            For the many research models under about a billion parameters, DDP
+            is still the right answer.
+          </p>
+
+          <h3 id="zero-and-fsdp">ZeRO and FSDP</h3>
+
+          <p>
+            ZeRO removes the redundancy in data parallelism by partitioning
+            model states across DP ranks. Stages 1 and 2 keep DDP's
+            communication volume. Stage 3 (parameter partitioning) makes memory
+            drop linearly with DP degree for a modest 50% increase in
+            communication volume.<a href="#src-1">[1]</a> PyTorch's
+            implementation of this idea is
+            <strong>Fully Sharded Data Parallel</strong>. The current version,
+            <strong>FSDP2</strong>
+            (<code>torch.distributed.fsdp.fully_shard</code>), shards each
+            parameter along dim-0 as a <code>DTensor</code>. It all-gathers
+            parameters before each module's forward and backward and
+            reduce-scatters gradients afterward.<a href="#src-13">[13]</a> The
+            PyTorch tutorial describes FSDP as DDP's all-reduce split into a
+            reduce-scatter and an all-gather, and marks FSDP1 as deprecated.<a
+              href="#src-14"
+              >[14]</a
+            >
+          </p>
+
+          <p>
+            Several FSDP2 details matter in practice:<a href="#src-13">[13]</a>
+          </p>
+          <ul>
+            <li>
+              Apply <code>fully_shard</code> <strong>bottom-up</strong>, once
+              per transformer block and then on the root. Each call creates one
+              communication group. Sharding only the root gives one huge
+              blocking all-gather with no overlap, which the docs call "almost
+              never what you want."
+            </li>
+            <li>
+              <code>reshard_after_forward=True</code> is ZeRO-3 behavior.
+              <code>False</code> keeps the gathered parameters until backward,
+              trading memory for one less all-gather, much like ZeRO-2. An
+              integer reshards to a smaller group, for example the GPUs within a
+              node. Llama 3 used the "do not reshard after forward" choice to
+              avoid the extra all-gather in backward.<a href="#src-7">[7]</a>
+            </li>
+            <li>
+              A 2D device mesh gives <strong>HSDP</strong> (hybrid sharding):
+              parameters are sharded along one mesh dimension and replicated
+              along the other. Typically you shard within a node or rack and
+              replicate across them.
+            </li>
+            <li>
+              <code
+                >MixedPrecisionPolicy(param_dtype=torch.bfloat16,
+                reduce_dtype=torch.float32)</code
+              >
+              computes in BF16 and reduces gradients in FP32. Because FSDP keeps
+              the sharded FP32 parameters anyway, it needs no extra FP32 master
+              copy.
+            </li>
+            <li>
+              <code>CPUOffloadPolicy</code> moves parameters, gradients and
+              optimizer states to host memory and runs the optimizer step on
+              CPU. It is slow, but sometimes it is the only way to fit a model
+              onto a small allocation.
+            </li>
+          </ul>
+
+          <h3 id="tensor-parallelism">Tensor Parallelism</h3>
+
+          <p>
+            Megatron-LM's tensor parallelism splits each transformer block's
+            weight matrices across GPUs. The first MLP matrix is split by
+            columns and the second by rows, so the block needs only one
+            all-reduce in the forward pass and one in the backward pass.
+            Attention heads are split the same way.<a href="#src-2">[2]</a>
+            Every layer adds a latency-sensitive collective to the critical
+            path, so TP only performs well on very fast links. Narayanan et
+            al.'s first takeaway is that tensor parallelism should generally be
+            used up to degree g on g-GPU servers, with pipeline parallelism
+            scaling beyond the server.<a href="#src-3">[3]</a> In PyTorch, TP is
+            expressed with <code>parallelize_module</code> and styles such as
+            <code>ColwiseParallel</code>, <code>RowwiseParallel</code> and
+            <code>SequenceParallel</code>, all built on DTensor.<a
+              href="#src-40"
+              >[40]</a
+            >
+          </p>
+
+          <h3 id="sequence-and-context-parallelism">
+            Sequence and Context Parallelism
+          </h3>
+
+          <p>
+            Two related ideas share this name.
+            <strong>Sequence parallelism</strong> (Korthikanti et al.) is a
+            companion to TP. It shards the parts TP leaves replicated, such as
+            LayerNorm and dropout, along the sequence dimension, so activation
+            memory divides cleanly by the TP degree.<a href="#src-4">[4]</a>
+            Megatron Core recommends always enabling it with TP.<a
+              href="#src-19"
+              >[19]</a
+            >
+            <strong>Context parallelism</strong> splits the whole sequence,
+            attention included, across GPUs. It exchanges key/value blocks
+            between ranks, in the style of Ring Attention, which overlaps KV
+            communication with blockwise attention compute and supports
+            sequences up to device-count times longer.<a href="#src-36">[36]</a>
+            CP is what makes long-context training feasible. Llama 3's
+            long-context stage ran at a 131,072-token sequence length with CP =
+            16 on 16,384 GPUs.<a href="#src-7">[7]</a> Megatron Core suggests CP
+            for sequences of 8K tokens and up.<a href="#src-19">[19]</a>
+          </p>
+
+          <h3 id="pipeline-parallelism">Pipeline Parallelism</h3>
+
+          <p>
+            Pipeline parallelism assigns contiguous groups of layers to
+            different GPUs, called stages, and streams micro-batches through
+            them. GPipe introduced batch-splitting pipelining for general
+            sequential networks.<a href="#src-38">[38]</a> The cost is the
+            <strong>pipeline bubble</strong>: stages sit idle while the pipeline
+            fills and drains. With p stages and m micro-batches per batch, the
+            bubble fraction is (p - 1)/m, so you need m much larger than p.<a
+              href="#src-3"
+              >[3]</a
+            >
+            Worked example: at p = 16 and m = 32 the bubble is 15/32, about 47%
+            of ideal compute time. At m = 128 it falls to about 12%.
+          </p>
+
+          <ul>
+            <li>
+              <strong>1F1B</strong> (one-forward-one-backward, from PipeDream)
+              limits how many micro-batches' activations are in flight. The
+              first stage still has to hold activations for p micro-batches,
+              which works out to L layers' worth regardless of p.<a
+                href="#src-4"
+                >[4]</a
+              >
+            </li>
+            <li>
+              <strong>Interleaved 1F1B</strong> gives each GPU v non-contiguous
+              "virtual" stages. This cuts the bubble by a factor of v and raises
+              communication by the same factor.<a href="#src-3">[3]</a>
+            </li>
+            <li>
+              <strong>Zero-bubble schedules</strong> split the backward pass
+              into input-gradient and weight-gradient computations and reorder
+              them. The authors report up to 23% higher throughput than 1F1B at
+              similar memory, and 31% with the memory constraint relaxed.<a
+                href="#src-10"
+                >[10]</a
+              >
+              DeepSeek-V3's <strong>DualPipe</strong> overlaps compute and
+              communication across forward and backward chunks.<a href="#src-9"
+                >[9]</a
+              >
+            </li>
+          </ul>
+
+          <p>
+            Pipelines also have load-balance problems. Meta found that the first
+            stage uses more memory (embeddings plus warm-up micro-batches) and
+            the last stage becomes the latency bottleneck (output projection
+            plus loss). They also found that standard schedules forced the
+            per-GPU batch size to be divisible by the stage count, so they
+            modified the schedule to allow arbitrary micro-batch counts.<a
+              href="#src-7"
+              >[7]</a
+            >
+            PyTorch ships <code>torch.distributed.pipelining</code>, still
+            labeled alpha, with GPipe, 1F1B, Interleaved 1F1B and Looped BFS
+            schedules.<a href="#src-39">[39]</a>
+          </p>
+
+          <h3 id="expert-parallelism-for-moe">Expert Parallelism for MoE</h3>
+
+          <p>
+            A Mixture-of-Experts model replaces dense MLPs with many expert MLPs
+            and a router that sends each token to a few of them. DeepSeek-V3,
+            for example, has 671B total parameters but activates only 37B per
+            token.<a href="#src-9">[9]</a> Expert parallelism puts different
+            experts on different GPUs and moves tokens to their experts and back
+            with <strong>all-to-all</strong> collectives, which are the most
+            network-hostile pattern in training. DeepSeek-V3 used 16-way PP,
+            64-way EP spanning 8 nodes, and ZeRO-1 DP on 2,048 H800 GPUs (8 per
+            node on NVLink/NVSwitch, InfiniBand between nodes), with custom
+            cross-node all-to-all kernels.<a href="#src-9">[9]</a> In Megatron
+            Core, EP is set with <code>--expert-model-parallel-size</code> and
+            an all-to-all token dispatcher. If you combine EP with TP, you must
+            also enable sequence parallelism.<a href="#src-19">[19]</a
+            ><a href="#src-43">[43]</a> Router load balancing and token-drop
+            policy affect both model quality and step time. Put expert-imbalance
+            metrics in your logs.
+          </p>
+
+          <h3 id="multi-dimensional-parallelism">
+            Multi-Dimensional Parallelism
+          </h3>
+
+          <p>
+            Real large-model jobs combine all of the above. The GPU count is the
+            product of the degrees. Megatron Core writes it as TP x PP x CP x EP
+            x DP. Its example trains a Llama-3 70B-shaped model on 64 GPUs with
+            TP = 4, PP = 4, CP = 2 and DP = 2.<a href="#src-19">[19]</a> Llama 3
+            405B used "4D parallelism", with GPUs grouped in the order [TP, CP,
+            PP, DP] from innermost to outermost and DP implemented as FSDP.<a
+              href="#src-7"
+              >[7]</a
+            >
+            Its published configurations:
+          </p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>GPUs</th>
+                <th>TP</th>
+                <th>CP</th>
+                <th>PP</th>
+                <th>DP</th>
+                <th>Seq. len.</th>
+                <th>TFLOPs/GPU</th>
+                <th>BF16 MFU</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>8,192</td>
+                <td>8</td>
+                <td>1</td>
+                <td>16</td>
+                <td>64</td>
+                <td>8,192</td>
+                <td>430</td>
+                <td>43%</td>
+              </tr>
+              <tr>
+                <td>16,384</td>
+                <td>8</td>
+                <td>1</td>
+                <td>16</td>
+                <td>128</td>
+                <td>8,192</td>
+                <td>400</td>
+                <td>41%</td>
+              </tr>
+              <tr>
+                <td>16,384</td>
+                <td>8</td>
+                <td>16</td>
+                <td>16</td>
+                <td>8</td>
+                <td>131,072</td>
+                <td>380</td>
+                <td>38%</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            <em
+              >Source: Llama 3 paper, Table 4. Global batch was 16M tokens in
+              all three.<a href="#src-7">[7]</a></em
+            >
+          </p>
+
+          <p>
+            TorchTitan measured the payoff of combining techniques on H100s
+            against optimized baselines: 65.08% speedup for Llama 3.1 8B on 128
+            GPUs (1D), 12.59% for 70B on 256 GPUs (2D), and 30% for 405B on 512
+            GPUs (3D).<a href="#src-8">[8]</a>
+          </p>
+
+          <h2 id="mapping-parallelism-onto-hardware">
+            Mapping Parallelism onto Hardware
+          </h2>
+
+          <p>
+            The rule is simple:
+            <strong
+              >the more often a parallel dimension communicates, the closer
+              together its GPUs must be.</strong
+            >
+            Llama 3's [TP, CP, PP, DP] ordering puts it into practice. The
+            innermost dimension (TP, a collective every layer) is placed on
+            adjacent ranks, which on a standard launcher means GPUs in the same
+            server. Meta's servers had eight GPUs connected by NVLink, and TP
+            was 8.<a href="#src-7">[7]</a>
+          </p>
+
+          <ul>
+            <li>
+              <strong>TP (and usually SP) inside the NVLink domain.</strong> On
+              an 8-GPU HGX-style node, TP is at most 8. Rack-scale NVLink
+              systems widen the domain. NVIDIA's GB200 NVL72 connects 72
+              Blackwell GPUs in one NVLink domain.<a href="#src-42">[42]</a>
+              That leaves room for larger TP or EP groups without touching the
+              scale-out network. See
+              <a href="interconnects.html">Interconnects</a>.
+            </li>
+            <li>
+              <strong>CP and EP next.</strong> Both are bandwidth-heavy. Keep
+              them in the NVLink domain when you can, and otherwise on the best
+              rail-aligned scale-out links.
+            </li>
+            <li>
+              <strong>PP across nodes.</strong> Point-to-point activation
+              transfers are small and tolerate slower links. That is why PP is
+              the standard way to scale depth across servers.<a href="#src-3"
+                >[3]</a
+              ><a href="#src-39">[39]</a>
+            </li>
+            <li>
+              <strong>DP/FSDP outermost.</strong> Gradient reduction happens
+              once per step (or once per layer group under FSDP) and overlaps
+              with compute. HSDP shards within a fast domain and replicates
+              across slower ones.
+            </li>
+          </ul>
+
+          <p>
+            Rank ordering comes from the launcher. <code>torchrun</code> places
+            the <code>LOCAL_RANK</code> processes of one node on consecutive
+            ranks,<a href="#src-17">[17]</a> so building your
+            <code>DeviceMesh</code> with the TP dimension last (fastest-varying)
+            keeps TP groups inside a node. Slurm topology-aware placement (see
+            <a href="scheduling.html">Scheduling</a>) keeps DP and PP groups
+            under as few switch tiers as possible.
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> The most common facilitation mistake
+              is a user setting TP = 16 on 8-GPU nodes because "the model is
+              big." The job runs, but every layer now crosses the scale-out NIC,
+              and throughput collapses. Keep TP within one NVLink domain. Add PP
+              or FSDP to go bigger.
+            </p>
+          </blockquote>
+
+          <h2 id="frameworks">Frameworks</h2>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Framework</th>
+                <th>Best for</th>
+                <th>Parallelism</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>PyTorch native (DDP, FSDP2, DTensor)</td>
+                <td>Custom research code</td>
+                <td>DP, FSDP/HSDP, TP, PP, CP building blocks</td>
+              </tr>
+              <tr>
+                <td>TorchTitan</td>
+                <td>PyTorch-native pretraining reference</td>
+                <td>FSDP2, TP (incl. async TP), PP, CP, Float8/MXFP8</td>
+              </tr>
+              <tr>
+                <td>Megatron-LM / Megatron Core</td>
+                <td>Maximum throughput on NVIDIA</td>
+                <td>TP, PP, DP, EP, CP; FP16/BF16/FP8/FP4</td>
+              </tr>
+              <tr>
+                <td>NVIDIA NeMo / Megatron Bridge</td>
+                <td>Recipes, HF checkpoint conversion</td>
+                <td>Megatron Core underneath</td>
+              </tr>
+              <tr>
+                <td>DeepSpeed</td>
+                <td>ZeRO via config, offload to CPU/NVMe</td>
+                <td>ZeRO 1-3, PP, MoE, ZeRO-Infinity</td>
+              </tr>
+              <tr>
+                <td>JAX / XLA</td>
+                <td>TPUs, compiler-driven sharding</td>
+                <td>Sharding annotations, <code>shard_map</code></td>
+              </tr>
+              <tr>
+                <td>Hugging Face Accelerate</td>
+                <td>Scaling existing HF scripts</td>
+                <td>DDP, FSDP (v1 or v2), DeepSpeed</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3 id="pytorch-native">PyTorch Native</h3>
+
+          <p>
+            PyTorch 2.14 is the current release as of this writing. Its
+            distributed highlights include a new <code>nccl2</code> backend and
+            fault tolerance as a first-class <code>c10d</code> concept, with
+            in-place process-group reconfiguration and a Flight Recorder that
+            works for any backend.<a href="#src-35">[35]</a> The building blocks
+            are:
+          </p>
+          <ul>
+            <li>
+              <strong>DeviceMesh and DTensor.</strong>
+              <code
+                >init_device_mesh("cuda", (dp, tp), mesh_dim_names=("dp",
+                "tp"))</code
+              >
+              describes the N-dimensional layout of GPUs.<a href="#src-46"
+                >[46]</a
+              >
+              DTensor records how each tensor is placed on that mesh
+              (<code>Shard(dim)</code>, <code>Replicate()</code>,
+              <code>Partial()</code>). FSDP2, TP and distributed checkpointing
+              all build on it.
+            </li>
+            <li><strong>DDP and FSDP2</strong>, described above.</li>
+            <li>
+              <strong>torch.compile.</strong> By default it compiles through the
+              Inductor backend.<a href="#src-47">[47]</a> With DDP, wrap in DDP
+              first and compile second, so the compiler can insert graph breaks
+              at bucket boundaries and keep all-reduce overlapped with
+              backward.<a href="#src-18">[18]</a>
+            </li>
+            <li>
+              <strong>torch.distributed.pipelining</strong> for PP (alpha) and
+              <strong>torch.distributed.checkpoint</strong> (DCP) for sharded
+              checkpoints.
+            </li>
+          </ul>
+
+          <h3 id="torchtitan">TorchTitan</h3>
+
+          <p>
+            TorchTitan is the PyTorch team's clean-room reference for
+            large-scale training. It is the best place to see how FSDP2, TP, PP,
+            CP, activation checkpointing, <code>torch.compile</code>, Float8,
+            async DCP checkpointing and Flight Recorder fit together in about as
+            little code as possible. Recent features include MXFP8 training on
+            Blackwell, TorchFT integration, checkpointable data loading and BF16
+            optimizer states. AMD maintains an optimized fork for its GPUs.<a
+              href="#src-27"
+              >[27]</a
+            >
+            It is also the companion code to the TorchTitan paper.<a
+              href="#src-8"
+              >[8]</a
+            >
+          </p>
+
+          <h3 id="megatron-core-and-nemo">
+            Megatron-LM, Megatron Core and NeMo
+          </h3>
+
+          <p>
+            Megatron Core is NVIDIA's composable library of GPU-optimized
+            transformer building blocks. It supports TP, PP, DP, EP and CP and
+            FP16/BF16/FP8/FP4 precision. Megatron-LM is the reference training
+            scripts built on it. Megatron Bridge handles Hugging Face to
+            Megatron checkpoint conversion in both directions.<a href="#src-20"
+              >[20]</a
+            >
+            Its parallelism guide documents the flags you will see in user job
+            scripts: <code>--tensor-model-parallel-size</code>,
+            <code>--sequence-parallel</code>,
+            <code>--pipeline-model-parallel-size</code>,
+            <code>--num-layers-per-virtual-pipeline-stage</code>,
+            <code>--context-parallel-size</code>,
+            <code>--expert-model-parallel-size</code>,
+            <code>--use-distributed-optimizer</code>, and the overlap switches
+            <code>--overlap-grad-reduce</code>,
+            <code>--overlap-param-gather</code> and
+            <code>--tp-comm-overlap</code>.<a href="#src-19">[19]</a> For LLM
+            work, the NVIDIA NeMo Framework container now defers to Megatron
+            Bridge's documentation, starting with the 26.02 container.<a
+              href="#src-34"
+              >[34]</a
+            >
+            Megatron Bridge 0.5.0 was released in June 2026.<a href="#src-33"
+              >[33]</a
+            >
+          </p>
+
+          <h3 id="deepspeed">DeepSpeed</h3>
+
+          <p>
+            DeepSpeed made ZeRO practical. Its main selling point is still that
+            you turn on ZeRO stages through the JSON config without changing
+            model code, and that ZeRO-Infinity can offload to CPU and NVMe.<a
+              href="#src-21"
+              >[21]</a
+            >
+            The config enforces the batch identity every facilitator should
+            know:
+            <code
+              >train_batch_size = train_micro_batch_size_per_gpu x
+              gradient_accumulation_steps x number of GPUs</code
+            >.<a href="#src-22">[22]</a> The project remains active. Its 2026
+            news includes Muon optimizer support and SDMA-offloaded collectives
+            for ZeRO-3 on AMD GPUs.<a href="#src-49">[49]</a>
+          </p>
+
+          <h3 id="jax-and-xla">JAX and XLA</h3>
+
+          <p>
+            JAX takes the compiler route. You annotate how arrays are sharded
+            over a device mesh, and XLA partitions the computation and inserts
+            collectives. <code>shard_map</code> gives explicit per-shard control
+            when you need it, and the two approaches compose.<a href="#src-26"
+              >[26]</a
+            >
+            Multi-node JAX runs one process per host (or per GPU), each calling
+            <code>jax.distributed.initialize()</code>. XLA uses high-speed links
+            such as TPU ICI or NVLink where they exist and host networking
+            elsewhere.<a href="#src-25">[25]</a> JAX is the native path on
+            Google TPUs (see <a href="cloud.html">Cloud</a>) and is fully
+            workable on GPU clusters.
+          </p>
+
+          <h3 id="hugging-face-accelerate">Hugging Face Accelerate</h3>
+
+          <p>
+            Accelerate wraps an existing PyTorch loop with an
+            <code>Accelerator</code> object and a few changed lines, then
+            dispatches to DDP, FSDP or DeepSpeed based on the launch config.<a
+              href="#src-28"
+              >[28]</a
+            >
+            Setting <code>fsdp_version=2</code> selects FSDP2. The default is
+            still 1 for backward compatibility, so check what your users are
+            actually running.<a href="#src-29">[29]</a> Accelerate is the
+            lowest-effort path for fine-tuning jobs built on the Hugging Face
+            stack.
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> For a campus cluster, standardize on
+              two paths and document them well. PyTorch-native FSDP2 (or
+              TorchTitan) covers people writing their own models. Megatron
+              Bridge/NeMo or Accelerate covers people adapting existing
+              checkpoints. Supporting all seven frameworks equally is how a
+              facilitation team burns out.
+            </p>
+          </blockquote>
+
+          <h2 id="precision-checkpointing-and-accumulation">
+            Precision, Activation Checkpointing and Gradient Accumulation
+          </h2>
+
+          <h3 id="mixed-precision-bf16">
+            Mixed Precision: BF16 as the Baseline
+          </h3>
+
+          <p>
+            BF16 compute with FP32 master weights and FP32 gradient reduction is
+            the default recipe on current hardware. FP16 needs dynamic loss
+            scaling to keep gradients from overflowing or underflowing.<a
+              href="#src-24"
+              >[24]</a
+            >
+            BF16 training does not require loss scaling.<a href="#src-22"
+              >[22]</a
+            >
+            Precision formats are covered in more depth in
+            <a href="convergence.html">The Convergence</a>.
+          </p>
+
+          <h3 id="fp8-training-and-transformer-engine">
+            FP8 Training and Transformer Engine
+          </h3>
+
+          <p>
+            NVIDIA Transformer Engine (TE) provides FP8 on Hopper, Ada and
+            Blackwell GPUs, plus MXFP8 and NVFP4 on Blackwell. It ships drop-in
+            modules (<code>te.Linear</code>, full transformer layers) that track
+            the scaling factors FP8 needs internally.<a href="#src-23">[23]</a>
+            Two FP8 encodings are used. E4M3 (range +/-448) is typically used
+            for forward activations and weights. E5M2 (range +/-57344) trades
+            precision for dynamic range and suits gradients.<a href="#src-24"
+              >[24]</a
+            >
+            A minimal TE usage pattern:
+          </p>
+
+          <pre><code class="language-python">import torch
+import transformer_engine.pytorch as te
+from transformer_engine.common import recipe
+
+model = te.Linear(768, 3072, bias=True)
+inp = torch.randn(2048, 768, device="cuda")
+fp8_recipe = recipe.DelayedScaling(margin=0, fp8_format=recipe.Format.E4M3)
+
+with te.autocast(enabled=True, recipe=fp8_recipe):
+    out = model(inp)
+out.sum().backward()
+</code></pre>
+          <p>
+            <em
+              >Adapted from the Transformer Engine documentation example.<a
+                href="#src-23"
+                >[23]</a
+              ></em
+            >
+          </p>
+
+          <p>
+            FP8 now works at frontier scale. DeepSeek-V3 was pre-trained with an
+            FP8 mixed-precision framework that uses fine-grained tile- and
+            block-wise quantization. In validation runs of about 1 trillion
+            tokens, its relative loss error against a BF16 baseline stayed below
+            0.25%.<a href="#src-9">[9]</a> Megatron Core and TorchTitan both
+            expose FP8 and MXFP8 recipes.<a href="#src-20">[20]</a
+            ><a href="#src-27">[27]</a> Treat FP8 as a throughput optimization
+            to validate against a BF16 loss curve, not as a default to switch on
+            blindly.
+          </p>
+
+          <h3 id="activation-checkpointing">Activation Checkpointing</h3>
+
+          <p>
+            Activation checkpointing (recomputation) trades compute for memory,
+            as quantified above. In PyTorch, use
+            <code
+              >torch.utils.checkpoint.checkpoint(fn, *args,
+              use_reentrant=False)</code
+            >, usually wrapped around each transformer block.<a href="#src-45"
+              >[45]</a
+            >
+            TorchTitan supports both full and per-op selective checkpointing.<a
+              href="#src-27"
+              >[27]</a
+            >
+            Start with no checkpointing, then selective, then full, and stop at
+            the first setting that fits.
+          </p>
+
+          <h3 id="gradient-accumulation">Gradient Accumulation</h3>
+
+          <p>
+            Gradient accumulation runs several micro-batches before each
+            optimizer step, so the global batch can be larger than memory
+            allows. Skip gradient communication on every micro-batch except the
+            last. FSDP2 does this with
+            <code>model.set_requires_gradient_sync(False)</code>, the equivalent
+            of FSDP1's <code>no_sync</code>.<a href="#src-13">[13]</a> Remember
+            that under PP, micro-batches are also what fill the pipeline, so
+            accumulation and bubble size are linked.<a href="#src-3">[3]</a>
+          </p>
+
+          <h2 id="scaling-laws-and-compute-budgets">
+            Scaling Laws and Compute Budgets
+          </h2>
+
+          <h3 id="kaplan-and-chinchilla">Kaplan and Chinchilla</h3>
+
+          <p>
+            Kaplan et al. (2020) showed that language-model loss follows power
+            laws in model size, dataset size and compute across more than seven
+            orders of magnitude. They concluded that compute-optimal training
+            uses very large models trained on relatively modest data and stops
+            well before convergence.<a href="#src-5">[5]</a> Hoffmann et al.
+            (2022, "Chinchilla") trained over 400 models from 70M to over 16B
+            parameters on 5 to 500B tokens. They found instead that parameters
+            and tokens should be scaled <em>equally</em>: every doubling of
+            model size should come with a doubling of training tokens. Their 70B
+            Chinchilla model, trained on 1.4 trillion tokens (20 tokens per
+            parameter) with the same compute as the 280B Gopher, outperformed
+            Gopher.<a href="#src-6">[6]</a> Modern labs fit their own scaling
+            laws on their own data. Meta did this to choose the 405B size for
+            its 3.8 x 10^25 FLOP budget.<a href="#src-7">[7]</a> Compute-optimal
+            is not always inference-optimal, either. Smaller models trained on
+            more tokens cost less to serve, as the Chinchilla paper itself
+            points out.<a href="#src-6">[6]</a>
+          </p>
+
+          <h3 id="the-6nd-estimate">The 6ND Estimate</h3>
+
+          <p>
+            Training compute is approximately
+            <strong>C = 6 x N x D</strong> FLOPs, where N is non-embedding
+            parameters and D is training tokens.<a href="#src-5">[5]</a> This
+            formula is how you turn a research idea into an allocation request.
+          </p>
+
+          <ul>
+            <li>
+              <strong>Sanity check against a published run:</strong> Llama 3
+              405B on 15.6T tokens gives 6 x 405 x 10^9 x 15.6 x 10^12 = 3.79 x
+              10^25 FLOPs, which matches the 3.8 x 10^25 Meta reports.<a
+                href="#src-7"
+                >[7]</a
+              >
+              At Meta's reported 400 TFLOP/s per GPU on 16,384 GPUs, that is
+              about 67 days of pure compute, before counting any interruptions.
+            </li>
+            <li>
+              <strong>Chinchilla:</strong> 6 x 70 x 10^9 x 1.4 x 10^12 = 5.9 x
+              10^23 FLOPs.<a href="#src-6">[6]</a>
+            </li>
+            <li>
+              <strong>A research-scale proposal:</strong> a 1B-parameter model
+              at the Chinchilla ratio (20B tokens) needs 6 x 10^9 x 20 x 10^9 =
+              1.2 x 10^20 FLOPs. At a sustained 400 TFLOP/s per GPU, that is 1.2
+              x 10^20 / 4 x 10^14 = 3 x 10^5 GPU-seconds, about 83 GPU-hours. At
+              half that throughput, which is realistic for small models with
+              short sequences, budget about 170 GPU-hours plus headroom for
+              restarts and evaluation.
+            </li>
+          </ul>
+
+          <p>
+            For MoE models, use the <em>active</em> parameter count for N.
+            DeepSeek-V3's 37B active parameters over 14.8T tokens gives about
+            3.3 x 10^24 FLOPs by this rule.<a href="#src-9">[9]</a>
+          </p>
+
+          <h2 id="fine-tuning-versus-pretraining">
+            Fine-Tuning versus Pretraining
+          </h2>
+
+          <p>
+            Most university GPU hours go to fine-tuning, evaluation and
+            small-model pretraining, not frontier-scale pretraining. Know which
+            one a user needs before sizing their request.
+          </p>
+
+          <ul>
+            <li>
+              <strong>Full fine-tuning</strong> has the same memory profile as
+              pretraining (16 bytes per parameter plus activations) but uses far
+              fewer tokens. A 7B full fine-tune is an FSDP job on one 8-GPU
+              node.
+            </li>
+            <li>
+              <strong>LoRA</strong> freezes the base weights and trains small
+              low-rank update matrices. On GPT-3 175B it reduced trainable
+              parameters by 10,000 times and GPU memory by 3 times compared with
+              Adam fine-tuning, matched or beat full fine-tuning quality, and
+              added no inference latency.<a href="#src-11">[11]</a> Arithmetic:
+              a frozen BF16 7B base is 14 GB, and the adapter's optimizer states
+              are negligible.
+            </li>
+            <li>
+              <strong>QLoRA</strong> backpropagates through a frozen 4-bit base
+              model into LoRA adapters, using the 4-bit NormalFloat (NF4) type,
+              double quantization and paged optimizers. It fine-tuned a 65B
+              model on a single 48 GB GPU while preserving 16-bit fine-tuning
+              task performance.<a href="#src-12">[12]</a>
+            </li>
+            <li>
+              Hugging Face <strong>PEFT</strong> implements LoRA and related
+              methods and integrates with Transformers and Accelerate.<a
+                href="#src-30"
+                >[30]</a
+              >
+              FSDP2's per-parameter sharding handles mixed frozen and trainable
+              parameters, and even NF4 all-gathers for QLoRA, without the
+              workarounds FSDP1 needed.<a href="#src-14">[14]</a>
+            </li>
+          </ul>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> When someone asks for "8 H100s for a
+              week to fine-tune a 70B model," ask whether QLoRA or LoRA on a
+              smaller allocation would answer their research question. Often it
+              will, and the queue will thank you. Save full-parameter runs for
+              work that actually needs them.
+            </p>
+          </blockquote>
+
+          <h2 id="checkpointing-and-fault-tolerance">
+            Checkpointing, Fault Tolerance and Data at Scale
+          </h2>
+
+          <h3 id="what-the-llama-3-run-taught-us">
+            What the Llama 3 Run Taught Us
+          </h3>
+
+          <p>
+            Meta's report is the best public data on failure rates at scale.
+            During a 54-day snapshot of Llama 3 405B pre-training on up to 16K
+            H100s, there were <strong>466 job interruptions</strong>: 47 planned
+            (firmware upgrades, configuration or dataset changes) and
+            <strong>419 unexpected</strong>. About 78% of the unexpected ones
+            were confirmed or suspected hardware issues, and GPU issues alone
+            were 58.7%. Only three needed significant manual intervention.
+            Automation handled the rest, and the job still achieved higher than
+            90% effective training time.<a href="#src-7">[7]</a>
+          </p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Root cause (selected)</th>
+                <th>Count</th>
+                <th>% of unexpected</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Faulty GPU</td>
+                <td>148</td>
+                <td>30.1%</td>
+              </tr>
+              <tr>
+                <td>GPU HBM3 memory</td>
+                <td>72</td>
+                <td>17.2%</td>
+              </tr>
+              <tr>
+                <td>Software bug</td>
+                <td>54</td>
+                <td>12.9%</td>
+              </tr>
+              <tr>
+                <td>Network switch/cable</td>
+                <td>35</td>
+                <td>8.4%</td>
+              </tr>
+              <tr>
+                <td>Unplanned host maintenance</td>
+                <td>32</td>
+                <td>7.6%</td>
+              </tr>
+              <tr>
+                <td>NCCL watchdog timeouts</td>
+                <td>7</td>
+                <td>1.7%</td>
+              </tr>
+              <tr>
+                <td>Silent data corruption</td>
+                <td>6</td>
+                <td>1.4%</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            <em
+              >Source: Llama 3 paper, Table 5; counts and percentages as
+              published.<a href="#src-7">[7]</a></em
+            >
+          </p>
+
+          <p>
+            The same paper records two effects that matter for facility
+            planning. Throughput varied 1-2% with time of day because higher
+            midday temperatures affected GPU DVFS. Synchronized power swings
+            across tens of thousands of GPUs, for example when every GPU waits
+            on a checkpoint or collective, caused data-center-level fluctuations
+            on the order of tens of megawatts.<a href="#src-7">[7]</a> See
+            <a href="facilities.html">Facilities</a>.
+          </p>
+
+          <h3 id="distributed-and-async-checkpoints">
+            Distributed and Asynchronous Checkpoints
+          </h3>
+
+          <p>
+            Never gather a large model onto rank 0 to save it. PyTorch
+            <strong>Distributed Checkpoint (DCP)</strong> has every rank write
+            its own shards in parallel, producing at least one file per rank. It
+            also reshards at load time, so you can save on one topology and
+            resume on another.<a href="#src-15">[15]</a>
+            <code>dcp.async_save</code> first copies state to CPU staging memory
+            and then writes from a background thread, so training continues.
+            This costs host RAM equal to the per-rank checkpoint size, and the
+            recipe recommends at most one async save in flight.<a href="#src-16"
+              >[16]</a
+            >
+            TorchTitan measured a 5-15x reduction in checkpoint overhead with
+            async DCP compared with synchronous DCP for Llama 3.1 8B.<a
+              href="#src-8"
+              >[8]</a
+            >
+            Size storage for the bursts. Meta's Tectonic fabric for Llama 3
+            offered 240 PB with 2 TB/s sustained and 7 TB/s peak throughput, and
+            bursty checkpoint writes of 1 MB to 4 GB per GPU were still a named
+            challenge.<a href="#src-7">[7]</a> Storage design is covered in
+            <a href="memory-storage.html">Memory and Storage</a>.
+          </p>
+
+          <h3 id="elastic-training-and-restarts">
+            Elastic Training and Restarts
+          </h3>
+
+          <p>
+            <code>torchrun</code> supports fault-tolerant
+            (<code>--max-restarts</code>) and elastic
+            (<code>--nnodes=MIN:MAX</code>) launches through the c10d rendezvous
+            backend. On any failure or membership change it kills all surviving
+            workers and restarts them. That makes your checkpoint frequency your
+            loss budget, and <code>RANK</code> is not stable across restarts.<a
+              href="#src-17"
+              >[17]</a
+            >
+            Newer tools go finer-grained. <strong>TorchFT</strong> provides
+            per-step fault tolerance: it heartbeats replicas, reconfigures
+            process groups, and recovers live from healthy peers for
+            fault-tolerant DDP and HSDP.<a href="#src-31">[31]</a> The
+            <strong>NVIDIA Resiliency Extension (NVRx)</strong>, marked
+            experimental, adds hung-rank detection, in-job restart without
+            reallocating Slurm nodes, async and local checkpointing, and
+            straggler detection.<a href="#src-32">[32]</a>
+          </p>
+
+          <h3 id="stragglers-and-hangs">Stragglers and Hangs</h3>
+
+          <p>
+            In synchronous training, the slowest GPU sets the pace for the whole
+            job. Meta relied heavily on PyTorch's NCCL Flight Recorder to
+            diagnose hangs and built tools to find the few process groups with
+            suspicious, slow communication.<a href="#src-7">[7]</a> TorchTitan
+            integrates Flight Recorder,<a href="#src-8">[8]</a> and PyTorch 2.14
+            extends it beyond NCCL.<a href="#src-35">[35]</a> On your own
+            cluster, run node health checks (GPU diagnostics, NCCL all-reduce
+            tests, ECC and XID counters) in the Slurm prolog, drain nodes that
+            fail, and keep a per-node history. The same few nodes cause most of
+            the trouble.
+          </p>
+
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Work out the checkpoint interval
+              instead of guessing. If a job loses on average half an interval of
+              work per failure, and checkpoints cost a few seconds with async
+              DCP, checkpointing every 15-30 minutes is cheap insurance on a
+              multi-node job. Test the resume path in week one, not after the
+              first node failure.
+            </p>
+          </blockquote>
+
+          <h3 id="data-pipelines">Data Pipelines</h3>
+
+          <p>
+            A stalled data loader wastes the whole allocation just as surely as
+            a slow network. Tokenize and pack sequences offline into large shard
+            files rather than millions of small files, which are what kill
+            parallel file systems. Give each DP rank a disjoint shard stream.
+            Make loader state part of the checkpoint so a resumed job does not
+            repeat or skip data. TorchTitan's loader is checkpointable for this
+            reason.<a href="#src-27">[27]</a> The JAX documentation sets out the
+            trade-off clearly. Distributed loading, where each process reads
+            only the shards its devices need, is more efficient but more
+            complex. Having every process load the full global data is simpler
+            but spends network bandwidth and can block the training loop.<a
+              href="#src-48"
+              >[48]</a
+            >
+            Stage datasets to node-local NVMe when they fit, and keep the
+            parallel file system for checkpoints and shared corpora (see
+            <a href="memory-storage.html">Memory and Storage</a>).
+          </p>
+
+          <h2 id="launching-multi-node-fsdp2">
+            Launching Multi-Node FSDP2 on Slurm
+          </h2>
+
+          <h3 id="minimal-fsdp2-skeleton">A Minimal FSDP2 Training Skeleton</h3>
+
+          <p>
+            The skeleton below uses the APIs as documented for PyTorch 2.14:
+            <code>init_device_mesh</code>, bottom-up
+            <code>fully_shard</code> with a <code>MixedPrecisionPolicy</code>,
+            an optimizer built <em>after</em> sharding, and DCP save/load
+            through a <code>Stateful</code> wrapper using
+            <code>get_state_dict</code>/<code>set_state_dict</code>.<a
+              href="#src-13"
+              >[13]</a
+            ><a href="#src-14">[14]</a><a href="#src-15">[15]</a
+            ><a href="#src-16">[16]</a> We ran it on PyTorch 2.14.0 (CPU build,
+            gloo backend, 2 processes under <code>torchrun</code>, with a
+            reduced model size) to confirm that training, async checkpointing
+            and resume all work. The CUDA path uses the same calls but was not
+            run here. Async saves use a separate gloo process group so
+            background checkpoint collectives do not contend with training
+            collectives. In our CPU test, async saves on the default group hung.
+            The model is a toy. Swap in your own model and a real data loader.
+          </p>
+
+          <pre><code class="language-python"># train_fsdp2.py - minimal FSDP2 skeleton (PyTorch 2.14 APIs)
+# Launch: torchrun --nnodes=N --nproc-per-node=G train_fsdp2.py
+import os
+import torch
+import torch.nn as nn
+import torch.distributed as dist
+import torch.distributed.checkpoint as dcp
+from torch.distributed.device_mesh import init_device_mesh
+from torch.distributed.fsdp import fully_shard, MixedPrecisionPolicy
+from torch.distributed.checkpoint.state_dict import get_state_dict, set_state_dict
+from torch.distributed.checkpoint.stateful import Stateful
+
+CKPT_DIR = os.environ.get("CKPT_DIR", "checkpoints")
+
+
+class Block(nn.Module):
+    def __init__(self, d):
+        super().__init__()
+        self.norm = nn.LayerNorm(d)
+        self.attn = nn.MultiheadAttention(d, num_heads=8, batch_first=True)
+        self.mlp = nn.Sequential(nn.Linear(d, 4 * d), nn.GELU(), nn.Linear(4 * d, d))
+
+    def forward(self, x):
+        h = self.norm(x)
+        x = x + self.attn(h, h, h, need_weights=False)[0]
+        return x + self.mlp(self.norm(x))
+
+
+class TinyLM(nn.Module):
+    def __init__(self, vocab=32000, d=1024, n_layers=8):
+        super().__init__()
+        self.embed = nn.Embedding(vocab, d)
+        self.layers = nn.ModuleList(Block(d) for _ in range(n_layers))
+        self.head = nn.Linear(d, vocab, bias=False)
+
+    def forward(self, tokens):
+        x = self.embed(tokens)
+        for layer in self.layers:
+            x = layer(x)
+        return self.head(x)
+
+
+class AppState(Stateful):
+    """Lets DCP save/load model + optimizer as sharded (DTensor) state."""
+
+    def __init__(self, model, optim):
+        self.model, self.optim = model, optim
+
+    def state_dict(self):
+        msd, osd = get_state_dict(self.model, self.optim)
+        return {"model": msd, "optim": osd}
+
+    def load_state_dict(self, sd):
+        set_state_dict(self.model, self.optim,
+                       model_state_dict=sd["model"], optim_state_dict=sd["optim"])
+
+
+def main():
+    use_cuda = torch.cuda.is_available()
+    local_rank = int(os.environ["LOCAL_RANK"])
+    if use_cuda:
+        torch.cuda.set_device(local_rank)
+    device_type = "cuda" if use_cuda else "cpu"
+    world = int(os.environ["WORLD_SIZE"])
+    mesh = init_device_mesh(device_type, (world,), mesh_dim_names=("dp",))
+
+    model = TinyLM()
+    mp = MixedPrecisionPolicy(param_dtype=torch.bfloat16, reduce_dtype=torch.float32)
+    for layer in model.layers:          # shard bottom-up: one comm group per block
+        fully_shard(layer, mesh=mesh, mp_policy=mp)
+    fully_shard(model, mesh=mesh, mp_policy=mp)   # root: embed + head
+
+    optim = torch.optim.AdamW(model.parameters(), lr=3e-4)  # build AFTER fully_shard
+
+    step0 = 0
+    if os.path.isdir(CKPT_DIR) and os.listdir(CKPT_DIR):
+        latest = max(os.listdir(CKPT_DIR), key=lambda s: int(s.split("_")[-1]))
+        dcp.load({"app": AppState(model, optim)},
+                 checkpoint_id=os.path.join(CKPT_DIR, latest))
+        step0 = int(latest.split("_")[-1]) + 1
+
+    ckpt_pg = dist.new_group(backend="gloo")  # separate group for background checkpoint I/O
+    pending = None
+    steps = int(os.environ.get("STEPS", "20"))
+    for step in range(step0, steps):
+        tokens = torch.randint(0, 32000, (4, 512), device=device_type)  # stand-in for a real loader
+        logits = model(tokens[:, :-1])
+        loss = nn.functional.cross_entropy(
+            logits.flatten(0, 1).float(), tokens[:, 1:].flatten())
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        optim.step()
+        optim.zero_grad(set_to_none=True)
+
+        if step % 10 == 0 or step == steps - 1:
+            if pending is not None:
+                pending.result()        # keep at most one async save in flight
+            pending = dcp.async_save({"app": AppState(model, optim)},
+                                     checkpoint_id=os.path.join(CKPT_DIR, f"step_{step}"),
+                                     process_group=ckpt_pg)
+            if dist.get_rank() == 0:
+                print(f"step {step} loss {loss.item():.4f}", flush=True)
+
+    if pending is not None:
+        pending.result()
+    dist.destroy_process_group()
+
+
+if __name__ == "__main__":
+    main()
+</code></pre>
+
+          <p>
+            The skeleton leaves out several things a production job needs. It
+            picks the latest directory by name without checking that the write
+            completed. A real job should write a marker file after
+            <code>pending.result()</code> returns and resume only from marked
+            checkpoints. It also has no learning-rate schedule, real data loader
+            or loader-state checkpointing. For those, start from TorchTitan
+            rather than growing this file.
+          </p>
+
+          <h3 id="slurm-launch-script">Slurm Launch Script</h3>
+
+          <p>
+            Use one Slurm task per node. That task runs <code>torchrun</code>,
+            which spawns one worker per GPU and sets <code>RANK</code>,
+            <code>LOCAL_RANK</code> and <code>WORLD_SIZE</code>. Rendezvous uses
+            the c10d backend on the first node of the allocation.<a
+              href="#src-17"
+              >[17]</a
+            >
+            Values marked as examples are site-specific.
+          </p>
+
+          <pre><code class="language-bash">#!/bin/bash
+#SBATCH --job-name=fsdp2-train
+#SBATCH --nodes=4                    # example: 4 nodes
+#SBATCH --ntasks-per-node=1          # one torchrun launcher per node
+#SBATCH --gpus-per-node=8            # example: 8-GPU nodes
+#SBATCH --cpus-per-task=64           # example: size to your nodes
+#SBATCH --exclusive
+#SBATCH --time=24:00:00
+#SBATCH --output=%x-%j.out
+
+set -euo pipefail
+
+# Environment (example: adjust to your site's modules or container)
+source /path/to/venv/bin/activate
+
+export OMP_NUM_THREADS=8
+export CKPT_DIR=/scratch/$USER/ckpt/${SLURM_JOB_NAME}   # stable across requeues
+export NCCL_DEBUG=WARN
+# Site-specific NCCL settings (fabric interfaces, HCAs) belong here;
+# see the Interconnects chapter and your center's documentation.
+
+HEAD_NODE=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
+GPUS_PER_NODE=8
+
+srun --kill-on-bad-exit=1 torchrun \
+    --nnodes="$SLURM_NNODES" \
+    --nproc-per-node="$GPUS_PER_NODE" \
+    --rdzv-id="$SLURM_JOB_ID" \
+    --rdzv-backend=c10d \
+    --rdzv-endpoint="$HEAD_NODE:29500" \
+    --max-restarts=3 \
+    train_fsdp2.py
+</code></pre>
+
+          <p>
+            Notes on the script. <code>--kill-on-bad-exit=1</code> makes Slurm
+            tear down the whole step when any task fails, instead of leaving the
+            other nodes blocked in a collective until the NCCL watchdog fires.<a
+              href="#src-50"
+              >[50]</a
+            >
+            <code>--max-restarts</code> lets <code>torchrun</code> restart its
+            workers after a crash, and the script resumes from the latest DCP
+            checkpoint.<a href="#src-17">[17]</a>
+            <code>NCCL_DEBUG=WARN</code> is a reasonable production setting.
+            Leave the settings listed under "Debugging" in the NCCL docs out of
+            production scripts.<a href="#src-44">[44]</a> For jobs longer than
+            your wall-clock limit, <code>sbatch --signal</code> can warn the job
+            a set number of seconds before its end time, so it can checkpoint
+            before it is killed.<a href="#src-41">[41]</a> Keep
+            <code>CKPT_DIR</code> keyed to something stable, such as the job
+            name, so a follow-on job finds it. Queue policy for long training
+            runs is covered in <a href="scheduling.html">Scheduling</a>, and
+            building the containers in
+            <a href="systems-software.html">Systems Software</a>.
+          </p>
+
+          <h2 id="key-takeaways">Key Takeaways</h2>
+          <ul>
+            <li>
+              Do the memory math first. Mixed-precision Adam costs 16 bytes per
+              parameter before activations, so a 7B full fine-tune needs
+              sharding across several GPUs and a 70B model needs more than one
+              8-GPU node of 80 GB parts.
+            </li>
+            <li>
+              Use the 6ND rule for every allocation request and MFU (6N x
+              tokens/s over peak) to judge efficiency. Published frontier runs
+              sit around 38-43% MFU.
+            </li>
+            <li>
+              Start simple. Use DDP if the model fits, then FSDP2/ZeRO, then add
+              TP inside the NVLink domain, PP across nodes, CP for long
+              sequences and EP for MoE.
+            </li>
+            <li>
+              Match communication frequency to link speed. TP and EP stay on
+              NVLink, PP crosses nodes, and DP/FSDP is outermost.
+            </li>
+            <li>
+              BF16 is the baseline. FP8 through Transformer Engine or TorchTitan
+              is production-proven but should be validated against a BF16 loss
+              curve.
+            </li>
+            <li>
+              Failures are routine at scale. Llama 3 saw 419 unexpected
+              interruptions in 54 days, most of them hardware. Use sharded async
+              checkpoints, automated restarts and node health checks.
+            </li>
+            <li>
+              Most research users need fine-tuning, not pretraining. LoRA and
+              QLoRA cut memory by large factors, so steer users toward them
+              before granting large full-parameter allocations.
+            </li>
+          </ul>
+
+          <h2 id="sources">Sources</h2>
+          <ol class="sources">
+            <li id="src-1">
+              <a
+                href="https://arxiv.org/abs/1910.02054"
+                target="_blank"
+                rel="noopener"
+                >Rajbhandari et al., ZeRO: Memory Optimizations Toward Training
+                Trillion Parameter Models (arXiv / SC20, 2019-2020)</a
+              >
+            </li>
+            <li id="src-2">
+              <a
+                href="https://arxiv.org/abs/1909.08053"
+                target="_blank"
+                rel="noopener"
+                >Shoeybi et al., Megatron-LM: Training Multi-Billion Parameter
+                Language Models Using Model Parallelism (arXiv, 2019)</a
+              >
+            </li>
+            <li id="src-3">
+              <a
+                href="https://arxiv.org/abs/2104.04473"
+                target="_blank"
+                rel="noopener"
+                >Narayanan et al., Efficient Large-Scale Language Model Training
+                on GPU Clusters Using Megatron-LM (arXiv / SC21, 2021)</a
+              >
+            </li>
+            <li id="src-4">
+              <a
+                href="https://arxiv.org/abs/2205.05198"
+                target="_blank"
+                rel="noopener"
+                >Korthikanti et al., Reducing Activation Recomputation in Large
+                Transformer Models (arXiv, 2022)</a
+              >
+            </li>
+            <li id="src-5">
+              <a
+                href="https://arxiv.org/abs/2001.08361"
+                target="_blank"
+                rel="noopener"
+                >Kaplan et al., Scaling Laws for Neural Language Models (arXiv,
+                2020)</a
+              >
+            </li>
+            <li id="src-6">
+              <a
+                href="https://arxiv.org/abs/2203.15556"
+                target="_blank"
+                rel="noopener"
+                >Hoffmann et al., Training Compute-Optimal Large Language Models
+                (arXiv, 2022)</a
+              >
+            </li>
+            <li id="src-7">
+              <a
+                href="https://arxiv.org/abs/2407.21783"
+                target="_blank"
+                rel="noopener"
+                >Llama Team, Meta, The Llama 3 Herd of Models (arXiv, 2024)</a
+              >
+            </li>
+            <li id="src-8">
+              <a
+                href="https://arxiv.org/abs/2410.06511"
+                target="_blank"
+                rel="noopener"
+                >Liang, Liu et al., TorchTitan: One-stop PyTorch native solution
+                for production ready LLM pre-training (arXiv / ICLR 2025)</a
+              >
+            </li>
+            <li id="src-9">
+              <a
+                href="https://arxiv.org/abs/2412.19437"
+                target="_blank"
+                rel="noopener"
+                >DeepSeek-AI, DeepSeek-V3 Technical Report (arXiv, 2024-2025)</a
+              >
+            </li>
+            <li id="src-10">
+              <a
+                href="https://arxiv.org/abs/2401.10241"
+                target="_blank"
+                rel="noopener"
+                >Qi et al., Zero Bubble Pipeline Parallelism (arXiv, 2023)</a
+              >
+            </li>
+            <li id="src-11">
+              <a
+                href="https://arxiv.org/abs/2106.09685"
+                target="_blank"
+                rel="noopener"
+                >Hu et al., LoRA: Low-Rank Adaptation of Large Language Models
+                (arXiv, 2021)</a
+              >
+            </li>
+            <li id="src-12">
+              <a
+                href="https://arxiv.org/abs/2305.14314"
+                target="_blank"
+                rel="noopener"
+                >Dettmers et al., QLoRA: Efficient Finetuning of Quantized LLMs
+                (arXiv, 2023)</a
+              >
+            </li>
+            <li id="src-13">
+              <a
+                href="https://docs.pytorch.org/docs/2.14/distributed.fsdp.fully_shard.html"
+                target="_blank"
+                rel="noopener"
+                >torch.distributed.fsdp.fully_shard (PyTorch 2.14 documentation,
+                2026)</a
+              >
+            </li>
+            <li id="src-14">
+              <a
+                href="https://docs.pytorch.org/tutorials/intermediate/FSDP_tutorial.html"
+                target="_blank"
+                rel="noopener"
+                >Getting Started with Fully Sharded Data Parallel (FSDP2)
+                (PyTorch Tutorials, 2025)</a
+              >
+            </li>
+            <li id="src-15">
+              <a
+                href="https://docs.pytorch.org/docs/2.14/distributed.checkpoint.html"
+                target="_blank"
+                rel="noopener"
+                >Distributed Checkpoint - torch.distributed.checkpoint (PyTorch
+                2.14 documentation, 2026)</a
+              >
+            </li>
+            <li id="src-16">
+              <a
+                href="https://docs.pytorch.org/tutorials/recipes/distributed_async_checkpoint_recipe.html"
+                target="_blank"
+                rel="noopener"
+                >Asynchronous Saving with Distributed Checkpoint (DCP) (PyTorch
+                Recipes, 2025)</a
+              >
+            </li>
+            <li id="src-17">
+              <a
+                href="https://docs.pytorch.org/docs/2.14/elastic/run.html"
+                target="_blank"
+                rel="noopener"
+                >torchrun (Elastic Launch) (PyTorch 2.14 documentation, 2026)</a
+              >
+            </li>
+            <li id="src-18">
+              <a
+                href="https://docs.pytorch.org/docs/2.14/notes/ddp.html"
+                target="_blank"
+                rel="noopener"
+                >Distributed Data Parallel design notes (PyTorch 2.14
+                documentation, 2026)</a
+              >
+            </li>
+            <li id="src-19">
+              <a
+                href="https://docs.nvidia.com/megatron-core/developer-guide/latest/user-guide/parallelism-guide.html"
+                target="_blank"
+                rel="noopener"
+                >Megatron Core Parallelism Strategies Guide (NVIDIA, 2026)</a
+              >
+            </li>
+            <li id="src-20">
+              <a
+                href="https://github.com/NVIDIA/Megatron-LM"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA Megatron-LM and Megatron Core repository README (NVIDIA
+                / GitHub, 2026)</a
+              >
+            </li>
+            <li id="src-21">
+              <a
+                href="https://www.deepspeed.ai/tutorials/zero/"
+                target="_blank"
+                rel="noopener"
+                >Zero Redundancy Optimizer tutorial (DeepSpeed, updated 2026)</a
+              >
+            </li>
+            <li id="src-22">
+              <a
+                href="https://www.deepspeed.ai/docs/config-json/"
+                target="_blank"
+                rel="noopener"
+                >DeepSpeed Configuration JSON (DeepSpeed, 2026)</a
+              >
+            </li>
+            <li id="src-23">
+              <a
+                href="https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/index.html"
+                target="_blank"
+                rel="noopener"
+                >Transformer Engine documentation (NVIDIA, 2026)</a
+              >
+            </li>
+            <li id="src-24">
+              <a
+                href="https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/examples/fp8_primer.html"
+                target="_blank"
+                rel="noopener"
+                >Using FP8 and FP4 with Transformer Engine, TE 2.18.0 (NVIDIA,
+                2026)</a
+              >
+            </li>
+            <li id="src-25">
+              <a
+                href="https://docs.jax.dev/en/latest/multi_process.html"
+                target="_blank"
+                rel="noopener"
+                >Introduction to multi-controller JAX (JAX documentation,
+                2026)</a
+              >
+            </li>
+            <li id="src-26">
+              <a
+                href="https://docs.jax.dev/en/latest/notebooks/shard_map.html"
+                target="_blank"
+                rel="noopener"
+                >Manual parallelism with shard_map (JAX documentation, 2026)</a
+              >
+            </li>
+            <li id="src-27">
+              <a
+                href="https://github.com/pytorch/torchtitan"
+                target="_blank"
+                rel="noopener"
+                >pytorch/torchtitan repository README (PyTorch / GitHub,
+                2026)</a
+              >
+            </li>
+            <li id="src-28">
+              <a
+                href="https://huggingface.co/docs/accelerate/index"
+                target="_blank"
+                rel="noopener"
+                >Accelerate documentation (Hugging Face, 2026)</a
+              >
+            </li>
+            <li id="src-29">
+              <a
+                href="https://huggingface.co/docs/accelerate/main/en/concept_guides/fsdp1_vs_fsdp2"
+                target="_blank"
+                rel="noopener"
+                >FSDP1 vs FSDP2 (Hugging Face Accelerate, 2026)</a
+              >
+            </li>
+            <li id="src-30">
+              <a
+                href="https://huggingface.co/docs/peft/index"
+                target="_blank"
+                rel="noopener"
+                >PEFT documentation (Hugging Face, 2026)</a
+              >
+            </li>
+            <li id="src-31">
+              <a
+                href="https://github.com/meta-pytorch/torchft"
+                target="_blank"
+                rel="noopener"
+                >torchft: Easy Per Step Fault Tolerance for PyTorch (Meta
+                PyTorch / GitHub, 2026)</a
+              >
+            </li>
+            <li id="src-32">
+              <a
+                href="https://github.com/NVIDIA/nvidia-resiliency-ext"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA Resiliency Extension (NVIDIA / GitHub, 2026)</a
+              >
+            </li>
+            <li id="src-33">
+              <a
+                href="https://docs.nvidia.com/nemo/megatron-bridge/latest/index.html"
+                target="_blank"
+                rel="noopener"
+                >NeMo Megatron Bridge documentation (NVIDIA, 2026)</a
+              >
+            </li>
+            <li id="src-34">
+              <a
+                href="https://docs.nvidia.com/nemo-framework/user-guide/latest/overview.html"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA NeMo Framework Overview (NVIDIA, 2026)</a
+              >
+            </li>
+            <li id="src-35">
+              <a
+                href="https://github.com/pytorch/pytorch/releases"
+                target="_blank"
+                rel="noopener"
+                >PyTorch 2.14.0 Release Notes (PyTorch / GitHub, 2026)</a
+              >
+            </li>
+            <li id="src-36">
+              <a
+                href="https://arxiv.org/abs/2310.01889"
+                target="_blank"
+                rel="noopener"
+                >Liu, Zaharia, Abbeel, Ring Attention with Blockwise
+                Transformers for Near-Infinite Context (arXiv, 2023)</a
+              >
+            </li>
+            <li id="src-37">
+              <a
+                href="https://arxiv.org/abs/2205.14135"
+                target="_blank"
+                rel="noopener"
+                >Dao et al., FlashAttention: Fast and Memory-Efficient Exact
+                Attention with IO-Awareness (arXiv, 2022)</a
+              >
+            </li>
+            <li id="src-38">
+              <a
+                href="https://arxiv.org/abs/1811.06965"
+                target="_blank"
+                rel="noopener"
+                >Huang et al., GPipe: Efficient Training of Giant Neural
+                Networks using Pipeline Parallelism (arXiv, 2018)</a
+              >
+            </li>
+            <li id="src-39">
+              <a
+                href="https://docs.pytorch.org/docs/2.14/distributed.pipelining.html"
+                target="_blank"
+                rel="noopener"
+                >Pipeline Parallelism - torch.distributed.pipelining (PyTorch
+                2.14 documentation, 2026)</a
+              >
+            </li>
+            <li id="src-40">
+              <a
+                href="https://docs.pytorch.org/docs/2.14/distributed.tensor.parallel.html"
+                target="_blank"
+                rel="noopener"
+                >Tensor Parallelism - torch.distributed.tensor.parallel (PyTorch
+                2.14 documentation, 2026)</a
+              >
+            </li>
+            <li id="src-41">
+              <a
+                href="https://slurm.schedmd.com/sbatch.html"
+                target="_blank"
+                rel="noopener"
+                >sbatch manual page (SchedMD, 2026)</a
+              >
+            </li>
+            <li id="src-42">
+              <a
+                href="https://www.nvidia.com/en-us/data-center/gb200-nvl72/"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA GB200 NVL72 product page (NVIDIA, 2026)</a
+              >
+            </li>
+            <li id="src-43">
+              <a
+                href="https://docs.nvidia.com/megatron-core/developer-guide/latest/api-guide/moe.html"
+                target="_blank"
+                rel="noopener"
+                >Megatron Core Mixture of Experts package (NVIDIA, 2026)</a
+              >
+            </li>
+            <li id="src-44">
+              <a
+                href="https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/env.html"
+                target="_blank"
+                rel="noopener"
+                >NCCL Environment Variables (NVIDIA, 2026)</a
+              >
+            </li>
+            <li id="src-45">
+              <a
+                href="https://docs.pytorch.org/docs/2.14/checkpoint.html"
+                target="_blank"
+                rel="noopener"
+                >torch.utils.checkpoint (PyTorch 2.14 documentation, 2026)</a
+              >
+            </li>
+            <li id="src-46">
+              <a
+                href="https://docs.pytorch.org/docs/2.14/distributed.html"
+                target="_blank"
+                rel="noopener"
+                >Distributed communication package - torch.distributed, incl.
+                init_device_mesh (PyTorch 2.14 documentation, 2026)</a
+              >
+            </li>
+            <li id="src-47">
+              <a
+                href="https://docs.pytorch.org/docs/2.14/generated/torch.compile.html"
+                target="_blank"
+                rel="noopener"
+                >torch.compile (PyTorch 2.14 documentation, 2026)</a
+              >
+            </li>
+            <li id="src-48">
+              <a
+                href="https://docs.jax.dev/en/latest/distributed_data_loading.html"
+                target="_blank"
+                rel="noopener"
+                >Distributed data loading (JAX documentation, 2026)</a
+              >
+            </li>
+            <li id="src-49">
+              <a
+                href="https://github.com/deepspeedai/DeepSpeed"
+                target="_blank"
+                rel="noopener"
+                >deepspeedai/DeepSpeed repository README (DeepSpeed / GitHub,
+                2026)</a
+              >
+            </li>
+            <li id="src-50">
+              <a
+                href="https://slurm.schedmd.com/srun.html"
+                target="_blank"
+                rel="noopener"
+                >srun manual page (SchedMD, 2026)</a
+              >
+            </li>
+          </ol>
+          <nav class="doc-pager" aria-label="Chapter navigation">
+            <a class="pager-prev" href="operations.html"
+              ><span>Previous</span>Research Computing Operations</a
+            ><a class="pager-next" href="inference.html"
+              ><span>Next</span>Inference at Scale</a
+            >
+          </nav>
+        </article>
+      </div>
+    </main>
+
+    <footer class="section-dark">
+      <div class="container text-center">
+        <p class="footer-note">
+          2026 edition |
+          <a href="index.html" class="subtle-link">Field Manual</a> |
+          <a href="../index.html" class="subtle-link"
+            >charles-forsyth.github.io</a
+          >
+        </p>
+      </div>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+      document.querySelectorAll('pre code').forEach(function (el) {
+        if (el.className === 'c++') el.className = 'language-cpp';
+        else if (el.className && el.className.indexOf('language-') !== 0)
+          el.className = 'language-' + el.className;
+        hljs.highlightElement(el);
+      });
+    </script>
+  </body>
+</html>
