@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Slurm Submission Scripts | HPC Field Manual | Charles Forsyth</title>
+    <meta
+      name="description"
+      content="How to ask the scheduler for resources, with working examples"
+    />
+    <link
+      rel="canonical"
+      href="https://charles-forsyth.github.io/handbook/slurm.html"
+    />
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="handbook.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
+    />
+  </head>
+  <body>
+    <header class="hero doc-hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="doc-kicker">
+            <i class="fas fa-tasks"></i> HPC Field Manual
+          </p>
+          <h1>Slurm Submission Scripts</h1>
+          <h2>How to ask the scheduler for resources, with working examples</h2>
+          <div class="cta-buttons">
+            <a href="index.html" class="btn btn-secondary"
+              ><i class="fas fa-book-open"></i> Field Manual</a
+            >
+            <a href="../index.html" class="btn btn-secondary"
+              ><i class="fas fa-arrow-left"></i> Main Site</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+    <nav class="doc-nav" aria-label="Field manual sections">
+      <div class="container">
+        <a href="linux.html">Linux Basics</a
+        ><a href="hardware.html">HPC Hardware</a
+        ><a href="provisioning.html">Provisioning</a
+        ><a href="software.html">HPC Software</a><a href="code.html">Code</a
+        ><a href="cloud.html">HPC in the Cloud</a
+        ><a href="slurm.html" class="active" aria-current="page"
+          >Slurm Submission Scripts</a
+        ><a href="presentations.html">Talks and Presentations</a
+        ><a href="cv.html">Career</a>
+      </div>
+    </nav>
+    <main class="section-light">
+      <div class="container doc-layout doc-layout-single">
+        <article class="doc-content">
+          <p><em>Slurm</em> is a resource scheduler for HPC Clusters.</p>
+          <p>
+            Slurm submission scripts are how you ask for resources on the
+            cluster and what to do with those resources once you get them.
+          </p>
+          <p>
+            I have a collection of different examples I have used. Its stored on
+            <a
+              href="https://github.com/CharlesForsyth/slurm_scripts"
+              target="_blank"
+              rel="noopener"
+              >GitHub - Charles Forsyth</a
+            >.
+          </p>
+          <p>Select examples shown below.</p>
+          <h2 id="spark-example">Spark Example</h2>
+          <p>
+            This example very specific to the HPCC Cluster at UCR. It does the
+            following:
+          </p>
+          <ul>
+            <li>
+              Creates a
+              <a href="https://spark.apache.org/" target="_blank" rel="noopener"
+                >spark</a
+              >
+              cluster on nodes allocated from slurm on the HPCC Cluster
+            </li>
+            <li>Spawns the spark master on the first node</li>
+            <li>Spawns spark workers on the rest of the nodes</li>
+            <li>Counts words in a text file of moby dick across all nodes.</li>
+          </ul>
+          <p>
+            <em
+              ><a
+                href="https://spark.apache.org/examples.html"
+                target="_blank"
+                rel="noopener"
+                >Other examples from the spark website</a
+              ></em
+            >
+          </p>
+          <h6 id="spark_jobslurm">
+            <a
+              href="https://raw.githubusercontent.com/CharlesForsyth/slurm_scripts/master/spark_job.sh"
+              target="_blank"
+              rel="noopener"
+              >spark_job.slurm</a
+            >
+          </h6>
+          <pre><code class="bash">#!/bin/bash -l
+
+#SBATCH -p short
+#SBATCH --nodes=3
+#SBATCH --cpus-per-task=8
+#SBATCH --ntasks-per-node=1
+#SBATCH --time=0:20:00
+#SBATCH --job-name=spark-example
+
+nodes=($( scontrol show hostnames $SLURM_NODELIST ))
+nnodes=${#nodes[@]}
+last=$(( $nnodes - 1 ))
+
+cd $SLURM_WORKING_DIR
+
+export SPARK_HOME=/rhome/forsythc/bigdata/bin/spark
+ssh ${nodes[0]}.ib.int.bioinfo.ucr.edu &quot;module load java/8u45; cd ${SPARK_HOME}; ./sbin/start-master.sh&quot;
+sparkmaster=&quot;spark://${nodes[0]}:7077&quot;
+
+SCRATCH=/rhome/forsythc/bigdata/scratch/
+mkdir -p ${SCRATCH}/work
+rm -f ${SCRATCH}/work/nohup*.out
+
+for i in $( seq 0 $last ); do
+        ssh ${nodes[$i]}.ib.int.bioinfo.ucr.edu &quot;cd ${SPARK_HOME}; module load java/8u45; nohup ./bin/spark-class org.apache.spark.deploy.worker.Worker ${sparkmaster} &amp;&gt; ${SCRATCH}/work/nohup-${nodes[$i]}.out&quot; &amp;
+done
+
+rm -rf ${SCRATCH}/wordcounts
+
+cat &gt; sparkscript.py &lt;&lt;EOF
+from pyspark import SparkContext
+
+sc = SparkContext(appName=&quot;wordCount&quot;)
+file = sc.textFile(&quot;${SCRATCH}/moby-dick.txt&quot;)
+counts = file.flatMap(lambda line: line.split(&quot; &quot;)).map(lambda word: (word, 1)).reduceByKey(lambda a, b: a+b)
+counts.saveAsTextFile(&quot;${SCRATCH}/wordcounts&quot;)
+EOF
+
+module load java/8u45
+${SPARK_HOME}/bin/spark-submit --master ${sparkmaster} sparkscript.py
+
+echo &quot;Tried to use host name ${nnodes[0]} maybe we should use ${nodes[0]}&quot;
+ssh ${nodes[0]}.ib.int.bioinfo.ucr.edu &quot;module load java/8u45; cd ${SPARK_HOME}; ./sbin/stop-master.sh&quot;
+for i in $( seq 0 $last ); do
+    ssh ${nodes[$i]}.ib.int.bioinfo.ucr.edu &quot;killall java&quot;
+    done
+wait
+</code></pre>
+        </article>
+      </div>
+    </main>
+
+    <footer class="section-dark">
+      <div class="container text-center">
+        <p class="footer-note">
+          Originally published 2018-2019 on the legacy HPC documentation site,
+          preserved here in full. |
+          <a href="index.html" class="subtle-link">Field Manual</a> |
+          <a href="../index.html" class="subtle-link"
+            >charles-forsyth.github.io</a
+          >
+        </p>
+      </div>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+      document.querySelectorAll('pre code').forEach(function (el) {
+        {
+          if (el.className === 'c++') el.className = 'language-cpp';
+          else if (el.className && el.className.indexOf('language-') !== 0)
+            el.className = 'language-' + el.className;
+          hljs.highlightElement(el);
+        }
+      });
+    </script>
+  </body>
+</html>
