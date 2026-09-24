@@ -1,0 +1,1874 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Scientific Computing in the AI Era | Field Manual</title>
+    <meta
+      name="description"
+      content="Where classic simulation stands in 2026, how to program and port codes to GPUs, GPU-aware MPI, the major GPU applications, and how AI surrogates, weather models and protein structure predictors fit alongside them."
+    />
+    <link
+      rel="canonical"
+      href="https://charles-forsyth.github.io/handbook/scientific-computing.html"
+    />
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="handbook.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
+    />
+  </head>
+  <body>
+    <header class="hero doc-hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="doc-kicker">
+            <i class="fas fa-atom"></i> AI + HPC Field Manual
+          </p>
+          <h1>Scientific Computing in the AI Era</h1>
+          <h2>
+            MPI codes, GPU porting and AI for science on the same machines
+          </h2>
+          <div class="cta-buttons">
+            <a href="index.html" class="btn btn-secondary"
+              ><i class="fas fa-book-open"></i> Field Manual</a
+            >
+            <a href="../index.html" class="btn btn-secondary"
+              ><i class="fas fa-arrow-left"></i> Main Site</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+    <nav class="doc-nav" aria-label="Field manual chapters">
+      <div class="container">
+        <a href="convergence.html">Convergence</a
+        ><a href="accelerators.html">Accelerators</a
+        ><a href="memory-storage.html">Memory &amp; Storage</a
+        ><a href="interconnects.html">Interconnects</a
+        ><a href="facilities.html">Facilities</a
+        ><a href="systems-software.html">Systems Software</a
+        ><a href="scheduling.html">Scheduling</a
+        ><a href="observability.html">Observability</a
+        ><a href="operations.html">Operations</a
+        ><a href="training.html">Training</a
+        ><a href="inference.html">Inference</a
+        ><a href="scientific-computing.html" class="active" aria-current="page"
+          >Scientific Computing</a
+        ><a href="cloud.html">Cloud</a><a href="linux.html">Linux</a
+        ><a href="glossary.html">Glossary</a>
+      </div>
+    </nav>
+    <main class="section-light">
+      <div class="container doc-layout">
+        <aside class="doc-toc">
+          <h4><i class="fas fa-list"></i> On this page</h4>
+          <ul>
+            <li>
+              <a href="#where-simulation-stands"
+                >Where Classic Simulation Stands</a
+              >
+            </li>
+            <li>
+              <a href="#gpu-programming-models">GPU Programming Models</a>
+            </li>
+            <li><a href="#mpi-today">MPI Today</a></li>
+            <li>
+              <a href="#porting-a-code-to-gpus">Porting a Code to GPUs</a>
+            </li>
+            <li>
+              <a href="#gpu-accelerated-applications"
+                >GPU-Accelerated Applications</a
+              >
+            </li>
+            <li><a href="#ai-for-science">AI for Science</a></li>
+            <li>
+              <a href="#mixed-precision-and-fp64-emulation"
+                >Mixed Precision and FP64 Emulation</a
+              >
+            </li>
+            <li><a href="#reproducibility">Reproducibility</a></li>
+            <li>
+              <a href="#interactive-computing-at-scale"
+                >Interactive Computing at Scale: Jupyter, Dask and Ray</a
+              >
+            </li>
+            <li><a href="#key-takeaways">Key Takeaways</a></li>
+          </ul>
+        </aside>
+        <article class="doc-content">
+          <p>
+            The 2019 edition of this manual taught shebang lines, OpenMP pragmas
+            on CPU loops, MPI in C and Fortran, Conda and Jupyter. All of that
+            still works, and most of it still matters. What changed is where the
+            flops live. The large systems are built around GPUs and other
+            accelerators, the codes that matter most have been rewritten or
+            re-plumbed to run on them, and a new class of scientific tools
+            (surrogate models, neural weather forecasters, protein structure
+            predictors) now sits next to the simulation codes and competes with
+            them for the same nodes. This chapter covers the working scientist's
+            and facilitator's view: what classic simulation looks like now,
+            which GPU programming model to pick, how MPI has evolved, how to
+            port a code without wasting a year, which applications are ready,
+            and how AI for science fits in. Hardware details live in
+            <a href="accelerators.html">Accelerators</a> and
+            <a href="interconnects.html">Interconnects</a>; the software stack
+            underneath (drivers, CUDA/ROCm, containers) is in
+            <a href="systems-software.html">Systems Software</a>.
+          </p>
+
+          <h2 id="where-simulation-stands">Where Classic Simulation Stands</h2>
+          <p>
+            Computational fluid dynamics, climate and weather, molecular
+            dynamics, materials and electronic structure, and astrophysics still
+            consume a large share of research computing cycles. The equations
+            have not changed. What changed is the hardware those equations are
+            solved on, and the pressure to use AI models as a complement to (or
+            replacement for) some runs.
+          </p>
+          <p>
+            The June 2026 TOP500 list is a useful snapshot. The new No. 1,
+            LineShine in Shenzhen, is a CPU-only design at 2.198 Exaflop/s HPL,
+            a reminder that CPU machines are not dead. The next four, El Capitan
+            (AMD Instinct MI300A accelerators, 1.809 Exaflop/s), Frontier (1.353
+            Exaflop/s), Aurora (Intel Data Center GPU Max accelerators, 1.012
+            Exaflop/s) and JUPITER Booster, are accelerator machines.<a
+              href="#src-1"
+              >[1]</a
+            >
+            The difference shows in mixed precision: LineShine's HPL-MxP result
+            is 3.6x its HPL score, while the accelerated systems run 6.3x to
+            11.5x.<a href="#src-1">[1]</a><a href="#src-2">[2]</a> For most
+            research centers, though, the practical reality is that new capacity
+            arrives as GPU nodes, and codes that cannot use them are left on
+            shrinking CPU partitions.
+          </p>
+
+          <h3 id="what-maps-well-to-gpus">What maps well to GPUs</h3>
+          <ul>
+            <li>
+              <strong
+                >Bandwidth-bound stencils and sparse linear algebra</strong
+              >
+              (CFD, climate dynamical cores, lattice methods). These are limited
+              by memory bandwidth, and HBM gives GPUs several times the
+              bandwidth of a CPU socket. See
+              <a href="memory-storage.html">Memory and Storage</a>.
+            </li>
+            <li>
+              <strong>Dense linear algebra and FFTs</strong> (electronic
+              structure, quantum chemistry, PME electrostatics in MD). These map
+              onto vendor libraries (cuBLAS, cuFFT, rocBLAS, rocFFT, oneMKL)
+              that are already tuned.
+            </li>
+            <li>
+              <strong>Particle methods with lots of independent work</strong>
+              (MD non-bonded forces, N-body, Monte Carlo transport).
+            </li>
+          </ul>
+          <h3 id="what-still-struggles">What still struggles</h3>
+          <ul>
+            <li>
+              Codes with deep, branchy, pointer-chasing logic per element (some
+              chemistry and physics parameterizations, adaptive mesh
+              bookkeeping).
+            </li>
+            <li>
+              Small problems that cannot fill a modern GPU. A 20,000-atom system
+              or a coarse 2D mesh may run faster on a well-used CPU node than on
+              a mostly idle GPU.
+            </li>
+            <li>
+              Workflows dominated by I/O or by serial pre- and post-processing,
+              where the GPU sits idle most of the job.
+            </li>
+            <li>
+              Codes that need FP64 everywhere on hardware whose FP64 rate has
+              not kept up with its low-precision tensor throughput. See
+              <a href="#mixed-precision-and-fp64-emulation">Mixed Precision</a>
+              below and <a href="convergence.html">The Convergence</a>.
+            </li>
+          </ul>
+
+          <h2 id="gpu-programming-models">GPU Programming Models</h2>
+          <p>
+            There is no single right answer, and the choice outlives any one
+            machine. The honest decision criteria are: which vendors you must
+            support in five years, what language the code is already in, how
+            much of the team's time goes to performance engineering, and whether
+            the code has a large community that has already chosen for you.
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th>Languages</th>
+                <th>Vendors</th>
+                <th>Style</th>
+                <th>Typical fit</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>CUDA</td>
+                <td>C++, Fortran (CUDA Fortran), Python</td>
+                <td>NVIDIA</td>
+                <td>Explicit kernels</td>
+                <td>Maximum control on NVIDIA; largest library ecosystem</td>
+              </tr>
+              <tr>
+                <td>HIP</td>
+                <td>C++</td>
+                <td>AMD (can also target NVIDIA)</td>
+                <td>Explicit kernels, CUDA-like API</td>
+                <td>AMD systems; porting existing CUDA</td>
+              </tr>
+              <tr>
+                <td>SYCL / oneAPI</td>
+                <td>C++</td>
+                <td>Intel, plus NVIDIA and AMD via backends</td>
+                <td>Explicit kernels in standard C++</td>
+                <td>Intel GPUs; vendor-neutral C++</td>
+              </tr>
+              <tr>
+                <td>OpenMP offload</td>
+                <td>C, C++, Fortran</td>
+                <td>All major vendors via their compilers</td>
+                <td>Directives</td>
+                <td>Incremental port of existing loops</td>
+              </tr>
+              <tr>
+                <td>OpenACC</td>
+                <td>C, C++, Fortran</td>
+                <td>Mainly NVIDIA compilers; GCC support</td>
+                <td>Directives</td>
+                <td>Fortran codes already using it</td>
+              </tr>
+              <tr>
+                <td>Kokkos, RAJA</td>
+                <td>C++</td>
+                <td>All, via backends</td>
+                <td>C++ abstraction layers</td>
+                <td>Large C++ codes that must run everywhere</td>
+              </tr>
+              <tr>
+                <td>Standard parallelism</td>
+                <td>C++ (stdpar), Fortran (do concurrent)</td>
+                <td>Compiler dependent</td>
+                <td>ISO language features</td>
+                <td>New code; simple data-parallel loops</td>
+              </tr>
+              <tr>
+                <td>Julia</td>
+                <td>Julia</td>
+                <td>NVIDIA, AMD, Intel, Apple</td>
+                <td>High-level arrays and kernels</td>
+                <td>New codes wanting productivity plus speed</td>
+              </tr>
+              <tr>
+                <td>Python (CuPy, Numba, JAX)</td>
+                <td>Python</td>
+                <td>NVIDIA; AMD for CuPy and JAX</td>
+                <td>Array libraries and JIT</td>
+                <td>Analysis, prototypes, ML-adjacent science</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3 id="native-models-cuda-hip-sycl">
+            Native models: CUDA, HIP and SYCL
+          </h3>
+          <p>
+            <strong>CUDA</strong> is still the reference point. Most GPU
+            libraries, profilers, tutorials and Stack Overflow answers assume
+            it. If a code only ever needs to run on NVIDIA hardware, CUDA plus
+            the CUDA-X libraries is the lowest-risk path to top performance.
+          </p>
+          <p>
+            <strong>HIP</strong> is AMD's C++ runtime API and kernel language,
+            deliberately close to CUDA. AMD's HIPIFY tools (hipify-clang, a
+            Clang-based translator, and hipify-perl, a text-based one) convert
+            CUDA sources to HIP as a starting point.<a href="#src-3">[3]</a>
+            Many projects keep one source tree and a thin macro layer that maps
+            to either CUDA or HIP.
+          </p>
+          <p>
+            <strong>SYCL</strong> is a Khronos standard for heterogeneous
+            programming in ISO C++. Intel's oneAPI DPC++/C++ compiler fully
+            supports SYCL 2020, and AdaptiveCpp is an independent implementation
+            that targets multiple vendors.<a href="#src-4">[4]</a> GROMACS, for
+            example, recommends SYCL builds for both AMD (with AdaptiveCpp) and
+            Intel GPUs.<a href="#src-5">[5]</a>
+          </p>
+
+          <h3 id="directive-models">
+            Directive models: OpenMP offload and OpenACC
+          </h3>
+          <p>
+            Directives let you keep the loop you already have and annotate it.
+            That is attractive for large Fortran codes with decades of validated
+            physics. <strong>OpenMP 6.0</strong> was released at SC24 in
+            November 2024; its device-side additions include a
+            <code>workdistribute</code> directive for Fortran array syntax,
+            structured asynchronous data-mapping regions, better control of
+            allocatable variables and per-team device memory via
+            <code>groupprivate</code>.<a href="#src-6">[6]</a>
+            <strong>OpenACC 3.4</strong> was announced at ISC 2025; its most
+            visible addition is a <code>capture</code> modifier on data clauses
+            so that arrays can still be placed in discrete device memory on
+            shared or unified memory systems, fixing race conditions seen in
+            real codes.<a href="#src-7">[7]</a>
+          </p>
+          <p>
+            In practice, OpenACC is best supported by the NVIDIA HPC SDK
+            compilers, while OpenMP offload is the vendor-neutral directive path
+            (NVIDIA, AMD, Intel, HPE Cray and LLVM compilers all implement it,
+            with varying completeness). VASP is a good illustration: it ships an
+            OpenACC port for NVIDIA GPUs and an OpenMP offload port for AMD and
+            Intel GPUs.<a href="#src-8">[8]</a>
+          </p>
+
+          <h3 id="portability-layers-kokkos-raja">
+            Portability layers: Kokkos and RAJA
+          </h3>
+          <p>
+            <strong>Kokkos</strong> is a C++ library that lets one kernel
+            implementation run on different hardware through compile-time
+            backends, and it can also adjust data layout per architecture.
+            Kokkos 5.0 (November 2025) moved the minimum standard to C++20, and
+            the project ships on a roughly four-month cadence (5.2 arrived in
+            July 2026).<a href="#src-9">[9]</a><a href="#src-10">[10]</a> LAMMPS
+            and the E3SM atmosphere model are two large users.<a href="#src-11"
+              >[11]</a
+            ><a href="#src-12">[12]</a> <strong>RAJA</strong>, from LLNL, is a
+            comparable set of C++ loop abstractions for architecture and
+            programming-model portability.<a href="#src-13">[13]</a> Choose one
+            of these when a C++ code must run well on NVIDIA, AMD and Intel GPUs
+            and on CPUs, and the team is prepared to adopt its idioms.
+          </p>
+
+          <h3 id="standard-language-parallelism">
+            Standard language parallelism
+          </h3>
+          <p>
+            C++17 parallel algorithms (<code>std::transform</code>,
+            <code>std::for_each</code> with an execution policy) and Fortran
+            <code>do concurrent</code> are part of the languages themselves.
+            With the NVIDIA HPC SDK, the <code>-stdpar</code> option (default
+            <code>-stdpar=gpu</code>) offloads these constructs to NVIDIA GPUs;
+            GPU acceleration of <code>do concurrent</code> arrived in nvfortran
+            with HPC SDK 20.11.<a href="#src-14">[14]</a
+            ><a href="#src-15">[15]</a> The appeal is obvious: no directives, no
+            new language, and the code still compiles and runs on a CPU with any
+            conforming compiler. The limits are real too: you get less control
+            over data placement and kernel shape, and support on non-NVIDIA
+            compilers is less mature.
+          </p>
+
+          <h3 id="julia-and-python">Julia and Python</h3>
+          <p>
+            <strong>Julia</strong> has first-class GPU packages: CUDA.jl for
+            NVIDIA, AMDGPU.jl for ROCm (described by the JuliaGPU project as
+            somewhat less developed), oneAPI.jl for Intel GPUs and Metal.jl for
+            Apple Silicon, the last two with more limited library integration.<a
+              href="#src-16"
+              >[16]</a
+            >
+          </p>
+          <p>
+            In <strong>Python</strong>, the options have sorted themselves out:
+          </p>
+          <ul>
+            <li>
+              <strong>CuPy</strong> is a NumPy/SciPy-compatible array library
+              for NVIDIA CUDA and AMD ROCm; on ROCm it maps CUDA library calls
+              to their HIP equivalents.<a href="#src-17">[17]</a> It is the
+              fastest way to move array-heavy analysis to a GPU.
+            </li>
+            <li>
+              <strong>Numba</strong> compiles Python functions, but its built-in
+              CUDA target is deprecated, with development moved to NVIDIA's
+              separate <code>numba-cuda</code> package.<a href="#src-18"
+                >[18]</a
+              >
+              New GPU kernels written with Numba should target
+              <code>numba-cuda</code>.
+            </li>
+            <li>
+              <strong>JAX</strong> traces Python functions and hands them to the
+              XLA compiler, which fuses operations and specializes for CPU, GPU
+              or TPU.<a href="#src-19">[19]</a> Automatic differentiation plus
+              XLA make it popular for differentiable simulation and for
+              AI-for-science models such as GraphCast and GenCast.
+            </li>
+            <li>
+              <strong>cuPyNumeric</strong> (NumPy on the Legate runtime, scaling
+              from one GPU to many nodes) has reached end of life. The final
+              release is v26.06.01 and no further releases, fixes or support are
+              planned.<a href="#src-20">[20]</a> Do not start new projects on
+              it; existing users should plan a migration to CuPy, JAX or
+              Dask-based alternatives.
+            </li>
+          </ul>
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> The programming model decision is
+              really a staffing decision. A directive port can be maintained by
+              domain scientists who mostly write physics. A CUDA or Kokkos code
+              needs at least one person who is comfortable reading profiler
+              output and rewriting kernels. Pick the model your group can keep
+              alive after the postdoc who did the port leaves.
+            </p>
+          </blockquote>
+
+          <h2 id="mpi-today">MPI Today</h2>
+          <p>
+            MPI remains the way nearly every multi-node simulation code
+            communicates, and it has kept evolving. The MPI Forum approved
+            <strong>MPI 4.1</strong> on November 2, 2023 and
+            <strong>MPI 5.0</strong> on June 5, 2025; work on a follow-on ("MPI
+            Next") with features still undefined is ongoing.<a href="#src-21"
+              >[21]</a
+            ><a href="#src-22">[22]</a> MPI 4.1 was scoped as minor additions
+            and corrections plus readability work.<a href="#src-23">[23]</a> MPI
+            5.0 is the bigger change: it adds a standard
+            <strong>Application Binary Interface (ABI)</strong>, defining the
+            layout of the status object, the type of handles such as
+            <code>MPI_Comm</code>, literal values for many constants, and new
+            functions <code>MPI_ABI_GET_VERSION</code> and
+            <code>MPI_ABI_GET_INFO</code>, plus a Fortran ABI section.<a
+              href="#src-24"
+              >[24]</a
+            >
+          </p>
+          <p>
+            Why the ABI matters to a research computing center: today an
+            application built against Open MPI will not run against MPICH
+            without a rebuild, which multiplies the software stack and
+            complicates containers. A standard ABI means a binary (or a
+            container) built once can, in principle, run against whichever
+            conforming MPI library the site provides. MPICH 5.0.0 is the first
+            stable MPICH release series with full MPI-5 support including the
+            ABI.<a href="#src-25">[25]</a> Expect other implementations to
+            follow, and expect a transition period where you still need
+            implementation-specific builds.
+          </p>
+
+          <h3 id="gpu-aware-mpi">GPU-aware MPI</h3>
+          <p>
+            A GPU-aware (CUDA-aware, ROCm-aware) MPI accepts device pointers
+            directly in send, receive and collective calls. Without it, every
+            halo exchange means copying data from GPU to host, calling MPI, and
+            copying back. With it, the library can use GPUDirect RDMA between
+            the NIC and GPU memory across nodes and peer-to-peer IPC within a
+            node.
+          </p>
+          <ul>
+            <li>
+              <strong>Open MPI 5.0.x</strong> supports CUDA buffers either
+              through UCX (the preferred mechanism, which requires UCX itself
+              built with CUDA) or through its internal CUDA support; it is
+              configured with <code>--with-cuda</code>, detects CUDA components
+              at run time, and exposes compile-time and run-time checks
+              (<code>MPIX_CUDA_AWARE_SUPPORT</code>,
+              <code>MPIX_Query_cuda_support()</code> in
+              <code>mpi-ext.h</code>).<a href="#src-26">[26]</a> ROCm device
+              buffers are supported through UCX, which is the only formally
+              supported transport for ROCm in the 5.0.x series.<a href="#src-27"
+                >[27]</a
+              >
+            </li>
+            <li>
+              <strong>MPICH</strong> enables GPU support automatically when
+              CUDA, Level Zero (ZE) or HIP runtimes are found at configure time
+              (<code>--with-cuda</code>, <code>--with-ze</code>,
+              <code>--with-hip</code>), and it can be disabled at run time with
+              <code>MPIR_CVAR_ENABLE_GPU=0</code> to avoid GPU initialization
+              overhead in CPU-only jobs.<a href="#src-28">[28]</a>
+            </li>
+            <li>
+              <strong>HPE Cray MPICH</strong> supports NVIDIA and AMD GPUs using
+              GPU-NIC RDMA between nodes and GPU peer-to-peer IPC within a node,
+              but you must set <code>MPICH_GPU_SUPPORT_ENABLED=1</code> at run
+              time.<a href="#src-29">[29]</a> Forgetting it is the single most
+              common cause of crashes when a code passes device pointers on a
+              Cray EX system.
+            </li>
+          </ul>
+          <p>
+            A minimal launch on a Slurm GPU cluster looks like the following.
+            Partition names, module names and counts are examples.
+          </p>
+          <pre><code class="language-bash">#!/bin/bash
+#SBATCH --job-name=halo-test
+#SBATCH --partition=gpu            # example partition name
+#SBATCH --nodes=2
+#SBATCH --ntasks-per-node=4        # one MPI rank per GPU
+#SBATCH --gpus-per-node=4
+#SBATCH --cpus-per-task=8
+#SBATCH --time=00:30:00
+
+module load cuda openmpi           # example module names; use your site's GPU-aware MPI
+
+# On HPE Cray systems with cray-mpich, this is required for device buffers:
+# export MPICH_GPU_SUPPORT_ENABLED=1
+
+srun --gpu-bind=closest ./halo_exchange
+</code></pre>
+          <p>
+            Scheduling details (GPU binding, MPS, MIG) are in
+            <a href="scheduling.html">Scheduling and Orchestration</a>. How
+            collectives behave on the fabric, and how NCCL and RCCL relate to
+            MPI, is in <a href="interconnects.html">Interconnects</a>.
+          </p>
+
+          <h2 id="porting-a-code-to-gpus">Porting a Code to GPUs</h2>
+          <p>
+            The failures we see in porting projects are rarely about syntax.
+            They come from porting the wrong thing, or from moving data back and
+            forth so often that the GPU never gets a chance to help. A workable
+            sequence:
+          </p>
+          <ol>
+            <li>
+              <strong>Build a regression test first.</strong> Pick two or three
+              representative inputs and define what "same answer" means (bitwise
+              is usually impossible; agree on tolerances with the scientists).
+            </li>
+            <li>
+              <strong>Profile the CPU code.</strong> Find the handful of
+              routines that take most of the time. If 80 percent of runtime is
+              in three loops, port those; do not touch the input parser.
+            </li>
+            <li>
+              <strong>Make data resident.</strong> Allocate the main arrays on
+              the GPU once, keep them there across time steps, and only copy
+              what the host truly needs (diagnostics, I/O, halos if MPI is not
+              GPU-aware).
+            </li>
+            <li>
+              <strong>Port kernels, then fuse.</strong> Get correctness with
+              simple one-to-one kernels, then merge small kernels that touch the
+              same data.
+            </li>
+            <li>
+              <strong>Move communication onto the device.</strong> Pack halos on
+              the GPU and pass device pointers to a GPU-aware MPI.
+            </li>
+            <li>
+              <strong>Profile again on the GPU.</strong> NVIDIA Nsight Systems
+              (for example <code>nsys profile --stats=true ./app</code>) shows a
+              timeline of kernels, copies and MPI calls; gaps and long
+              host-device copies jump out immediately.<a href="#src-30">[30]</a>
+              AMD's ROCm profilers and Intel's VTune fill the same role on their
+              hardware. More on this in
+              <a href="observability.html">Observability</a>.
+            </li>
+          </ol>
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> The first GPU build of a legacy code
+              is often slower than the CPU version. That is normal and almost
+              always caused by host-device transfers inside the time loop. Look
+              at the profiler timeline before touching a single kernel. If you
+              see copies between every kernel, fix data residency first.
+            </p>
+          </blockquote>
+
+          <h3 id="saxpy-in-cuda-and-openmp">
+            SAXPY in CUDA and in OpenMP offload
+          </h3>
+          <p>
+            SAXPY (y = a*x + y) is the "hello world" of GPU computing. In CUDA,
+            you write the kernel explicitly and manage device memory. This
+            version uses unified (managed) memory to keep the example short;
+            production codes usually manage device allocations explicitly.
+          </p>
+          <pre><code class="language-cpp">// saxpy.cu -- build: nvcc -O3 -arch=sm_90 saxpy.cu -o saxpy   (sm_90 = Hopper; example)
+#include &lt;cstdio&gt;
+#include &lt;cuda_runtime.h&gt;
+
+__global__ void saxpy(int n, float a, const float *x, float *y) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i &lt; n) y[i] = a * x[i] + y[i];
+}
+
+int main() {
+    const int n = 1 &lt;&lt; 24;
+    float *x, *y;
+    cudaMallocManaged(&amp;x, n * sizeof(float));
+    cudaMallocManaged(&amp;y, n * sizeof(float));
+    for (int i = 0; i &lt; n; ++i) { x[i] = 1.0f; y[i] = 2.0f; }
+
+    int threads = 256;
+    int blocks = (n + threads - 1) / threads;
+    saxpy&lt;&lt;&lt;blocks, threads&gt;&gt;&gt;(n, 3.0f, x, y);
+    cudaDeviceSynchronize();
+
+    printf("y[0] = %f (expect 5.0)\n", y[0]);
+    cudaFree(x); cudaFree(y);
+    return 0;
+}
+</code></pre>
+          <p>
+            The same computation with OpenMP offload is a single directive on
+            the existing loop. The <code>map</code> clauses say what moves to
+            and from the device.
+          </p>
+          <pre><code class="language-c">/* saxpy_omp.c
+ * NVIDIA HPC SDK:  nvc -O3 -mp=gpu saxpy_omp.c -o saxpy_omp
+ * LLVM clang:      clang -O3 -fopenmp --offload-arch=sm_90 saxpy_omp.c -o saxpy_omp  (example arch)
+ */
+#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+
+int main(void) {
+    const int n = 1 &lt;&lt; 24;
+    float a = 3.0f;
+    float *x = malloc(n * sizeof(float));
+    float *y = malloc(n * sizeof(float));
+    for (int i = 0; i &lt; n; ++i) { x[i] = 1.0f; y[i] = 2.0f; }
+
+    #pragma omp target teams distribute parallel for map(to: x[0:n]) map(tofrom: y[0:n])
+    for (int i = 0; i &lt; n; ++i)
+        y[i] = a * x[i] + y[i];
+
+    printf("y[0] = %f (expect 5.0)\n", y[0]);
+    free(x); free(y);
+    return 0;
+}
+</code></pre>
+          <p>
+            The <code>-mp=gpu</code> flag is how the NVIDIA compilers offload
+            OpenMP regions, and LLVM uses <code>--offload-arch</code> to name
+            the target GPU (for example <code>sm_80</code> for NVIDIA A100 or
+            <code>gfx90a</code> for AMD MI200-series).<a href="#src-14">[14]</a
+            ><a href="#src-31">[31]</a> In Fortran with standard parallelism,
+            the loop needs no directive at all:
+          </p>
+          <pre><code class="language-fortran">! saxpy_dc.f90 -- build: nvfortran -O3 -stdpar=gpu saxpy_dc.f90 -o saxpy_dc
+program saxpy_dc
+  implicit none
+  integer, parameter :: n = 2**24
+  real, allocatable :: x(:), y(:)
+  real :: a
+  integer :: i
+  allocate(x(n), y(n))
+  a = 3.0
+  x = 1.0
+  y = 2.0
+  do concurrent (i = 1:n)
+     y(i) = a * x(i) + y(i)
+  end do
+  print *, 'y(1) =', y(1), ' (expect 5.0)'
+end program saxpy_dc
+</code></pre>
+
+          <h3 id="a-stencil-with-resident-data">
+            A stencil with resident data
+          </h3>
+          <p>
+            Real codes iterate. The key idea is a
+            <code>target data</code> region that keeps arrays on the device for
+            the whole solve, so the loop body does no host-device copies. This
+            is a 2D Jacobi relaxation, the core of many CFD and diffusion
+            solvers.
+          </p>
+          <pre><code class="language-c">/* One Jacobi sweep per iteration; u and unew stay on the GPU the whole time. */
+void jacobi(int nx, int ny, int iters, double *restrict u, double *restrict unew) {
+    #pragma omp target data map(tofrom: u[0:nx*ny]) map(alloc: unew[0:nx*ny])
+    {
+        for (int it = 0; it &lt; iters; ++it) {
+            #pragma omp target teams distribute parallel for collapse(2)
+            for (int j = 1; j &lt; ny - 1; ++j)
+                for (int i = 1; i &lt; nx - 1; ++i)
+                    unew[j*nx + i] = 0.25 * (u[j*nx + i - 1] + u[j*nx + i + 1]
+                                           + u[(j-1)*nx + i] + u[(j+1)*nx + i]);
+
+            #pragma omp target teams distribute parallel for collapse(2)
+            for (int j = 1; j &lt; ny - 1; ++j)
+                for (int i = 1; i &lt; nx - 1; ++i)
+                    u[j*nx + i] = unew[j*nx + i];
+        }
+    }   /* u is copied back to the host once, here */
+}
+</code></pre>
+
+          <h3 id="gpu-aware-halo-exchange">A GPU-aware MPI halo exchange</h3>
+          <p>
+            Once the stencil is split across ranks (one per GPU), each rank must
+            exchange boundary rows with its neighbors every iteration. With a
+            GPU-aware MPI, you hand MPI the device addresses. In OpenMP, a
+            <code>use_device_ptr</code> clause on a
+            <code>target data</code> construct replaces a host pointer with the
+            corresponding device pointer inside the region, so host code (here,
+            MPI calls) sees device addresses. This sketch assumes a 1D
+            decomposition in <code>j</code> with one ghost row on each side, and
+            that <code>u</code> is already mapped by an enclosing
+            <code>target data</code> region.
+          </p>
+          <pre><code class="language-c">#include &lt;mpi.h&gt;
+
+/* Exchange ghost rows with up/down neighbors. u has (ny_local + 2) rows of nx doubles.
+ * up/down are neighbor ranks or MPI_PROC_NULL at the domain edges. */
+void halo_exchange(double *u, int nx, int ny_local, int up, int down, MPI_Comm comm) {
+    MPI_Request req[4];
+    #pragma omp target data use_device_ptr(u)
+    {
+        /* Inside this region, u refers to the DEVICE copy, so MPI gets device pointers. */
+        double *first_real = u + 1 * nx;          /* row 1          */
+        double *last_real  = u + ny_local * nx;   /* row ny_local   */
+        double *ghost_lo   = u;                   /* row 0          */
+        double *ghost_hi   = u + (ny_local + 1) * nx;
+
+        MPI_Irecv(ghost_lo,   nx, MPI_DOUBLE, down, 0, comm, &amp;req[0]);
+        MPI_Irecv(ghost_hi,   nx, MPI_DOUBLE, up,   1, comm, &amp;req[1]);
+        MPI_Isend(first_real, nx, MPI_DOUBLE, down, 1, comm, &amp;req[2]);
+        MPI_Isend(last_real,  nx, MPI_DOUBLE, up,   0, comm, &amp;req[3]);
+        MPI_Waitall(4, req, MPI_STATUSES_IGNORE);
+    }
+}
+</code></pre>
+          <p>
+            Contiguous rows are the easy case. For column halos in a 2D
+            decomposition, pack the strided data into a contiguous device buffer
+            with a small kernel first, send that, and unpack on the receiving
+            side. Overlap interior computation with the exchange once
+            correctness is established. If the MPI library is not GPU-aware,
+            this code will fail or silently read garbage; check with the
+            implementation's query mechanism before trusting it.
+          </p>
+
+          <h2 id="gpu-accelerated-applications">
+            GPU-Accelerated Applications
+          </h2>
+          <p>
+            Most users never port anything. They run community codes, and the
+            question is whether their code and their particular feature set run
+            well on GPUs. The status of major applications, from the projects'
+            own documentation:
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Application</th>
+                <th>Domain</th>
+                <th>GPU approach</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>GROMACS</td>
+                <td>Biomolecular MD</td>
+                <td>
+                  CUDA (NVIDIA), SYCL (AMD via AdaptiveCpp, Intel via oneAPI)
+                </td>
+                <td>
+                  GPU support since 4.5 (2010), native since 4.6 (2013); the
+                  update step runs on the GPU by default (for supported
+                  settings) since 2023; direct GPU halo communication with
+                  GPU-aware MPI since 2022, enabled with
+                  <code>GMX_ENABLE_DIRECT_GPU_COMM</code>.<a href="#src-32"
+                    >[32]</a
+                  ><a href="#src-5">[5]</a><a href="#src-33">[33]</a>
+                </td>
+              </tr>
+              <tr>
+                <td>LAMMPS</td>
+                <td>Materials and soft-matter MD</td>
+                <td>
+                  KOKKOS package (CUDA, HIP, OpenMP); separate GPU package
+                </td>
+                <td>
+                  Kokkos modes fully supported for Serial, OpenMP, CUDA and HIP;
+                  OpenMP target and Intel GPU modes listed as under
+                  development.<a href="#src-11">[11]</a>
+                </td>
+              </tr>
+              <tr>
+                <td>NAMD 3</td>
+                <td>Biomolecular MD</td>
+                <td>CUDA and HIP</td>
+                <td>
+                  GPU-resident mode (<code>CUDASOAintegrate on</code>) runs
+                  almost all of the dynamics on the GPU; single-GPU runs can see
+                  2x or more over GPU-offload mode, and 1M to 10M atom systems
+                  reached up to 87 percent parallel efficiency on an 8-GPU
+                  DGX-A100.<a href="#src-34">[34]</a>
+                </td>
+              </tr>
+              <tr>
+                <td>AMBER (pmemd)</td>
+                <td>Biomolecular MD</td>
+                <td>CUDA; HIP for AMD</td>
+                <td>
+                  Uses a mixed single/double/fixed precision model (SPFP); AMD
+                  support covers Instinct MI100, MI210, MI250(X) and MI300A.<a
+                    href="#src-35"
+                    >[35]</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>VASP</td>
+                <td>Electronic structure (DFT)</td>
+                <td>OpenACC (NVIDIA); OpenMP offload (AMD, Intel)</td>
+                <td>
+                  OpenACC port official since VASP 6.2.0; the old CUDA-C port is
+                  deprecated.<a href="#src-8">[8]</a>
+                </td>
+              </tr>
+              <tr>
+                <td>Quantum ESPRESSO</td>
+                <td>Electronic structure (DFT)</td>
+                <td>GPU-enabled builds of the main codes</td>
+                <td>
+                  The developers documented their GPU porting approach and
+                  benchmarks for PWscf, PHonon, turboEELS and CP.<a
+                    href="#src-36"
+                    >[36]</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>OpenFOAM</td>
+                <td>CFD</td>
+                <td>
+                  Mostly CPU; GPU via linear-solver plug-ins and research ports
+                </td>
+                <td>
+                  Linear solves can be delegated to PETSc through the PETSc4FOAM
+                  plug-in; broader GPU ports remain research efforts.<a
+                    href="#src-37"
+                    >[37]</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>E3SM (EAMxx)</td>
+                <td>Climate</td>
+                <td>C++ with Kokkos</td>
+                <td>
+                  Cloud-resolving global atmosphere; a 3.25 km global run
+                  exceeded 1 simulated year per day on Frontier; recognized with
+                  a 2023 Gordon Bell Prize.<a href="#src-12">[12]</a>
+                </td>
+              </tr>
+              <tr>
+                <td>MPAS-Atmosphere</td>
+                <td>Weather and climate</td>
+                <td>OpenACC</td>
+                <td>
+                  NCAR's GPU efforts also include Kokkos (StormSPEED) and CUDA
+                  (MUSICA chemistry).<a href="#src-38">[38]</a>
+                </td>
+              </tr>
+              <tr>
+                <td>WRF</td>
+                <td>Regional weather</td>
+                <td>No native GPU support in the NCAR distribution</td>
+                <td>
+                  GPU versions exist outside the main distribution (for example
+                  TempoQuest's commercial AceCAST) and research ports use OpenMP
+                  offload.<a href="#src-39">[39]</a><a href="#src-40">[40]</a>
+                </td>
+              </tr>
+              <tr>
+                <td>NVIDIA PhysicsNeMo</td>
+                <td>Physics-ML framework</td>
+                <td>PyTorch on NVIDIA GPUs</td>
+                <td>
+                  Open-source framework for neural operators, GNNs, transformers
+                  and physics-informed networks.<a href="#src-41">[41]</a>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> "Runs on GPUs" is feature-specific. A
+              code may accelerate the standard path beautifully and fall back to
+              the CPU for the one thermostat, force field or solver option your
+              group depends on. Before you promise a lab that GPUs will help,
+              run their actual input deck on one GPU node and one CPU node and
+              compare time to solution and cost per result.
+            </p>
+          </blockquote>
+
+          <h2 id="ai-for-science">AI for Science</h2>
+          <p>
+            AI for science is not one thing. It is at least four different
+            workloads, each with different compute and validation needs.
+          </p>
+
+          <h3 id="surrogates-pinns-and-neural-operators">
+            Surrogates, physics-informed ML and neural operators
+          </h3>
+          <p>
+            A <strong>surrogate</strong> is a model trained on simulation (or
+            experimental) output that predicts results far faster than rerunning
+            the simulation. It is useful for design sweeps, uncertainty
+            quantification and inverse problems, and it is only trustworthy
+            inside the range of its training data.
+          </p>
+          <p>
+            <strong>Physics-informed neural networks (PINNs)</strong>,
+            introduced by Raissi, Perdikaris and Karniadakis in the Journal of
+            Computational Physics in 2019, embed the governing PDE into the loss
+            function so the network is penalized for violating the physics, and
+            they handle both forward and inverse problems.<a href="#src-42"
+              >[42]</a
+            >
+            They are appealing when data are scarce but can be hard to train for
+            stiff or multiscale problems.
+          </p>
+          <p>
+            <strong>Neural operators</strong> learn a map between function
+            spaces (for example from initial conditions to the solution field),
+            rather than a single solution. The Fourier Neural Operator paper
+            reported modeling turbulent flow with zero-shot super-resolution and
+            speeds up to three orders of magnitude faster than traditional PDE
+            solvers on its test problems.<a href="#src-43">[43]</a> NVIDIA
+            PhysicsNeMo packages these families (neural operators, GNNs,
+            transformers, PINNs and hybrids) as PyTorch modules with scalable
+            training pipelines.<a href="#src-41">[41]</a>
+          </p>
+          <p>
+            The compute pattern matters for capacity planning: generating
+            training data is a classic HPC simulation campaign (often FP64, MPI,
+            lots of storage), training is a GPU deep learning job (see
+            <a href="training.html">Training at Scale</a>), and inference is
+            cheap enough to run interactively. One project can need all three in
+            the same month.
+          </p>
+
+          <h3 id="ai-weather-models">AI weather and climate models</h3>
+          <p>
+            Weather is where machine-learned models moved fastest from papers
+            into operations.
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th>Developer</th>
+                <th>Type</th>
+                <th>Reported result (from the paper or operator)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>GraphCast</td>
+                <td>Google DeepMind</td>
+                <td>Deterministic, graph neural network</td>
+                <td>
+                  10-day global forecasts at 0.25 degree in under one minute;
+                  better than the leading operational deterministic system on 90
+                  percent of 1,380 verification targets.<a href="#src-44"
+                    >[44]</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>GenCast</td>
+                <td>Google DeepMind</td>
+                <td>Probabilistic ensemble, diffusion</td>
+                <td>
+                  15-day ensembles at 0.25 degree, more skillful than ECMWF's
+                  ENS; about 8 minutes per 15-day member on one Cloud TPU v5
+                  device.<a href="#src-45">[45]</a>
+                </td>
+              </tr>
+              <tr>
+                <td>Aurora</td>
+                <td>Microsoft Research</td>
+                <td>Earth system foundation model</td>
+                <td>
+                  Trained on over one million hours of geophysical data;
+                  outperformed operational forecasts for air quality, ocean
+                  waves, cyclone tracks and high-resolution weather (Nature,
+                  2025).<a href="#src-46">[46]</a>
+                </td>
+              </tr>
+              <tr>
+                <td>FourCastNet 3</td>
+                <td>NVIDIA</td>
+                <td>Probabilistic, spherical geometric CNN</td>
+                <td>
+                  60-day global forecast at 0.25 degree, 6-hourly, in under 4
+                  minutes on a single GPU; trained on 1,024 or more GPUs.<a
+                    href="#src-47"
+                    >[47]</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>AIFS</td>
+                <td>ECMWF</td>
+                <td>Operational ML system</td>
+                <td>
+                  AIFS Single operational from 25 February 2025; the 51-member
+                  AIFS ENS operational from 1 July 2025, at 31 km versus 9 km
+                  for the physics-based ensemble, running alongside IFS.<a
+                    href="#src-48"
+                    >[48]</a
+                  >
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Two practical lessons. First, these models are trained on reanalysis
+            data produced by physics models, so they depend on the physics
+            pipeline rather than replacing it. ECMWF explicitly runs AIFS side
+            by side with IFS. Second, inference is cheap but training is not:
+            training runs use many GPUs or TPUs for weeks, while a lab can run
+            inference on one GPU node. Most university groups will fine-tune or
+            run these models, not train them from scratch.
+          </p>
+
+          <h3 id="protein-structure-and-biomolecular-models">
+            Protein structure and biomolecular models
+          </h3>
+          <p>
+            AlphaFold 2 (Nature, 2021) changed structural biology, and AlphaFold
+            3 (Nature, 2024) extended prediction to complexes of proteins with
+            nucleic acids, small molecules and ions.<a href="#src-49">[49]</a
+            ><a href="#src-50">[50]</a> For research computing staff, licensing
+            and workflow are the operational issues. The AlphaFold 3 inference
+            code is on GitHub under Apache 2.0, but the model parameters are
+            only available directly from Google under separate terms of use, so
+            each user or lab must obtain them and a center cannot simply
+            redistribute a ready-to-run container with weights.<a href="#src-51"
+              >[51]</a
+            >
+          </p>
+          <p>
+            Open alternatives have matured. <strong>OpenFold3-preview</strong>,
+            from the AlQuraishi Lab at Columbia and the OpenFold consortium,
+            aims to be a bitwise reproduction of AlphaFold 3 and is Apache 2.0
+            licensed, with training data released.<a href="#src-52">[52]</a>
+            <strong>Boltz-2</strong> (MIT license, model weights and training
+            pipeline open) jointly predicts structure and binding affinity; its
+            developers report affinity accuracy approaching physics-based
+            free-energy perturbation (FEP) at more than 1000x the speed.<a
+              href="#src-53"
+              >[53]</a
+            >
+            Treat that as a claim to validate on your own targets, not a reason
+            to retire FEP.
+          </p>
+          <p>
+            These tools have an awkward shape for schedulers: the multiple
+            sequence alignment step is CPU and I/O heavy against multi-terabyte
+            databases, and the model inference step wants one GPU with a lot of
+            memory. Split them into separate job steps or a workflow with
+            dependencies so GPUs are not held idle during database searches.
+            Stage the databases on fast local or parallel storage.
+          </p>
+
+          <h3 id="foundation-models-and-agents">
+            Scientific foundation models and LLM agents
+          </h3>
+          <p>
+            Aurora is one example of a broader trend toward large pretrained
+            models for a scientific domain that are then fine-tuned for specific
+            tasks. Similar efforts exist for materials, chemistry, genomics and
+            climate. At the other end, general-purpose LLMs are being wrapped
+            into research agents. Google's Co-Scientist, for example, is a
+            multi-agent system built on Gemini that generates, critiques and
+            refines hypotheses using extra test-time compute.<a href="#src-54"
+              >[54]</a
+            >
+            In the US, the Genesis Mission, launched by executive order on
+            November 24, 2025 and led by DOE, aims to apply the national
+            laboratories' supercomputers and data resources to AI-driven
+            science.<a href="#src-55">[55]</a>
+          </p>
+          <p>
+            For a campus center, the immediate implications are concrete:
+            researchers will ask for GPU time to fine-tune domain models, for
+            inference endpoints they can call from notebooks and workflows (see
+            <a href="inference.html">Inference at Scale</a>), and for agent
+            frameworks that submit jobs on their behalf. The last one needs
+            policy before it needs hardware: an agent with a user's credentials
+            can burn an allocation or touch data that user can reach. Cover this
+            in your acceptable use policy (see
+            <a href="operations.html">Operations</a>).
+          </p>
+
+          <h2 id="mixed-precision-and-fp64-emulation">
+            Mixed Precision and FP64 Emulation
+          </h2>
+          <p>
+            Modern accelerators devote most of their silicon to low-precision
+            tensor math. Scientific codes that assume FP64 everywhere leave much
+            of that capacity unused. Two approaches are moving into the
+            mainstream.
+          </p>
+          <p>
+            <strong>Mixed-precision algorithms</strong> do most of the work in
+            lower precision and recover full accuracy with a small amount of
+            high-precision work, for example iterative refinement in linear
+            solvers. The HPL-MxP benchmark measures exactly this. On its results
+            list, El Capitan reports 16.68 Exaflop/s mixed precision against
+            1.809 Exaflop/s on FP64 HPL, a 9.2x ratio.<a href="#src-2">[2]</a>
+            Real applications see far smaller gains than a benchmark designed
+            for the purpose, but the direction is clear.
+          </p>
+          <p>
+            <strong>Floating-point emulation</strong> computes FP32 or FP64
+            matrix products by splitting each value into several lower-precision
+            pieces, multiplying those on tensor cores, and recombining. NVIDIA
+            introduced emulation in cuBLAS with CUDA 12.9 (FP32 emulated with
+            BF16, called BF16x9), and CUDA 13.0 Update 2 added FP64 emulation on
+            Blackwell INT8 tensor cores using Ozaki-scheme methods, with an
+            automatic mode that picks parameters to match or beat native FP64
+            accuracy and falls back to native FP64 when emulation offers no
+            benefit.<a href="#src-56">[56]</a><a href="#src-57">[57]</a> NVIDIA
+            reports a 1.5x end-to-end speedup for Quantum ESPRESSO with the
+            automatic setting on an RTX PRO 6000 Blackwell Server Edition, with
+            results consistent to 12 significant digits, and a 2.4x
+            matrix-product speedup in the ecTrans weather library with FP32
+            emulation.<a href="#src-57">[57]</a>
+          </p>
+          <p>
+            What this means in practice: emulation only helps GEMM-heavy codes
+            that call cuBLAS (directly or through a library), it helps most on
+            GPUs with weak native FP64, and it changes numerical behavior enough
+            that you must rerun your validation suite. It does nothing for
+            stencils, sparse solvers or particle codes that are bandwidth-bound.
+            When evaluating hardware for FP64 science, ask vendors for native
+            FP64 figures and for emulated results on your own workloads, and
+            treat the two separately. Precision formats are covered in
+            <a href="convergence.html">The Convergence</a>.
+          </p>
+
+          <h2 id="reproducibility">Reproducibility</h2>
+          <p>
+            GPU codes make reproducibility harder in two ways. Numerically,
+            parallel reductions and atomic operations change the order of
+            floating-point additions from run to run, and GPU math can differ
+            from CPU math. The NAMD release notes, for example, warn that GPU
+            forces differ slightly from CPU-only calculations, most visibly in
+            reported pressure.<a href="#src-34">[34]</a> Environmentally, a
+            result now depends on the driver, the CUDA or ROCm version, the MPI
+            build, and library versions, not just the source code.
+          </p>
+          <ul>
+            <li>
+              <strong>Define correctness as tolerance, not bits.</strong> Agree
+              with the science team on which outputs must match and how closely,
+              and record it with the regression tests.
+            </li>
+            <li>
+              <strong>Pin the software stack.</strong> Spack environments
+              capture which packages to build, how they are configured and the
+              concretized result in <code>spack.yaml</code> and
+              <code>spack.lock</code>, so a stack can be rebuilt exactly.<a
+                href="#src-58"
+                >[58]</a
+              >
+            </li>
+            <li>
+              <strong>Use containers for portability, carefully.</strong>
+              Apptainer's <code>--nv</code> and <code>--rocm</code> flags bring
+              the host's GPU driver libraries into the container.<a
+                href="#src-59"
+                >[59]</a
+              >
+              The container holds the user-space stack, but the host driver must
+              still be new enough for the CUDA or ROCm version inside, and MPI
+              inside the container must be compatible with the host fabric (the
+              MPI 5.0 ABI should eventually ease this).
+            </li>
+            <li>
+              <strong>Record provenance automatically.</strong> Log module
+              lists, container digests, GPU model, driver version and job IDs
+              with every production run. Workflow tools and simple wrapper
+              scripts both work; what matters is that nobody has to remember to
+              do it.
+            </li>
+            <li>
+              <strong>For AI models, version the weights and the data.</strong>
+              A surrogate or structure predictor is part of the method. Record
+              the exact checkpoint, its license, and the training data version.
+            </li>
+          </ul>
+
+          <h2 id="interactive-computing-at-scale">
+            Interactive Computing at Scale: Jupyter, Dask and Ray
+          </h2>
+          <p>
+            Notebooks became the front door for a large share of users. The
+            questions for a center are how to give people notebooks on real
+            compute without letting them camp on GPUs, and how to let Python
+            scale past one node.
+          </p>
+          <h3 id="jupyter-on-clusters">Jupyter on clusters</h3>
+          <p>
+            Open OnDemand provides JupyterLab as an interactive app: the user
+            fills in a form, the portal submits a batch job, and the notebook
+            runs on a compute node inside a normal Slurm allocation.<a
+              href="#src-60"
+              >[60]</a
+            >
+            That keeps notebooks under the scheduler's accounting and limits.
+            Pair it with short default wall times on GPU partitions, idle
+            culling, and a small shared or fractional GPU partition (MIG or MPS;
+            see <a href="scheduling.html">Scheduling</a>) for development, so
+            full GPUs go to batch work.
+          </p>
+          <h3 id="dask-and-ray">Dask and Ray</h3>
+          <p>
+            <strong>Dask</strong> scales NumPy- and pandas-style work across
+            many workers. The dask-jobqueue project deploys Dask on PBS, Slurm,
+            MOAB, SGE, LSF and HTCondor, either as dynamic clusters where
+            workers are submitted as separate jobs or as batch runners inside
+            one allocation.<a href="#src-61">[61]</a>
+          </p>
+          <pre><code class="language-python"># Dask on Slurm from a notebook or login node (values are examples)
+from dask_jobqueue import SLURMCluster
+from dask.distributed import Client
+
+cluster = SLURMCluster(
+    queue="standard",            # Slurm partition
+    account="mylab",             # Slurm account
+    cores=16,
+    memory="64GB",
+    walltime="02:00:00",
+    job_extra_directives=["--constraint=intel"],   # example extra sbatch line
+)
+cluster.scale(jobs=4)            # submit 4 worker jobs
+client = Client(cluster)
+
+import dask.array as da
+x = da.random.random((200_000, 20_000), chunks=(10_000, 20_000))
+print(x.mean().compute())
+</code></pre>
+          <p>
+            <strong>Ray</strong> targets distributed Python more generally (task
+            and actor parallelism, hyperparameter tuning, serving). Ray expects
+            a head node plus workers, which does not match Slurm's model
+            naturally; Ray 2.49 and later add a
+            <code>ray symmetric-run</code> command that starts the Ray cluster
+            on all allocated nodes and runs the entry script only on the head
+            node, which simplifies running Ray inside an
+            <code>sbatch</code> job.<a href="#src-62">[62]</a>
+          </p>
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Dynamic Dask clusters submit many
+              small jobs, which can look like abuse to a busy scheduler and can
+              stall when the queue is long. For large runs, prefer the
+              batch-runner pattern (one allocation, Dask inside it). Reserve
+              dynamic clusters for interactive exploration on partitions with
+              short waits.
+            </p>
+          </blockquote>
+
+          <h2 id="key-takeaways">Key Takeaways</h2>
+          <ul>
+            <li>
+              New capacity arrives mostly as GPU nodes. Bandwidth-bound and
+              dense-math codes benefit most; small or branchy workloads may
+              still belong on CPUs.
+            </li>
+            <li>
+              Choose a GPU programming model by portability needs and staffing:
+              CUDA for NVIDIA-only performance, OpenMP offload or OpenACC for
+              incremental Fortran ports, Kokkos or RAJA for portable C++,
+              standard parallelism for simple loops. cuPyNumeric is end of life;
+              use CuPy, JAX or Dask instead.
+            </li>
+            <li>
+              MPI 5.0 (June 2025) adds a standard ABI, which should eventually
+              let one binary or container run against any conforming MPI. MPICH
+              5.0 already implements it.
+            </li>
+            <li>
+              GPU-aware MPI is essential for multi-GPU codes. Verify it is built
+              and enabled (for Cray MPICH, set
+              <code>MPICH_GPU_SUPPORT_ENABLED=1</code>).
+            </li>
+            <li>
+              Porting is mostly about data residency: profile first, keep arrays
+              on the device, and move halo exchanges onto the GPU.
+            </li>
+            <li>
+              AI weather and structure-prediction models are now operational
+              tools, but they are trained on physics-derived data and need
+              validation; check model weight licenses before building shared
+              services.
+            </li>
+            <li>
+              FP64 emulation in cuBLAS can speed up GEMM-heavy codes on hardware
+              with weak native FP64, but it requires revalidation and does
+              nothing for bandwidth-bound kernels.
+            </li>
+            <li>
+              Reproducibility now means pinning drivers, libraries, containers
+              and model checkpoints, and defining correctness by tolerance.
+            </li>
+          </ul>
+
+          <h2 id="sources">Sources</h2>
+          <ol class="sources">
+            <li id="src-1">
+              <a
+                href="https://www.top500.org/lists/top500/2026/06/"
+                target="_blank"
+                rel="noopener"
+                >TOP500 June 2026 list and highlights (TOP500, 2026)</a
+              >
+            </li>
+            <li id="src-2">
+              <a
+                href="https://hpl-mxp.org/results.md"
+                target="_blank"
+                rel="noopener"
+                >HPL-MxP results (HPL-MxP, 2026)</a
+              >
+            </li>
+            <li id="src-3">
+              <a
+                href="https://rocm.docs.amd.com/projects/HIPIFY/en/latest/"
+                target="_blank"
+                rel="noopener"
+                >HIPIFY documentation (AMD ROCm, 2026)</a
+              >
+            </li>
+            <li id="src-4">
+              <a
+                href="https://www.khronos.org/sycl/"
+                target="_blank"
+                rel="noopener"
+                >SYCL overview and implementations (Khronos Group, 2026)</a
+              >
+            </li>
+            <li id="src-5">
+              <a
+                href="https://manual.gromacs.org/2025.0/install-guide/index.html"
+                target="_blank"
+                rel="noopener"
+                >GROMACS 2025.0 installation guide: GPU acceleration options
+                (GROMACS, 2025)</a
+              >
+            </li>
+            <li id="src-6">
+              <a
+                href="https://openmp.org/home-news/openmp-arb-releases-openmp-6-0-for-easier-programming"
+                target="_blank"
+                rel="noopener"
+                >OpenMP ARB releases OpenMP 6.0 (OpenMP ARB, 2024)</a
+              >
+            </li>
+            <li id="src-7">
+              <a
+                href="https://www.openacc.org/blog/announcing-openacc-34"
+                target="_blank"
+                rel="noopener"
+                >Announcing OpenACC 3.4 at ISC 2025 (OpenACC, 2025)</a
+              >
+            </li>
+            <li id="src-8">
+              <a
+                href="https://vasp.at/wiki/OpenACC_GPU_port_of_VASP"
+                target="_blank"
+                rel="noopener"
+                >GPU ports of VASP (VASP Wiki, 2026)</a
+              >
+            </li>
+            <li id="src-9">
+              <a
+                href="https://hpsf.io/blog/2025/kokkos-5-0-embracing-c20-and-celebrating-a-milestone-era-in-hpc/"
+                target="_blank"
+                rel="noopener"
+                >Kokkos 5.0: Embracing C++20 (High Performance Software
+                Foundation, 2025)</a
+              >
+            </li>
+            <li id="src-10">
+              <a
+                href="https://kokkos.org/about/releases/"
+                target="_blank"
+                rel="noopener"
+                >Kokkos releases (Kokkos project, 2026)</a
+              >
+            </li>
+            <li id="src-11">
+              <a
+                href="https://docs.lammps.org/Speed_kokkos.html"
+                target="_blank"
+                rel="noopener"
+                >KOKKOS package (LAMMPS documentation, 2026)</a
+              >
+            </li>
+            <li id="src-12">
+              <a
+                href="https://e3sm.org/modeling-at-exascale"
+                target="_blank"
+                rel="noopener"
+                >Modeling at Exascale: EAMxx (E3SM project, DOE, 2025)</a
+              >
+            </li>
+            <li id="src-13">
+              <a
+                href="https://raja.readthedocs.io/"
+                target="_blank"
+                rel="noopener"
+                >RAJA documentation (Lawrence Livermore National Laboratory,
+                2026)</a
+              >
+            </li>
+            <li id="src-14">
+              <a
+                href="https://docs.nvidia.com/hpc-sdk/compilers/hpc-compilers-user-guide/index.html"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA HPC Compilers User's Guide (NVIDIA, 2026)</a
+              >
+            </li>
+            <li id="src-15">
+              <a
+                href="https://developer.nvidia.com/blog/accelerating-fortran-do-concurrent-with-gpus-and-the-nvidia-hpc-sdk"
+                target="_blank"
+                rel="noopener"
+                >Accelerating Fortran DO CONCURRENT with GPUs and the NVIDIA HPC
+                SDK (NVIDIA, 2020)</a
+              >
+            </li>
+            <li id="src-16">
+              <a href="https://juliagpu.org/" target="_blank" rel="noopener"
+                >JuliaGPU: GPU programming in Julia (JuliaGPU, 2026)</a
+              >
+            </li>
+            <li id="src-17">
+              <a
+                href="https://docs.cupy.dev/en/stable/overview.html"
+                target="_blank"
+                rel="noopener"
+                >CuPy overview (CuPy documentation, 2026)</a
+              >
+            </li>
+            <li id="src-18">
+              <a
+                href="https://numba.readthedocs.io/en/stable/cuda/cudapysupported.html"
+                target="_blank"
+                rel="noopener"
+                >Numba for CUDA GPUs: built-in CUDA target deprecation notice
+                (Numba documentation, 2026)</a
+              >
+            </li>
+            <li id="src-19">
+              <a
+                href="https://docs.jax.dev/en/latest/201/jit.html"
+                target="_blank"
+                rel="noopener"
+                >Just-in-time compilation (JAX documentation, 2026)</a
+              >
+            </li>
+            <li id="src-20">
+              <a
+                href="https://github.com/nv-legate/cupynumeric"
+                target="_blank"
+                rel="noopener"
+                >cuPyNumeric repository: end-of-life notice (NVIDIA, 2026)</a
+              >
+            </li>
+            <li id="src-21">
+              <a
+                href="https://www.mpi-forum.org/docs/"
+                target="_blank"
+                rel="noopener"
+                >MPI Documents (MPI Forum, 2025)</a
+              >
+            </li>
+            <li id="src-22">
+              <a
+                href="https://www.mpi-forum.org/"
+                target="_blank"
+                rel="noopener"
+                >MPI Forum home: current efforts (MPI Forum, 2025)</a
+              >
+            </li>
+            <li id="src-23">
+              <a
+                href="https://www.mpi-forum.org/mpi-41"
+                target="_blank"
+                rel="noopener"
+                >MPI 4.1 scope (MPI Forum, 2023)</a
+              >
+            </li>
+            <li id="src-24">
+              <a
+                href="https://mpi-forum.org/docs/mpi-5.0/mpi50-report/node611.htm"
+                target="_blank"
+                rel="noopener"
+                >MPI 5.0 standard: Changes in MPI-5.0 (MPI Forum, 2025)</a
+              >
+            </li>
+            <li id="src-25">
+              <a
+                href="https://github.com/pmodels/mpich/releases/tag/v5.0.0"
+                target="_blank"
+                rel="noopener"
+                >MPICH v5.0.0 release notes (MPICH project, 2026)</a
+              >
+            </li>
+            <li id="src-26">
+              <a
+                href="https://docs.open-mpi.org/en/v5.0.x/tuning-apps/networking/cuda.html"
+                target="_blank"
+                rel="noopener"
+                >Open MPI 5.0.x: CUDA (Open MPI documentation, 2026)</a
+              >
+            </li>
+            <li id="src-27">
+              <a
+                href="https://docs.open-mpi.org/en/v5.0.x/tuning-apps/networking/rocm.html"
+                target="_blank"
+                rel="noopener"
+                >Open MPI 5.0.x: ROCm (Open MPI documentation, 2026)</a
+              >
+            </li>
+            <li id="src-28">
+              <a
+                href="https://www.mpich.org/static/downloads/4.3.0/mpich-4.3.0-README.txt"
+                target="_blank"
+                rel="noopener"
+                >MPICH 4.3.0 README: GPU support (MPICH project, 2025)</a
+              >
+            </li>
+            <li id="src-29">
+              <a
+                href="https://cpe.ext.hpe.com/docs/25.09/mpt/mpich/intro_mpi.html"
+                target="_blank"
+                rel="noopener"
+                >intro_mpi: GPU support in Cray MPICH (HPE Cray Programming
+                Environment 25.09, 2025)</a
+              >
+            </li>
+            <li id="src-30">
+              <a
+                href="https://docs.nvidia.com/nsight-systems/UserGuide/index.html"
+                target="_blank"
+                rel="noopener"
+                >Nsight Systems User Guide (NVIDIA, 2026)</a
+              >
+            </li>
+            <li id="src-31">
+              <a
+                href="https://openmp.llvm.org/CommandLineArgumentReference.html"
+                target="_blank"
+                rel="noopener"
+                >OpenMP command-line argument reference (LLVM OpenMP, 2026)</a
+              >
+            </li>
+            <li id="src-32">
+              <a
+                href="https://www.gromacs.org/topic/heterogeneous_parallelization.html"
+                target="_blank"
+                rel="noopener"
+                >Heterogeneous parallelization and GPU acceleration (GROMACS,
+                2026)</a
+              >
+            </li>
+            <li id="src-33">
+              <a
+                href="https://manual.gromacs.org/current/user-guide/mdrun-performance.html"
+                target="_blank"
+                rel="noopener"
+                >Getting good performance from mdrun (GROMACS documentation,
+                2026)</a
+              >
+            </li>
+            <li id="src-34">
+              <a
+                href="https://www.ks.uiuc.edu/Research/namd/3.0/notes.html"
+                target="_blank"
+                rel="noopener"
+                >NAMD 3.0 release notes (University of Illinois, 2024)</a
+              >
+            </li>
+            <li id="src-35">
+              <a
+                href="https://ambermd.org/GPUHardware.php"
+                target="_blank"
+                rel="noopener"
+                >The pmemd.cuda GPU implementation (Amber, 2026)</a
+              >
+            </li>
+            <li id="src-36">
+              <a
+                href="https://air.uniud.it/retrieve/dd02ac6e-276f-46bb-8f69-32bd3e4572bc/acs.jctc.3c00249.pdf"
+                target="_blank"
+                rel="noopener"
+                >Quantum ESPRESSO: One Further Step toward the Exascale (J.
+                Chem. Theory Comput., 2023)</a
+              >
+            </li>
+            <li id="src-37">
+              <a
+                href="https://arxiv.org/abs/2507.18268"
+                target="_blank"
+                rel="noopener"
+                >Building an Accelerated OpenFOAM Proof-of-Concept Application
+                using Modern C++ (arXiv, 2025)</a
+              >
+            </li>
+            <li id="src-38">
+              <a
+                href="https://ncarprojects.ucar.edu/csf/projects/gpu"
+                target="_blank"
+                rel="noopener"
+                >GPU Acceleration project (NCAR, 2026)</a
+              >
+            </li>
+            <li id="src-39">
+              <a
+                href="https://acecast-docs.readthedocs.io"
+                target="_blank"
+                rel="noopener"
+                >AceCAST documentation: GPU-accelerated WRF (TempoQuest,
+                2026)</a
+              >
+            </li>
+            <li id="src-40">
+              <a
+                href="https://arxiv.org/abs/2409.07232"
+                target="_blank"
+                rel="noopener"
+                >Optimizing the Weather Research and Forecasting Model with
+                OpenMP Offload and Codee (arXiv, 2024)</a
+              >
+            </li>
+            <li id="src-41">
+              <a
+                href="https://docs.nvidia.com/physicsnemo/latest/overview.html"
+                target="_blank"
+                rel="noopener"
+                >NVIDIA PhysicsNeMo overview (NVIDIA, 2026)</a
+              >
+            </li>
+            <li id="src-42">
+              <a
+                href="https://faculty.sites.iastate.edu/hliu/files/inline-files/PINN_RPK_2019_1.pdf"
+                target="_blank"
+                rel="noopener"
+                >Raissi, Perdikaris, Karniadakis: Physics-informed neural
+                networks (Journal of Computational Physics 378, 2019)</a
+              >
+            </li>
+            <li id="src-43">
+              <a
+                href="https://arxiv.org/abs/2010.08895"
+                target="_blank"
+                rel="noopener"
+                >Li et al.: Fourier Neural Operator for Parametric Partial
+                Differential Equations (arXiv, 2020)</a
+              >
+            </li>
+            <li id="src-44">
+              <a
+                href="https://arxiv.org/abs/2212.12794"
+                target="_blank"
+                rel="noopener"
+                >Lam et al.: GraphCast: Learning skillful medium-range global
+                weather forecasting (arXiv / Science, 2023)</a
+              >
+            </li>
+            <li id="src-45">
+              <a
+                href="https://www.nature.com/articles/s41586-024-08252-9"
+                target="_blank"
+                rel="noopener"
+                >Price et al.: Probabilistic weather forecasting with machine
+                learning (Nature, 2025)</a
+              >
+            </li>
+            <li id="src-46">
+              <a
+                href="https://www.microsoft.com/en-us/research/publication/aurora-a-foundation-model-for-the-earth-system/"
+                target="_blank"
+                rel="noopener"
+                >Bodnar et al.: A Foundation Model for the Earth System (Nature
+                641, 2025)</a
+              >
+            </li>
+            <li id="src-47">
+              <a
+                href="https://arxiv.org/abs/2507.12144"
+                target="_blank"
+                rel="noopener"
+                >FourCastNet 3: A geometric approach to probabilistic
+                machine-learning weather forecasting at scale (arXiv, 2025)</a
+              >
+            </li>
+            <li id="src-48">
+              <a
+                href="https://ecmwf.int/en/about/media-centre/news/2025/ecmwfs-ensemble-ai-forecasts-become-operational"
+                target="_blank"
+                rel="noopener"
+                >ECMWF's ensemble AI forecasts become operational (ECMWF,
+                2025)</a
+              >
+            </li>
+            <li id="src-49">
+              <a
+                href="https://www.nature.com/articles/s41586-021-03819-2"
+                target="_blank"
+                rel="noopener"
+                >Jumper et al.: Highly accurate protein structure prediction
+                with AlphaFold (Nature, 2021)</a
+              >
+            </li>
+            <li id="src-50">
+              <a
+                href="https://www.nature.com/articles/s41586-024-07487-w"
+                target="_blank"
+                rel="noopener"
+                >Abramson et al.: Accurate structure prediction of biomolecular
+                interactions with AlphaFold 3 (Nature 630, 2024)</a
+              >
+            </li>
+            <li id="src-51">
+              <a
+                href="https://github.com/google-deepmind/alphafold3"
+                target="_blank"
+                rel="noopener"
+                >AlphaFold 3 inference pipeline and weights terms (Google
+                DeepMind, 2026)</a
+              >
+            </li>
+            <li id="src-52">
+              <a
+                href="https://github.com/aqlaboratory/openfold-3"
+                target="_blank"
+                rel="noopener"
+                >OpenFold3-preview repository (AlQuraishi Lab and OpenFold
+                Consortium, 2025)</a
+              >
+            </li>
+            <li id="src-53">
+              <a href="https://boltz.bio/boltz2" target="_blank" rel="noopener"
+                >Boltz-2: Joint Structure and Binding Affinity Prediction (Boltz
+                team, MIT Jameel Clinic and Recursion, 2025)</a
+              >
+            </li>
+            <li id="src-54">
+              <a
+                href="https://arxiv.org/abs/2502.18864"
+                target="_blank"
+                rel="noopener"
+                >Accelerating scientific discovery with Co-Scientist (Google,
+                arXiv, 2025)</a
+              >
+            </li>
+            <li id="src-55">
+              <a
+                href="https://www.energy.gov/articles/energy-department-launches-genesis-mission-transform-american-science-and-innovation"
+                target="_blank"
+                rel="noopener"
+                >Energy Department Launches Genesis Mission (U.S. DOE, 2025)</a
+              >
+            </li>
+            <li id="src-56">
+              <a
+                href="https://docs.nvidia.com/cuda/cublas/#floating-point-emulation"
+                target="_blank"
+                rel="noopener"
+                >cuBLAS documentation: Floating Point Emulation (NVIDIA,
+                2026)</a
+              >
+            </li>
+            <li id="src-57">
+              <a
+                href="https://developer.nvidia.com/blog/unlocking-tensor-core-performance-with-floating-point-emulation-in-cublas"
+                target="_blank"
+                rel="noopener"
+                >Unlocking Tensor Core Performance with Floating Point Emulation
+                in cuBLAS (NVIDIA, 2025)</a
+              >
+            </li>
+            <li id="src-58">
+              <a
+                href="https://spack.readthedocs.io/en/latest/environments.html"
+                target="_blank"
+                rel="noopener"
+                >Environments (spack.yaml, spack.lock) (Spack documentation,
+                2026)</a
+              >
+            </li>
+            <li id="src-59">
+              <a
+                href="https://apptainer.org/docs/user/latest/gpu.html"
+                target="_blank"
+                rel="noopener"
+                >GPU and other device support (Apptainer documentation, 2026)</a
+              >
+            </li>
+            <li id="src-60">
+              <a
+                href="https://www.openondemand.org/software/jupyter"
+                target="_blank"
+                rel="noopener"
+                >Jupyter on Open OnDemand (Open OnDemand, 2026)</a
+              >
+            </li>
+            <li id="src-61">
+              <a
+                href="https://jobqueue.dask.org/en/latest"
+                target="_blank"
+                rel="noopener"
+                >Dask-Jobqueue documentation (Dask, 2026)</a
+              >
+            </li>
+            <li id="src-62">
+              <a
+                href="https://docs.ray.io/en/latest/cluster/vms/user-guides/community/slurm.html"
+                target="_blank"
+                rel="noopener"
+                >Deploying on Slurm (Ray documentation, 2026)</a
+              >
+            </li>
+          </ol>
+          <nav class="doc-pager" aria-label="Chapter navigation">
+            <a class="pager-prev" href="inference.html"
+              ><span>Previous</span>Inference at Scale</a
+            ><a class="pager-next" href="cloud.html"
+              ><span>Next</span>Cloud and Hybrid AI/HPC</a
+            >
+          </nav>
+        </article>
+      </div>
+    </main>
+
+    <footer class="section-dark">
+      <div class="container text-center">
+        <p class="footer-note">
+          2026 edition |
+          <a href="index.html" class="subtle-link">Field Manual</a> |
+          <a href="../index.html" class="subtle-link"
+            >charles-forsyth.github.io</a
+          >
+        </p>
+      </div>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+      document.querySelectorAll('pre code').forEach(function (el) {
+        if (el.className === 'c++') el.className = 'language-cpp';
+        else if (el.className && el.className.indexOf('language-') !== 0)
+          el.className = 'language-' + el.className;
+        hljs.highlightElement(el);
+      });
+    </script>
+  </body>
+</html>

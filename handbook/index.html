@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>HPC Field Manual | Charles Forsyth</title>
+    <title>AI + HPC Field Manual | Charles Forsyth</title>
     <meta
       name="description"
-      content="The HPC Field Manual: Linux, hardware, provisioning, software, code, cloud clusters, Slurm and training presentations from two decades of running research supercomputers."
+      content="The AI + HPC Field Manual, 2026 edition: accelerators, memory, interconnects, facilities, systems software, scheduling, training and inference at scale, scientific computing and research computing operations."
     />
     <link rel="canonical" href="https://charles-forsyth.github.io/handbook/" />
     <link rel="stylesheet" href="../style.css" />
@@ -21,18 +21,20 @@
       <div class="container">
         <div class="hero-content">
           <p class="doc-kicker">
-            <i class="fas fa-book-open"></i> Charles Forsyth
+            <i class="fas fa-book-open"></i> 2026 Edition
           </p>
-          <h1>The HPC Field Manual</h1>
-          <h2>Hard-won notes from the machine room floor</h2>
+          <h1>The AI + HPC Field Manual</h1>
+          <h2>GPUs, memory, fabrics and the science that runs on them</h2>
           <p>
-            Before the agents, there were the clusters. These are the working
-            notes I kept while building, provisioning and teaching on research
-            supercomputers at Corning and UC Riverside.
+            AI and high-performance computing are now one discipline. This
+            manual covers the whole stack as it stands today, from the
+            accelerator and its memory to the fabric, the facility, the
+            scheduler, and the training, inference and simulation workloads that
+            run on top.
           </p>
           <div class="cta-buttons">
-            <a href="#sections" class="btn btn-primary">Open the Manual</a>
-            <a href="../cv.html" class="btn btn-secondary">Career Record</a>
+            <a href="convergence.html" class="btn btn-primary">Start Reading</a>
+            <a href="glossary.html" class="btn btn-secondary">Glossary</a>
             <a href="../index.html" class="btn btn-secondary"
               ><i class="fas fa-arrow-left"></i> Main Site</a
             >
@@ -42,119 +44,211 @@
     </header>
 
     <main>
-      <section id="sections" class="section-light">
+      <section id="chapters" class="section-light">
         <div class="container">
           <p class="manual-intro">
-            The manual covers the full stack of high-performance computing, from
-            the cables and switches up through the scheduler, the software and
-            the researcher at the keyboard.
+            15 chapters in five parts. Every hardware figure is sourced to the
+            vendor, standards body or published result it came from, and each
+            chapter ends with its sources.
           </p>
+          <h3 class="manual-part">Foundations</h3>
           <div class="manual-grid">
-            <a class="manual-card" href="linux.html">
-              <i class="fab fa-linux"></i>
-              <h4>Linux Basics</h4>
+            <a class="manual-card" href="convergence.html">
+              <i class="fas fa-layer-group"></i>
+              <h4>The Convergence</h4>
               <p>
-                Files, permissions, processes, Vim, the shell, Screen, SSH,
-                archives and one-liners: the command-line foundation under every
-                supercomputer.
+                Why GPU-dense systems now serve both simulation and AI, how the
+                two scoreboards (TOP500 and MLPerf) differ, what the numeric
+                precision spectrum means for science, and how this manual is
+                organized.
               </p>
               <span>Read <i class="fas fa-arrow-right"></i></span>
             </a>
-            <a class="manual-card" href="hardware.html">
-              <i class="fas fa-server"></i>
-              <h4>HPC Hardware</h4>
+          </div>
+          <h3 class="manual-part">Hardware</h3>
+          <div class="manual-grid">
+            <a class="manual-card" href="accelerators.html">
+              <i class="fas fa-microchip"></i>
+              <h4>Accelerators: GPUs, TPUs and Beyond</h4>
               <p>
-                Ethernet, InfiniBand and Fibre Channel fabrics, cabling, storage
-                shelves and controllers, nodes, power and cooling.
+                GPU architecture for practitioners, NVIDIA, AMD, Intel and
+                Google TPU generations with datasheet specs, the FP64 question,
+                partitioning, form factors and a buying guide for research
+                centers.
               </p>
               <span>Read <i class="fas fa-arrow-right"></i></span>
             </a>
-            <a class="manual-card" href="provisioning.html">
+            <a class="manual-card" href="memory-storage.html">
+              <i class="fas fa-memory"></i>
+              <h4>Memory and Storage</h4>
+              <p>
+                How memory bandwidth and capacity now bound most AI and HPC
+                work, what HBM, unified memory and CXL actually give you, and
+                how to size parallel file systems, local NVMe, checkpoints and
+                data pipelines for a research center.
+              </p>
+              <span>Read <i class="fas fa-arrow-right"></i></span>
+            </a>
+            <a class="manual-card" href="interconnects.html">
               <i class="fas fa-network-wired"></i>
-              <h4>Provisioning</h4>
+              <h4>Interconnects: Scale-Up and Scale-Out</h4>
               <p>
-                Bare metal (DNS, PXE, TFTP, IPMI), provisioning systems,
-                identity (LDAP, Kerberos, NIS) and virtual machines across
-                clouds and hypervisors.
+                NVLink, UALink, PCIe, InfiniBand, Ethernet for AI and Slingshot
+                explained for practitioners, with collectives, congestion
+                control, testing commands and design guidance for 8, 64 and 512+
+                GPU clusters.
               </p>
               <span>Read <i class="fas fa-arrow-right"></i></span>
             </a>
-            <a class="manual-card" href="software.html">
-              <i class="fas fa-cubes"></i>
-              <h4>HPC Software</h4>
+            <a class="manual-card" href="facilities.html">
+              <i class="fas fa-temperature-low"></i>
+              <h4>Power, Cooling and Facilities</h4>
               <p>
-                System packages, BLAST, Conda environments, Jupyter notebooks
-                and scaling Python across the cluster with Dask.
+                What changed when GPU racks went from 10 kW to more than 130 kW,
+                and how to plan power, cooling, floor, water and procurement for
+                your first liquid-cooled systems.
               </p>
               <span>Read <i class="fas fa-arrow-right"></i></span>
             </a>
-            <a class="manual-card" href="code.html">
-              <i class="fas fa-code"></i>
-              <h4>Code</h4>
+          </div>
+          <h3 class="manual-part">Software and Operations</h3>
+          <div class="manual-grid">
+            <a class="manual-card" href="systems-software.html">
+              <i class="fas fa-layer-group"></i>
+              <h4>Systems Software and Provisioning</h4>
               <p>
-                The languages of the cluster, with working OpenMP and MPI
-                examples in C and Fortran and a primer on the Bash shebang.
+                How a 2026 AI + HPC cluster gets from powered-off hardware to a
+                usable, secure software environment: OS choices after CentOS,
+                Warewulf and friends, Redfish, the NVIDIA and AMD GPU stacks and
+                their compatibility rules, Spack, EasyBuild, Lmod, Python
+                tooling, containers and identity.
+              </p>
+              <span>Read <i class="fas fa-arrow-right"></i></span>
+            </a>
+            <a class="manual-card" href="scheduling.html">
+              <i class="fas fa-tasks"></i>
+              <h4>Scheduling and Orchestration</h4>
+              <p>
+                How to schedule GPUs well: Slurm GRES, binding, topology,
+                fairshare, QOS and preemption, working sbatch recipes for
+                PyTorch and MPI, Kubernetes with Kueue and the GPU Operator, GPU
+                sharing, Open OnDemand and workflow managers.
+              </p>
+              <span>Read <i class="fas fa-arrow-right"></i></span>
+            </a>
+            <a class="manual-card" href="observability.html">
+              <i class="fas fa-chart-line"></i>
+              <h4>Observability, Performance and Efficiency</h4>
+              <p>
+                GPU telemetry, job accounting, health checks, fabric monitoring,
+                profilers, the metrics that matter (MFU, SM activity, TTFT),
+                energy accounting, benchmarks and reliability at scale, with
+                working commands.
+              </p>
+              <span>Read <i class="fas fa-arrow-right"></i></span>
+            </a>
+            <a class="manual-card" href="operations.html">
+              <i class="fas fa-users"></i>
+              <h4>Research Computing Operations</h4>
+              <p>
+                Service and cost models, national resources (ACCESS, NAIRR,
+                INCITE and ALCC), facilitation and training, GPU onboarding,
+                CUI, HIPAA, export control and CMMC, capacity planning for AI
+                demand, staffing, sustainability and measuring impact.
+              </p>
+              <span>Read <i class="fas fa-arrow-right"></i></span>
+            </a>
+          </div>
+          <h3 class="manual-part">Workloads</h3>
+          <div class="manual-grid">
+            <a class="manual-card" href="training.html">
+              <i class="fas fa-brain"></i>
+              <h4>Training at Scale</h4>
+              <p>
+                How large models are actually trained on GPU clusters: where the
+                memory and time go, how DP, FSDP, TP, PP, CP and EP combine and
+                map onto hardware, which frameworks to use, and how to survive
+                failures at scale. Includes a tested FSDP2 skeleton and a
+                multi-node Slurm launch script.
+              </p>
+              <span>Read <i class="fas fa-arrow-right"></i></span>
+            </a>
+            <a class="manual-card" href="inference.html">
+              <i class="fas fa-rocket"></i>
+              <h4>Inference at Scale</h4>
+              <p>
+                How LLM inference actually works on GPUs, why decode is bound by
+                memory bandwidth, and how to size, serve, benchmark and budget
+                models on a research cluster with vLLM, SGLang, TensorRT-LLM and
+                friends.
+              </p>
+              <span>Read <i class="fas fa-arrow-right"></i></span>
+            </a>
+            <a class="manual-card" href="scientific-computing.html">
+              <i class="fas fa-atom"></i>
+              <h4>Scientific Computing in the AI Era</h4>
+              <p>
+                Where classic simulation stands in 2026, how to program and port
+                codes to GPUs, GPU-aware MPI, the major GPU applications, and
+                how AI surrogates, weather models and protein structure
+                predictors fit alongside them.
               </p>
               <span>Read <i class="fas fa-arrow-right"></i></span>
             </a>
             <a class="manual-card" href="cloud.html">
               <i class="fas fa-cloud"></i>
-              <h4>HPC in the Cloud</h4>
+              <h4>Cloud and Hybrid AI/HPC</h4>
               <p>
-                On-demand private clusters on AWS: built in ten minutes, scaled
-                on demand, billed by the minute and deleted when done.
+                Cluster tooling on AWS, Google Cloud and Azure, the GPU and TPU
+                instance families, capacity models from spot to reserved blocks,
+                neoclouds, cost guardrails for research, hybrid bursting from
+                campus Slurm, security, and how to reason about cloud versus
+                on-prem.
               </p>
               <span>Read <i class="fas fa-arrow-right"></i></span>
             </a>
-            <a class="manual-card" href="slurm.html">
-              <i class="fas fa-tasks"></i>
-              <h4>Slurm Submission Scripts</h4>
+          </div>
+          <h3 class="manual-part">Reference</h3>
+          <div class="manual-grid">
+            <a class="manual-card" href="linux.html">
+              <i class="fab fa-linux"></i>
+              <h4>Linux Essentials</h4>
               <p>
-                How to ask the scheduler for resources, including a full Spark
-                cluster spun up inside a Slurm allocation.
+                Files, permissions, processes, Vim, the shell, Screen, SSH and
+                archives: the 2019 reference chapter, still true.
               </p>
               <span>Read <i class="fas fa-arrow-right"></i></span>
             </a>
-            <a class="manual-card" href="presentations.html">
-              <i class="fas fa-chalkboard-teacher"></i>
-              <h4>Talks and Presentations</h4>
+            <a class="manual-card" href="glossary.html">
+              <i class="fas fa-book"></i>
+              <h4>Glossary</h4>
               <p>
-                Training decks on Python, Linux and the HPCC cluster, cloud HPC,
-                terminal recordings, and noteworthy talks by others.
-              </p>
-              <span>Read <i class="fas fa-arrow-right"></i></span>
-            </a>
-            <a class="manual-card" href="../cv.html">
-              <i class="fas fa-id-badge"></i>
-              <h4>Career Record</h4>
-              <p>
-                The detailed record: UC Riverside, Corning Incorporated,
-                education and United States Navy electronics training.
+                Plain definitions of more than 100 terms spanning accelerators,
+                memory, interconnects, scheduling, training, inference and
+                numerics, with links to the chapters that cover each one in
+                depth.
               </p>
               <span>Read <i class="fas fa-arrow-right"></i></span>
             </a>
           </div>
 
           <div class="manual-roadmap">
-            <h4>
-              <i class="fas fa-drafting-compass"></i> The original outline
-            </h4>
+            <h4><i class="fas fa-archive"></i> The 2019 edition</h4>
             <p>
-              The manual was planned in nine parts. Architecture, schedulers,
-              monitoring and metrics were outlined but never written up; their
-              modern successors live in the Flagship Innovations on the main
-              site.
+              The original HPC Field Manual, written in 2018-2019 for CPU
+              clusters, is preserved as written. The Linux chapter carries
+              forward into this edition.
             </p>
             <ul>
-              <li>Hardware</li>
-              <li>Provisioning</li>
-              <li>Architecture</li>
-              <li>Schedulers</li>
-              <li>Software</li>
-              <li>Scripts</li>
-              <li>HPC in the Cloud</li>
-              <li>Monitoring</li>
-              <li>Metrics</li>
+              <li><a href="2019/hardware.html">HPC Hardware</a></li>
+              <li><a href="2019/provisioning.html">Provisioning</a></li>
+              <li><a href="2019/software.html">HPC Software</a></li>
+              <li><a href="2019/code.html">Code</a></li>
+              <li><a href="2019/cloud.html">HPC in the Cloud</a></li>
+              <li><a href="2019/slurm.html">Slurm Submission Scripts</a></li>
+              <li>
+                <a href="2019/presentations.html">Talks and Presentations</a>
+              </li>
             </ul>
           </div>
         </div>
@@ -164,8 +258,8 @@
     <footer class="section-dark">
       <div class="container text-center">
         <p class="footer-note">
-          Originally published 2018-2019 on the legacy HPC documentation site,
-          preserved here in full. |
+          AI + HPC Field Manual, 2026 edition |
+          <a href="../cv.html" class="subtle-link">Charles Forsyth</a> |
           <a href="../index.html" class="subtle-link"
             >charles-forsyth.github.io</a
           >

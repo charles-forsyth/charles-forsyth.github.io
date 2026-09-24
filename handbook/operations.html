@@ -1,0 +1,1507 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Research Computing Operations | Field Manual</title>
+    <meta
+      name="description"
+      content="Service and cost models, national resources (ACCESS, NAIRR, INCITE and ALCC), facilitation and training, GPU onboarding, CUI, HIPAA, export control and CMMC, capacity planning for AI demand, staffing, sustainability and measuring impact."
+    />
+    <link
+      rel="canonical"
+      href="https://charles-forsyth.github.io/handbook/operations.html"
+    />
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="handbook.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
+    />
+  </head>
+  <body>
+    <header class="hero doc-hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="doc-kicker">
+            <i class="fas fa-users"></i> AI + HPC Field Manual
+          </p>
+          <h1>Research Computing Operations</h1>
+          <h2>
+            Running a research computing service people trust, fund and actually
+            use
+          </h2>
+          <div class="cta-buttons">
+            <a href="index.html" class="btn btn-secondary"
+              ><i class="fas fa-book-open"></i> Field Manual</a
+            >
+            <a href="../index.html" class="btn btn-secondary"
+              ><i class="fas fa-arrow-left"></i> Main Site</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+    <nav class="doc-nav" aria-label="Field manual chapters">
+      <div class="container">
+        <a href="convergence.html">Convergence</a
+        ><a href="accelerators.html">Accelerators</a
+        ><a href="memory-storage.html">Memory &amp; Storage</a
+        ><a href="interconnects.html">Interconnects</a
+        ><a href="facilities.html">Facilities</a
+        ><a href="systems-software.html">Systems Software</a
+        ><a href="scheduling.html">Scheduling</a
+        ><a href="observability.html">Observability</a
+        ><a href="operations.html" class="active" aria-current="page"
+          >Operations</a
+        ><a href="training.html">Training</a
+        ><a href="inference.html">Inference</a
+        ><a href="scientific-computing.html">Scientific Computing</a
+        ><a href="cloud.html">Cloud</a><a href="linux.html">Linux</a
+        ><a href="glossary.html">Glossary</a>
+      </div>
+    </nav>
+    <main class="section-light">
+      <div class="container doc-layout">
+        <aside class="doc-toc">
+          <h4><i class="fas fa-list"></i> On this page</h4>
+          <ul>
+            <li><a href="#service-models">Service Models</a></li>
+            <li><a href="#national-resources">National Resources</a></li>
+            <li>
+              <a href="#community-and-consortia">Community and Consortia</a>
+            </li>
+            <li>
+              <a href="#facilitation-and-training">Facilitation and Training</a>
+            </li>
+            <li>
+              <a href="#onboarding-researchers-to-gpus"
+                >Onboarding Researchers to GPUs</a
+              >
+            </li>
+            <li>
+              <a href="#security-and-compliance">Security and Compliance</a>
+            </li>
+            <li>
+              <a href="#cost-models-and-chargeback"
+                >Cost Models and Chargeback</a
+              >
+            </li>
+            <li>
+              <a href="#capacity-planning-for-ai-demand"
+                >Capacity Planning for AI Demand</a
+              >
+            </li>
+            <li><a href="#staffing-and-skills">Staffing and Skills</a></li>
+            <li><a href="#sustainability">Sustainability</a></li>
+            <li><a href="#measuring-impact">Measuring Impact</a></li>
+            <li><a href="#key-takeaways">Key Takeaways</a></li>
+          </ul>
+        </aside>
+        <article class="doc-content">
+          <p>
+            Hardware is the easy part. A research computing center succeeds or
+            fails on the things that never show up on a spec sheet: who can get
+            an account and how fast, what it costs a lab and how that cost is
+            justified, whether a second-year grad student can get a PyTorch job
+            running on a GPU in an afternoon, whether the controlled-data
+            project gets a yes from the security office, and whether the provost
+            believes the investment paid off. AI has raised the stakes on every
+            one of those questions. GPU demand now comes from departments that
+            never used the cluster before, it arrives faster than procurement
+            cycles, and it drags compliance and cost questions along with it.
+            This chapter is the operations playbook: service models, national
+            resources, facilitation, security and compliance, cost recovery,
+            capacity planning, staffing, sustainability and impact. Scheduler
+            mechanics are in
+            <a href="scheduling.html">Scheduling and Orchestration</a>, and
+            cloud options are in <a href="cloud.html">Cloud and Hybrid</a>.
+          </p>
+
+          <h2 id="service-models">Service Models</h2>
+          <p>
+            Almost every campus service is a blend of four models. The blend is
+            what matters, because each model attracts a different population and
+            creates a different political problem.
+          </p>
+
+          <h3 id="condo-model">Condo (Buy-In) Model</h3>
+          <p>
+            In a condo, faculty buy nodes with grant or startup funds, and the
+            center integrates them into a shared cluster with shared networking,
+            storage, software and staff. Purdue's Community Cluster Program is
+            the long-running example. Purdue affiliates have pooled purchases
+            since Q4 2006, the center handles patching, repairs, data center
+            space, power and cooling, and pooled funds give more vendor leverage
+            than individual labs would get.<a href="#src-1">[1]</a> At UC
+            Riverside, owned nodes get a priority-queueing model: the owning lab
+            has high-priority access, its CPU or GPU quota rises with the
+            capacity it bought, and idle owned capacity can run short jobs from
+            other registered users.<a href="#src-2">[2]</a>
+          </p>
+          <p>
+            Condos turn grant money into shared infrastructure and give faculty
+            a sense of ownership. The costs are heterogeneity (every procurement
+            brings a new node type), awkward queue structures, and relationship
+            overhead. Georgia Tech's PACE team cites exactly these problems
+            (unsustainable hardware heterogeneity, unstable queue structures,
+            stakeholder management overhead) in explaining why institutions move
+            away from pure condos.<a href="#src-3">[3]</a>
+          </p>
+
+          <h3 id="fee-for-service">Fee-for-Service and Consumption Models</h3>
+          <p>
+            In a consumption model, the center owns the hardware and researchers
+            pay for what they use, as core-hours, GPU-hours, or credits. Georgia
+            Tech's Phoenix transition is the best-documented recent case. PACE
+            bought all-new hardware during a data center move, ran a rate study
+            covering hardware, effort-weighted salaries, licenses and the data
+            center lease over a five-year period, converted faculty hardware
+            funds into compute credits, and introduced a free tier for all
+            faculty (68 credits per month plus the first TB of project storage).
+            A key decision was waiving facilities and administrative overhead
+            (then 57.8%) on the rate, which leadership accepted because it
+            removed a barrier to adoption.<a href="#src-3">[3]</a> Phoenix also
+            shows that consumption models need ongoing negotiation: after
+            faculty feedback, PACE extended refresh-credit lifetime from 5 to
+            7.5 years.<a href="#src-3">[3]</a>
+          </p>
+          <p>
+            Federal cost principles constrain how you set these rates. Under 2
+            CFR 200.468, costs of specialized service facilities, explicitly
+            including computing facilities, are allowable when charged on actual
+            usage through a rate schedule that does not discriminate between
+            federal and non-federal users, is designed to recover only aggregate
+            costs, and is adjusted at least biennially for over- or
+            under-recovery.<a href="#src-4">[4]</a> Involve your cost accounting
+            office before you publish a GPU-hour rate, not after.
+          </p>
+
+          <h3 id="subscription-and-allocation-models">
+            Subscriptions, Allocations and Free Tiers
+          </h3>
+          <p>
+            Many centers use a flat subscription or a centrally funded
+            allocation with quotas. UC Riverside's HPCC charges an annual lab
+            registration fee of $1,000 that covers everyone in the lab. CPU use
+            carries no extra charge but is capped at 384 cores per user and 768
+            per lab, and storage is sold in 10 TB units ($1,000 per year rented,
+            or $260 per year in support fees for lab-owned drives).<a
+              href="#src-2"
+              >[2]</a
+            >
+            Allocation models (proposals reviewed by a faculty committee) are
+            common for large central systems and mirror how national resources
+            work. A free or nearly free entry tier matters more than any other
+            design choice for adoption: it is how new faculty and students in
+            non-traditional disciplines discover they need the cluster at all.
+          </p>
+
+          <h3 id="cloud-credits">Cloud Credits and Brokered Cloud</h3>
+          <p>
+            Cloud is now a standard part of the service catalog rather than an
+            exception. CloudBank, an NSF-supported service, provides access to
+            commercial clouds for researchers and educators through ACCESS and
+            the NAIRR Pilot, with fast account provisioning, cross-cloud spend
+            monitoring, automated balance alerts and training material.<a
+              href="#src-5"
+              >[5]</a
+            >
+            Campus-negotiated agreements and vendor research credit programs
+            fill the rest. The operational lesson is to broker cloud through the
+            center, with guardrails, billing visibility and a clear exit path
+            for data, rather than letting every lab open an account on a
+            personal card. Architecture patterns are in
+            <a href="cloud.html">Cloud and Hybrid</a>.
+          </p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th>Who pays</th>
+                <th>Strength</th>
+                <th>Watch out for</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Condo</td>
+                <td>Faculty buy nodes</td>
+                <td>Leverages grants and startup funds</td>
+                <td>Heterogeneity, "my nodes" politics</td>
+              </tr>
+              <tr>
+                <td>Consumption</td>
+                <td>Per core-hour or GPU-hour</td>
+                <td>Fair, scales with use, simple hardware</td>
+                <td>
+                  Rate studies, F&amp;A treatment, budgeting uncertainty for PIs
+                </td>
+              </tr>
+              <tr>
+                <td>Subscription</td>
+                <td>Flat lab fee</td>
+                <td>Predictable, low friction</td>
+                <td>Heavy users subsidized by light users</td>
+              </tr>
+              <tr>
+                <td>Allocation</td>
+                <td>Institution (central)</td>
+                <td>Merit-based, no billing</td>
+                <td>Committee load, demand exceeding supply</td>
+              </tr>
+              <tr>
+                <td>Cloud credits</td>
+                <td>Grants, vendors, NSF programs</td>
+                <td>Elastic, newest hardware</td>
+                <td>Egress, runaway spend, data governance</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h2 id="national-resources">National Resources</h2>
+          <p>
+            No campus can meet all of its researchers' needs locally, and in
+            2026 most campuses cannot keep up with GPU demand alone. A good
+            center treats national resources as part of its own capacity and
+            helps researchers get there.
+          </p>
+
+          <h3 id="nsf-access">NSF ACCESS</h3>
+          <p>
+            ACCESS (Advanced Cyberinfrastructure Coordination Ecosystem:
+            Services and Support) is the NSF program that succeeded the 11-year
+            XSEDE project. NSF awarded $52 million over five years to five lead
+            institutions to run it, and it gives researchers and educators, with
+            or without grants, access to national systems at no cost to them.<a
+              href="#src-6"
+              >[6]</a
+            >
+            The program reports that in a given month more than 2.5 million jobs
+            are run on average by more than 4,000 researchers on more than 2,000
+            projects.<a href="#src-7">[7]</a>
+          </p>
+          <p>
+            ACCESS has four project types: <strong>Explore</strong> (evaluation,
+            small classes, code porting), <strong>Discover</strong> (modest
+            grant-funded research, Campus Champions, larger classes),
+            <strong>Accelerate</strong> (experienced mid-scale users) and
+            <strong>Maximize</strong> (large-scale work, reviewed in semi-annual
+            rounds).<a href="#src-8">[8]</a> The first three are awarded in
+            ACCESS Credits, which researchers exchange for specific resources at
+            fixed rates. A credit is set at about one core-hour or 1 GB of
+            storage, GPU-hours cost more credits, and credits arrive in two
+            halves: one at award and one after a progress report.<a
+              href="#src-9"
+              >[9]</a
+            >
+            Graduate students can be PIs on requests but need a signed advisor
+            letter.<a href="#src-10">[10]</a>
+          </p>
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Get every new faculty member an
+              Explore project in their first semester, even if the campus
+              cluster meets their needs today. It takes a one-page description,
+              it teaches them the national ecosystem, and it gives you an
+              overflow valve when your GPU queue is full the week before a
+              conference deadline.
+            </p>
+          </blockquote>
+
+          <h3 id="nairr">NAIRR: From Pilot to Operations Center</h3>
+          <p>
+            The National Artificial Intelligence Research Resource (NAIRR) is an
+            NSF-led effort to give the research and education community access
+            to computing, data, models, software, training and expertise for AI.
+            It was established as a pilot in 2024, working with other federal
+            agencies and non-governmental partners.<a href="#src-11">[11]</a>
+            NIH and DOE lead the NAIRR Secure element, which focuses on privacy-
+            and security-preserving infrastructure for controlled-access data.<a
+              href="#src-11"
+              >[11]</a
+            ><a href="#src-12">[12]</a>
+          </p>
+          <p>
+            The pilot is now moving to a sustained program. On September 1,
+            2026, NSF announced the NSF NAIRR Operations Center (NAIRR-OC), led
+            by the San Diego Supercomputer Center with the Texas Advanced
+            Computing Center. It will coordinate resource providers, run the
+            national NAIRR portal, provide user support and training, and lead
+            the transition of pilot functions into long-term infrastructure. The
+            same announcement says the pilot has supported over 800 research
+            projects with more than 25 private-sector partners.<a href="#src-13"
+              >[13]</a
+            >
+            SDSC describes the award as a $35 million cooperative agreement over
+            five years.<a href="#src-14">[14]</a> NSF has also announced State
+            and Regional AI Infrastructure Hubs, up to 10 of which will pool
+            regional AI computing and are encouraged to integrate with NAIRR.<a
+              href="#src-12"
+              >[12]</a
+            >
+            For campus centers, the practical message is to watch the NAIRR
+            portal for allocation calls, fold NAIRR into your consultation
+            scripts next to ACCESS, and look at whether a regional hub proposal
+            fits your institution.
+          </p>
+
+          <h3 id="doe-incite-and-alcc">DOE INCITE and ALCC</h3>
+          <p>
+            For the largest problems, DOE's leadership computing programs are
+            the path. INCITE is open to researchers from academia, government
+            laboratories and industry, and is the major means by which the
+            scientific community gains access to the nation's fastest
+            supercomputers. New INCITE proposals are accepted between mid-April
+            and June 15 (2026 dates for the 2027 call), and small Director's
+            Discretionary awards, typically less than 75,000 node-hours, are
+            available year-round for porting and benchmarking before a
+            proposal.<a href="#src-15">[15]</a><a href="#src-16">[16]</a> The
+            ASCR Leadership Computing Challenge (ALCC) targets DOE-mission,
+            high-risk high-payoff campaigns. Each year it makes 10% to 30% of
+            resources at NERSC, ALCF and OLCF available, on a July 1 to June 30
+            allocation year with renewals of up to two years.<a href="#src-17"
+              >[17]</a
+            >
+          </p>
+          <p>
+            NSF's Leadership-Class Computing Facility system, Horizon at TACC,
+            is coming online. TACC's user guide noted in July 2026 that Horizon
+            was still limited to internal users, so treat it as upcoming
+            capacity rather than something to plan current projects around.<a
+              href="#src-18"
+              >[18]</a
+            >
+          </p>
+
+          <h2 id="community-and-consortia">Community and Consortia</h2>
+          <p>
+            Research computing is a small profession, and much of what works was
+            learned from peers. Three communities repay the time:
+          </p>
+          <ul>
+            <li>
+              <strong>Campus Champions</strong>: a community of research
+              computing and data professionals who connect their campuses to
+              ACCESS and other cyberinfrastructure and help users get start-up
+              allocations. The program lists nearly 800 Champions at more than
+              360 institutions, runs affinity groups and an AI mentorship
+              program, and is funded in part by NSF as part of the NAIRR
+              Pilot.<a href="#src-19">[19]</a>
+            </li>
+            <li>
+              <strong>CaRCC (Campus Research Computing Consortium)</strong>:
+              runs the People Network, with tracks organized around role-based
+              "facings" (Researcher-, Data-, Systems-, and Strategy and
+              Policy-Facing) that each have email lists, Slack channels and
+              monthly calls.<a href="#src-20">[20]</a> CaRCC also maintains the
+              RCD Capabilities Model, developed with Internet2 and EDUCAUSE with
+              NSF support, which institutions use to assess and benchmark their
+              research computing and data support.<a href="#src-21">[21]</a>
+            </li>
+            <li>
+              <strong>US-RSE</strong>: the US Research Software Engineer
+              Association, for people who write research software. Relevant as
+              centers add RSE groups alongside facilitation and systems staff.<a
+                href="#src-22"
+                >[22]</a
+              >
+            </li>
+          </ul>
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Run the CaRCC Capabilities Model
+              assessment before you write a strategic plan or ask for a budget
+              increase. It gives you a structured inventory of gaps, and the
+              peer benchmarking is the most persuasive slide you can show a dean
+              who asks "what are other schools doing?"
+            </p>
+          </blockquote>
+
+          <h2 id="facilitation-and-training">Facilitation and Training</h2>
+          <p>
+            Facilitation is the difference between a cluster and a service.
+            CaRCC's professionalization work defines RCD facilitation as
+            advancing scholarly discovery by empowering researchers to better
+            use research computing and data resources themselves.<a
+              href="#src-23"
+              >[23]</a
+            >
+            In practice that means consultations, office hours, onboarding,
+            documentation, workshops and embedded collaboration on hard
+            projects.
+          </p>
+
+          <h3 id="carpentries-and-workshops">
+            The Carpentries and Workshop Programs
+          </h3>
+          <p>
+            The Carpentries is a nonprofit that teaches foundational coding and
+            data science skills to researchers, with Software, Data and Library
+            Carpentry lesson programs and a large volunteer instructor
+            community.<a href="#src-24">[24]</a> HPC Carpentry entered Lesson
+            Program Incubation in July 2024, a step toward joining the other
+            lesson programs.<a href="#src-25">[25]</a> Its
+            <em>Using High-Performance Computing Systems</em> (hpc-intro) lesson
+            is in beta, meaning it is ready for instructors outside the original
+            authors, and is designed to fit in about two days of teaching.<a
+              href="#src-26"
+              >[26]</a
+            >
+            Adapting hpc-intro to your cluster (your module names, your
+            partitions, your storage paths) is faster than writing an intro
+            course from scratch, and certified Carpentries instructors on staff
+            raise the quality of all your teaching.
+          </p>
+          <p>A workshop ladder that works on many campuses:</p>
+          <ol>
+            <li>Unix shell and SSH basics (Software Carpentry).</li>
+            <li>
+              Intro to the cluster: modules, storage, Slurm, job arrays
+              (hpc-intro adapted locally).
+            </li>
+            <li>
+              Python or R environments and containers (see
+              <a href="systems-software.html">Systems Software</a>).
+            </li>
+            <li>
+              GPU computing: requesting GPUs, checking utilization, data
+              loading, mixed precision.
+            </li>
+            <li>
+              Distributed training and scaling (see
+              <a href="training.html">Training at Scale</a>).
+            </li>
+            <li>
+              Serving and fine-tuning models on shared infrastructure (see
+              <a href="inference.html">Inference at Scale</a>).
+            </li>
+          </ol>
+
+          <h3 id="documentation">Documentation</h3>
+          <p>
+            Documentation is facilitation that scales. Treat it as a product.
+            Keep it in version control, give every page an owner and a review
+            date, and test every code sample against the current cluster after
+            each upgrade (Slurm and CUDA upgrades break copied scripts quietly).
+            Organize it by task ("run a multi-GPU PyTorch job", "move 50 TB from
+            a sequencer") rather than by system component, and put a working
+            example at the top of every page. Your ticket system shows you which
+            pages to write next: if the same question appears three times in a
+            month, it needs a page.
+          </p>
+
+          <h2 id="onboarding-researchers-to-gpus">
+            Onboarding Researchers to GPUs
+          </h2>
+          <p>
+            AI has brought a new user population: people who know PyTorch well
+            but have never seen a batch scheduler, and domain scientists who
+            want to fine-tune a model they found online. Most of them arrive
+            with a laptop or cloud notebook workflow. A structured on-ramp saves
+            both sides a lot of time.
+          </p>
+          <h3 id="a-gpu-onboarding-path">A GPU Onboarding Path</h3>
+          <ol>
+            <li>
+              <strong>Intake conversation.</strong> What model, what data size,
+              what framework, what deadline, and is any data regulated? Ten
+              minutes here routes the user to the right partition, a MIG slice,
+              a national resource, or a secure enclave.
+            </li>
+            <li>
+              <strong>Interactive start.</strong> Open OnDemand Jupyter on a
+              small GPU or MIG instance, with a curated environment that already
+              has CUDA-matched PyTorch.
+            </li>
+            <li>
+              <strong>First batch job.</strong> A template single-GPU sbatch
+              script (see <a href="scheduling.html">Scheduling</a>) with
+              <code>nvidia-smi</code> logging and checkpointing built in.
+            </li>
+            <li>
+              <strong>Efficiency check.</strong> Review the first real job's GPU
+              utilization with the user. Low utilization is almost always a
+              data-loading or CPU-count problem, not a need for more GPUs (see
+              <a href="observability.html">Observability</a>).
+            </li>
+            <li>
+              <strong>Scale up deliberately.</strong> Multi-GPU and multi-node
+              only after single-GPU efficiency is good. Point them to ACCESS or
+              NAIRR if their demand exceeds what local policy allows.
+            </li>
+          </ol>
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Gate access to the big GPU partition
+              behind a short efficiency conversation, not a quiz. Researchers
+              accept "show us one job at decent utilization on a single GPU and
+              we will open the 8-GPU queue" because it is obviously fair, and it
+              catches most wasted-GPU problems before they happen.
+            </p>
+          </blockquote>
+
+          <h2 id="security-and-compliance">Security and Compliance</h2>
+          <p>
+            Regulated data used to be a niche for a few medical and defense
+            labs. AI has changed that: clinical notes, genomic data, imaging,
+            student records and export-controlled engineering data are all now
+            candidate training data. Centers need a clear answer for each
+            category and a secure environment for the ones the general cluster
+            cannot take. What follows is an operator's orientation, not legal
+            advice. Your research compliance, export control and information
+            security offices make the determinations.
+          </p>
+
+          <h3 id="cui-and-nist-800-171">CUI and NIST SP 800-171</h3>
+          <p>
+            Controlled Unclassified Information (CUI) is information that law,
+            regulation or government-wide policy requires to be safeguarded or
+            disseminated under controls, but that is not classified. The program
+            was established by Executive Order 13556, is overseen by NARA's
+            Information Security Oversight Office, and is implemented through 32
+            CFR Part 2002.<a href="#src-27">[27]</a> For non-federal systems
+            such as university clusters, the baseline is NIST SP 800-171.
+            Revision 3 was published in May 2024 and supersedes Revision 2. Its
+            requirement families include access control, audit and
+            accountability, configuration management, identification and
+            authentication, incident response, media protection, system and
+            communications protection, system and information integrity, and
+            supply chain risk management, among others.<a href="#src-28"
+              >[28]</a
+            >
+          </p>
+          <p>
+            The revision number your contract names matters. The DoD's CMMC
+            program rule incorporates NIST SP 800-171 <em>Revision 2</em> by
+            reference for Level 2, and Level 3 adds selected requirements from
+            SP 800-172.<a href="#src-29">[29]</a> So a DoD-sponsored project may
+            be assessed against Rev. 2, while other agencies or newer agreements
+            may point at Rev. 3. Build your enclave to satisfy both, and map
+            controls explicitly.
+          </p>
+
+          <h3 id="cmmc-status">CMMC Status for Research</h3>
+          <p>
+            CMMC has two rules. The program rule (32 CFR Part 170) took effect
+            December 16, 2024, and the DFARS acquisition rule that puts CMMC
+            requirements into contracts took effect November 10, 2025.<a
+              href="#src-30"
+              >[30]</a
+            >
+            Implementation has four phases. Phase 1 began on the DFARS rule's
+            effective date, with Level 1 and Level 2 self-assessments as
+            conditions of award. Phase 2 begins one calendar year later, adding
+            Level 2 third-party (C3PAO) certification for applicable contracts.
+            Phases 3 and 4 follow at one-year intervals, with Phase 4 applying
+            CMMC to all applicable DoD solicitations and contracts, including
+            option periods.<a href="#src-31">[31]</a> By that schedule, Phase 2
+            starts on November 10, 2026.
+          </p>
+          <p>
+            For universities the critical point is fundamental research. In the
+            DFARS rule's response to comments, DoD states that fundamental
+            research, as defined in NSDD 189, is published and broadly shared
+            and so cannot be safeguarded as either FCI or CUI. If fundamental
+            research has the potential to become CUI, though, CMMC requirements
+            apply once the data becomes CUI. The rule also recognizes an enclave
+            approach, where the contractor defines the systems used for a DoD
+            contract and the assessment scope in advance.<a href="#src-30"
+              >[30]</a
+            >
+            That is exactly why most research universities build a scoped CUI
+            enclave instead of trying to certify the whole campus.
+          </p>
+
+          <h3 id="hipaa-and-nih-controlled-access-data">
+            HIPAA and NIH Controlled-Access Data
+          </h3>
+          <p>
+            The HIPAA Security Rule sets national standards for protecting
+            electronic protected health information created, received, used or
+            maintained by a covered entity or business associate. It requires
+            administrative, physical and technical safeguards for
+            confidentiality, integrity and availability, and is codified at 45
+            CFR Part 160 and Subparts A and C of Part 164.<a href="#src-32"
+              >[32]</a
+            >
+            University clusters usually take HIPAA data under a documented
+            institutional arrangement with the health system, with security
+            controls, access reviews and audit logging that the privacy office
+            has approved.
+          </p>
+          <p>
+            NIH genomic data is the category most likely to surprise a
+            general-purpose center. Since January 25, 2025, users of data from
+            NIH Controlled-Access Data Repositories under the Genomic Data
+            Sharing Policy are expected to secure it according to the NIH
+            Security Best Practices for Users of Controlled-Access Data. Those
+            practices are built on NIST SP 800-171, and users who analyze data
+            on third-party systems or cloud providers must attest that the
+            system complies (ISO/IEC 27001/27002 is accepted as an
+            equivalent).<a href="#src-33">[33]</a> Effective February 25, 2026,
+            the expectation extends to data from all NIH controlled-access
+            repositories under new or renewed agreements.<a href="#src-34"
+              >[34]</a
+            >
+            In practice, many dbGaP-style projects now need the same enclave as
+            CUI.
+          </p>
+
+          <h3 id="export-controls-basics">Export Controls Basics</h3>
+          <p>
+            Export controls (EAR and ITAR) regulate not just shipping items
+            abroad but releasing controlled technology or technical data to
+            foreign persons in the United States. Such a release is a "deemed
+            export" to the person's home country.<a href="#src-35">[35]</a> Most
+            university work avoids this through the fundamental research
+            exclusion. Under 15 CFR 734.8, technology or software that arises
+            during or results from fundamental research and is intended to be
+            published is not subject to the EAR. Once researchers accept
+            publication restrictions or decide to keep results proprietary, that
+            protection is lost (with narrow exceptions for brief patent and
+            sponsor-proprietary reviews).<a href="#src-36">[36]</a> For the
+            operator, this means three things. Your export control office, not
+            the systems team, decides whether a project is controlled.
+            Controlled projects need access controls based on citizenship or
+            authorization, which a shared cluster cannot enforce. And input data
+            such as licensed engineering models may be controlled even when the
+            research itself is fundamental.
+          </p>
+
+          <h3 id="secure-enclaves">Secure Enclaves for Research</h3>
+          <p>
+            The durable pattern is a separate, scoped secure environment rather
+            than retrofitting the main cluster. Examples of how centers present
+            this: the University of Michigan's Armis2 is an HPC cluster
+            described as suitable for export-controlled and HIPAA-regulated
+            data, while making clear that users remain responsible for the
+            security and compliance of their sensitive code and data.<a
+              href="#src-37"
+              >[37]</a
+            >
+            NIST now publishes HPC-specific guidance for building such systems.
+            SP 800-223 (February 2024) gives an HPC reference architecture,
+            threat analysis and security posture,<a href="#src-38">[38]</a> and
+            SP 800-234 (May 2026) is an HPC Security Overlay that starts from
+            the SP 800-53B moderate baseline and tailors 60 SP 800-53 controls
+            with HPC-specific guidance.<a href="#src-39">[39]</a> Trusted CI,
+            which works with NSF cyberinfrastructure operators on their
+            cybersecurity programs, runs a Regulated Research Community of
+            Practice with monthly webinars.<a href="#src-40">[40]</a>
+          </p>
+          <p>Features a research enclave should plan for:</p>
+          <ul>
+            <li>
+              Separate login and data transfer paths with MFA, and no direct
+              internet egress from compute.
+            </li>
+            <li>
+              Project-based isolation (per-project groups, storage and ideally
+              partitions or reservations), so data from one agreement never
+              shares a filesystem namespace with another.
+            </li>
+            <li>
+              Centralized logging with retention that matches your strictest
+              agreement, plus regular access reviews.
+            </li>
+            <li>
+              A system security plan and control mapping that covers NIST
+              800-171 Rev. 2 and Rev. 3, HIPAA and NIH requirements in one
+              matrix.
+            </li>
+            <li>
+              GPUs inside the enclave. Researchers will not accept a secure
+              environment that cannot train models, and if the enclave has no
+              GPUs, they will find riskier alternatives.
+            </li>
+          </ul>
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Price the secure enclave honestly and
+              fund the compliance staff time centrally if you can. If a CUI or
+              dbGaP project costs a PI several times what the open cluster
+              costs, they will try to argue their data out of scope, and your
+              security office will be the one saying no in a hallway.
+            </p>
+          </blockquote>
+
+          <h2 id="cost-models-and-chargeback">Cost Models and Chargeback</h2>
+
+          <h3 id="building-a-rate">Building a Rate</h3>
+          <p>
+            Whether you charge or not, you need to know your fully loaded cost
+            per unit of service. Georgia Tech's approach is a reasonable
+            template: sum hardware (the portion the center funds),
+            effort-weighted salaries, software licenses and facility costs,
+            divide over the service life, and account for planned maintenance
+            downtime and historical utilization.<a href="#src-3">[3]</a> Set GPU
+            rates per GPU-hour on the GPU type, not per node, and decide
+            deliberately how CPU and memory bundled with a GPU are charged.
+            Otherwise a one-GPU job that takes every core on the node will be
+            billed for one-eighth of it. If the rate is charged to federal
+            awards, the 2 CFR 200.468 rules apply: usage-based,
+            non-discriminatory, aggregate cost recovery, and review at least
+            every two years.<a href="#src-4">[4]</a>
+          </p>
+
+          <h3 id="showback-before-chargeback">Showback Before Chargeback</h3>
+          <p>
+            Even under a fully subsidized model, send PIs a regular usage
+            statement. Georgia Tech provided monthly showback statements during
+            its Phoenix migration before charges began.<a href="#src-3">[3]</a>
+            Slurm makes this straightforward. Partition
+            <code>TRESBillingWeights</code> define the billing TRES that feeds
+            fairshare and billing limits,<a href="#src-41">[41]</a> and
+            <code>sreport</code> produces utilization reports by account and
+            user from the accounting database rollups, for any TRES including
+            GPUs.<a href="#src-42">[42]</a>
+          </p>
+          <pre><code class="language-bash"># Monthly GPU-hours by account and user (example dates; TRES name must match AccountingStorageTRES)
+sreport -T gres/gpu cluster AccountUtilizationByUser start=2026-09-01 end=2026-10-01 -t hours
+
+# Billing-weighted usage, the same number fairshare uses
+sreport -T billing cluster AccountUtilizationByUser start=2026-09-01 end=2026-10-01 -t hours
+</code></pre>
+          <p>
+            Open XDMoD adds a web portal on top of scheduler logs, with metrics
+            such as job counts, CPU hours, wait time and wall time broken down
+            by any level of your organizational hierarchy, plus an optional job
+            performance module.<a href="#src-43">[43]</a> Georgia Tech used it
+            for exactly this reporting role.<a href="#src-3">[3]</a>
+          </p>
+
+          <h2 id="capacity-planning-for-ai-demand">
+            Capacity Planning for AI Demand
+          </h2>
+          <p>
+            AI demand does not grow on the smooth curve that CPU demand used to
+            follow. It jumps when a new model family makes a technique
+            accessible, when a department hires three ML faculty, or when a
+            course moves its labs onto the cluster. Plan in terms of signals and
+            options, not a single forecast.
+          </p>
+
+          <h3 id="signals-to-watch">Signals to Watch</h3>
+          <ul>
+            <li>
+              <strong>Queue wait by partition and job size</strong>, especially
+              GPU partitions. Rising median wait for one-GPU jobs means you are
+              short of entry-level capacity. Rising wait for multi-node jobs
+              means you are short of contiguous blocks.
+            </li>
+            <li>
+              <strong>Pending GPU demand</strong> (GPU-hours requested by
+              pending jobs) alongside allocated GPU-hours. Slurm 26.05 exposes
+              GPU allocation statistics through its OpenMetrics endpoints, which
+              makes these series easy to collect.<a href="#src-44">[44]</a>
+            </li>
+            <li>
+              <strong>Actual GPU utilization of running jobs.</strong> Buying
+              more GPUs to serve jobs that use a fraction of the ones they hold
+              is the most expensive mistake in this field (see
+              <a href="observability.html">Observability</a>).
+            </li>
+            <li>
+              <strong>Pipeline signals</strong>: faculty hiring plans, large
+              grant submissions with compute budgets, new degree programs, and
+              consultation intake notes. Ask the research office to flag
+              proposals that mention GPUs.
+            </li>
+            <li>
+              <strong>Offload volume</strong>: how many projects you sent to
+              ACCESS, NAIRR, INCITE or cloud, and why.
+            </li>
+          </ul>
+
+          <h3 id="planning-levers">Planning Levers</h3>
+          <p>
+            Your levers, roughly from fastest to slowest: policy changes (caps,
+            QOS, sharing via MIG), better efficiency (onboarding, data
+            pipelines), brokering national resources and cloud, condo buy-ins
+            timed with grant cycles, and central procurement. Hardware lead
+            times, and above all facility power and cooling, are the slow
+            constraints (see
+            <a href="facilities.html">Power, Cooling and Facilities</a>). NSF's
+            Campus Cyberinfrastructure (CC*) program, which includes a
+            "Computing and the Computing Continuum" area, is one external source
+            for campus compute investments.<a href="#src-45">[45]</a> When you
+            plan GPU purchases, favor configurations that can serve both
+            simulation and AI (double-precision capable parts where your
+            simulation codes need them, enough memory per GPU for current
+            models), and plan the network for multi-node training from day one.
+            Retrofitting a fabric costs far more than building it right (see
+            <a href="interconnects.html">Interconnects</a>).
+          </p>
+
+          <h2 id="staffing-and-skills">Staffing and Skills</h2>
+          <p>
+            The skills mix has shifted. A 2015-era center could run on systems
+            administrators and a couple of consultants. A 2026 center that
+            supports AI needs people who can tune NCCL on a fabric, build
+            containers with the right CUDA stack, run Kubernetes for inference
+            endpoints, write a system security plan, teach PyTorch performance,
+            and talk to a dean about cost recovery. CaRCC's facings model is a
+            practical way to map these roles: researcher-facing (facilitation,
+            consulting, training), data-facing (data management, transfer,
+            workflows), systems-facing (infrastructure and operations), and
+            strategy and policy-facing (leadership, governance, compliance).<a
+              href="#src-23"
+              >[23]</a
+            ><a href="#src-20">[20]</a>
+          </p>
+          <p>
+            Recruiting and retention are constant problems, because the same
+            skills command industry salaries. CaRCC's RCD Professionalization
+            working group publishes an HR job family matrix that institutions
+            have customized to classify RCD roles properly. It also ran a 2025
+            RCD Workforce Survey, with initial results published in the PEARC26
+            proceedings, which provides data on titles, responsibilities and
+            compensation.<a href="#src-23">[23]</a> Use these when you work with
+            HR on job descriptions and salary bands. A reclassification backed
+            by community data is far easier to win than one argued from
+            anecdotes.
+          </p>
+          <ul>
+            <li>
+              <strong>Grow your own.</strong> Student employees and interns
+              trained on real operations work are the best pipeline most centers
+              have.
+            </li>
+            <li>
+              <strong>Cross-train on the new stack.</strong> Give systems staff
+              time to learn Kubernetes and GPU operations, and give facilitators
+              time to learn modern ML frameworks, before the demand arrives.
+            </li>
+            <li>
+              <strong>Share staff.</strong> Joint positions with departments or
+              institutes (an embedded ML facilitator, an RSE funded partly on
+              grants) extend reach and build faculty allies.
+            </li>
+            <li>
+              <strong>Use the community.</strong> Campus Champions, CaRCC tracks
+              and US-RSE provide peer support that no single center can
+              replicate.
+            </li>
+          </ul>
+
+          <h2 id="sustainability">Sustainability</h2>
+          <p>
+            Sustainability has two meanings in research computing, and centers
+            need to manage both.
+          </p>
+          <h3 id="energy-and-environmental-sustainability">
+            Energy and Environmental Sustainability
+          </h3>
+          <p>
+            Data center energy is now a public policy issue. A DOE-commissioned
+            LBNL report found that U.S. data centers used about 4.4% of total
+            U.S. electricity in 2023 (176 TWh), and projected 6.7% to 12% by
+            2028.<a href="#src-46">[46]</a> University GPU clusters are a small
+            part of that, but campus sustainability offices and utilities notice
+            every new megawatt. Practical steps: measure energy per job where
+            you can, use scheduler power saving for idle nodes (Slurm 26.05
+            allows <code>SuspendTime</code> per node, so power-save policy can
+            differ by pool),<a href="#src-44">[44]</a> and set efficiency
+            expectations in policy. Slurm's GPU energy accounting plugin
+            (<code>acct_gather_energy/gpu</code>) currently supports only AMD's
+            RSMI library, so NVIDIA sites usually collect GPU power through
+            DCGM-based monitoring instead.<a href="#src-47">[47]</a>
+            Facility-level measures such as liquid cooling and heat reuse are
+            covered in
+            <a href="facilities.html">Power, Cooling and Facilities</a>.
+          </p>
+          <h3 id="financial-and-organizational-sustainability">
+            Financial and Organizational Sustainability
+          </h3>
+          <p>
+            The harder problem is keeping the service funded through refresh
+            cycles. Hardware bought with one-time money becomes an unfunded
+            liability in five years. Guard against that by building refresh into
+            the base budget or the rate, keeping a written service catalog with
+            defined levels, documenting governance (a faculty advisory committee
+            with a real charter), and avoiding single-person dependencies for
+            critical systems. Condo contributions, consumption revenue, national
+            resources and grants should add up to a model that survives the
+            departure of the one champion who got it started.
+          </p>
+
+          <h2 id="measuring-impact">Measuring Impact</h2>
+          <p>
+            Leadership asks one question in many forms: what did we get for this
+            money? Answer with a mix of operational and research outcome
+            metrics, collected continuously rather than assembled in a panic
+            before budget season.
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Metrics</th>
+                <th>Where the data comes from</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Usage</td>
+                <td>
+                  Active users, PIs, departments; core-hours and GPU-hours
+                  delivered
+                </td>
+                <td>Slurm accounting, sreport, XDMoD</td>
+              </tr>
+              <tr>
+                <td>Service quality</td>
+                <td>
+                  Queue wait by partition, ticket response and resolution time,
+                  uptime
+                </td>
+                <td>Scheduler logs, ticket system, monitoring</td>
+              </tr>
+              <tr>
+                <td>Efficiency</td>
+                <td>
+                  GPU utilization of running jobs, fraction of idle allocated
+                  GPUs
+                </td>
+                <td>DCGM and job-level telemetry</td>
+              </tr>
+              <tr>
+                <td>Reach</td>
+                <td>
+                  Workshop attendance, new departments, first-time users,
+                  national allocations obtained
+                </td>
+                <td>Registration, account records, ACCESS and NAIRR records</td>
+              </tr>
+              <tr>
+                <td>Research outcomes</td>
+                <td>
+                  Publications and grants that used the resource, graduates
+                  trained
+                </td>
+                <td>
+                  Acknowledgment tracking, grant office data, annual surveys
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            The return-on-investment literature supports making this case. The
+            Coalition for Academic Scientific Computation (CASC) has run an ROI
+            working group that surveys member institutions and reports on the
+            value of research computing and data services,<a href="#src-48"
+              >[48]</a
+            >
+            and a PEARC 2022 review of historical studies concludes that
+            existing literature shows strong evidence of good return on
+            investment in cyberinfrastructure.<a href="#src-49">[49]</a> Local
+            evidence persuades more than national studies, so ask for an
+            acknowledgment statement in publications, link accounts to grant
+            records with your research office, and survey PIs every year.
+            Georgia Tech showed its post-transition impact directly from
+            scheduler data: larger maximum job sizes, more CPU time consumed per
+            group, and much shorter wait times.<a href="#src-3">[3]</a> Provosts
+            believe numbers like those.
+          </p>
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Keep a running file of research
+              stories: one paragraph, one figure, one named PI, one sentence on
+              what the cluster made possible. When the budget call comes, twelve
+              good stories and a utilization chart will do more than any
+              cost-per-core-hour comparison.
+            </p>
+          </blockquote>
+
+          <h2 id="key-takeaways">Key Takeaways</h2>
+          <ul>
+            <li>
+              Every campus service mixes condo, consumption, subscription,
+              allocation and cloud models. Design the blend deliberately,
+              include a free entry tier, and follow 2 CFR 200.468 when charging
+              federal awards.
+            </li>
+            <li>
+              Treat ACCESS, NAIRR (now moving from pilot to the SDSC-led NAIRR
+              Operations Center), INCITE and ALCC as extensions of local
+              capacity, and get researchers onto them early.
+            </li>
+            <li>
+              Facilitation is the service. Use Carpentries lessons including HPC
+              Carpentry's hpc-intro, treat documentation as a product, and build
+              a structured GPU onboarding path with an efficiency check.
+            </li>
+            <li>
+              Build a scoped secure enclave with GPUs for CUI, HIPAA, NIH
+              controlled-access and export-controlled work. CMMC Level 2
+              references NIST SP 800-171 Rev. 2 while Rev. 3 is current, CMMC
+              Phase 2 begins November 10, 2026, and fundamental research stays
+              out of scope until data becomes CUI.
+            </li>
+            <li>
+              Know your fully loaded cost per GPU-hour, bill GPUs by weight in
+              Slurm, and send showback statements before any chargeback.
+            </li>
+            <li>
+              Plan AI capacity from signals (wait times, pending GPU demand,
+              utilization, hiring and grant pipelines), and remember that power
+              and cooling are the slowest constraint.
+            </li>
+            <li>
+              Staff for the new stack using CaRCC's facings and job family
+              resources, and fund refresh and governance so the service outlives
+              its founders.
+            </li>
+            <li>
+              Measure usage, service quality, efficiency, reach and research
+              outcomes continuously, and pair the numbers with research stories.
+            </li>
+          </ul>
+
+          <h2 id="sources">Sources</h2>
+          <ol class="sources">
+            <li id="src-1">
+              <a
+                href="https://www.rcac.purdue.edu/services/communityclusters"
+                target="_blank"
+                rel="noopener"
+                >Community Cluster Program (Purdue University Rosen Center for
+                Advanced Computing)</a
+              >
+            </li>
+            <li id="src-2">
+              <a
+                href="https://hpcc.ucr.edu/about/overview/access/"
+                target="_blank"
+                rel="noopener"
+                >HPCC Access and Recharging Rates (UC Riverside High-Performance
+                Computing Center, 2026)</a
+              >
+            </li>
+            <li id="src-3">
+              <a
+                href="https://dl.acm.org/doi/fullHtml/10.1145/3491418.3530767"
+                target="_blank"
+                rel="noopener"
+                >Jezghani et al., Phoenix: The Revival of Research Computing and
+                the Launch of the New Cost Model at Georgia Tech (PEARC 2022,
+                ACM)</a
+              >
+            </li>
+            <li id="src-4">
+              <a
+                href="https://www.ecfr.gov/current/title-2/section-200.468"
+                target="_blank"
+                rel="noopener"
+                >2 CFR 200.468 Specialized service facilities (eCFR)</a
+              >
+            </li>
+            <li id="src-5">
+              <a
+                href="https://www.cloudbank.org/"
+                target="_blank"
+                rel="noopener"
+                >CloudBank (NSF-supported cloud access service)</a
+              >
+            </li>
+            <li id="src-6">
+              <a
+                href="https://access-ci.org/about/"
+                target="_blank"
+                rel="noopener"
+                >About ACCESS (NSF ACCESS program)</a
+              >
+            </li>
+            <li id="src-7">
+              <a href="https://access-ci.org/" target="_blank" rel="noopener"
+                >ACCESS home page (NSF ACCESS program, 2026)</a
+              >
+            </li>
+            <li id="src-8">
+              <a
+                href="https://allocations.access-ci.org/project-types"
+                target="_blank"
+                rel="noopener"
+                >ACCESS Allocations: Project Types (NSF ACCESS)</a
+              >
+            </li>
+            <li id="src-9">
+              <a
+                href="https://allocations.access-ci.org/exchange_calculator"
+                target="_blank"
+                rel="noopener"
+                >ACCESS Credit Exchange and Calculator (NSF ACCESS)</a
+              >
+            </li>
+            <li id="src-10">
+              <a
+                href="https://allocations.access-ci.org/prepare-requests"
+                target="_blank"
+                rel="noopener"
+                >ACCESS Allocations: Prepare Requests (NSF ACCESS)</a
+              >
+            </li>
+            <li id="src-11">
+              <a
+                href="https://www.nsf.gov/focus-areas/ai/nairr"
+                target="_blank"
+                rel="noopener"
+                >National Artificial Intelligence Research Resource (NSF)</a
+              >
+            </li>
+            <li id="src-12">
+              <a href="https://nairrpilot.org/" target="_blank" rel="noopener"
+                >NAIRR Pilot portal (NSF and partners, 2026)</a
+              >
+            </li>
+            <li id="src-13">
+              <a
+                href="https://www.nsf.gov/cise/updates/nsf-establishes-operations-center-national-artificial"
+                target="_blank"
+                rel="noopener"
+                >NSF establishes operations center for the National Artificial
+                Intelligence Research Resource (NSF, September 2026)</a
+              >
+            </li>
+            <li id="src-14">
+              <a
+                href="https://www.sdsc.edu/news/2026/PR20260901-NAIRR-OC.html"
+                target="_blank"
+                rel="noopener"
+                >Strengthening America's AI Ecosystem with the Launch of the NSF
+                NAIRR Operations Center (SDSC, September 2026)</a
+              >
+            </li>
+            <li id="src-15">
+              <a
+                href="https://doeleadershipcomputing.org/about/"
+                target="_blank"
+                rel="noopener"
+                >About INCITE (DOE Leadership Computing)</a
+              >
+            </li>
+            <li id="src-16">
+              <a
+                href="https://doeleadershipcomputing.org/"
+                target="_blank"
+                rel="noopener"
+                >INCITE program home: 2027 call dates (DOE Leadership Computing,
+                2026)</a
+              >
+            </li>
+            <li id="src-17">
+              <a
+                href="https://science.osti.gov/ascr/Facilities/Accessing-ASCR-Facilities/ALCC"
+                target="_blank"
+                rel="noopener"
+                >ASCR Leadership Computing Challenge (DOE Office of Science)</a
+              >
+            </li>
+            <li id="src-18">
+              <a
+                href="https://docs.tacc.utexas.edu/hpc/horizon/"
+                target="_blank"
+                rel="noopener"
+                >Horizon User Guide (TACC, 2026)</a
+              >
+            </li>
+            <li id="src-19">
+              <a
+                href="https://campuschampions.org/"
+                target="_blank"
+                rel="noopener"
+                >Campus Champions (2026)</a
+              >
+            </li>
+            <li id="src-20">
+              <a
+                href="https://carcc.org/people-network/"
+                target="_blank"
+                rel="noopener"
+                >CaRCC People Network (Campus Research Computing Consortium)</a
+              >
+            </li>
+            <li id="src-21">
+              <a
+                href="https://carcc.org/products_resources/tools-capsmodel"
+                target="_blank"
+                rel="noopener"
+                >CaRCC Capabilities Model (Campus Research Computing
+                Consortium)</a
+              >
+            </li>
+            <li id="src-22">
+              <a href="https://us-rse.org/" target="_blank" rel="noopener"
+                >US Research Software Engineer Association (US-RSE)</a
+              >
+            </li>
+            <li id="src-23">
+              <a
+                href="https://carcc.org/products_resources/rcd-professionalization/"
+                target="_blank"
+                rel="noopener"
+                >RCD Professionalization Working Group (Campus Research
+                Computing Consortium)</a
+              >
+            </li>
+            <li id="src-24">
+              <a href="https://carpentries.org/" target="_blank" rel="noopener"
+                >The Carpentries</a
+              >
+            </li>
+            <li id="src-25">
+              <a
+                href="https://carpentries.org/blog/2024/07/hpc-carpentry-incubation-announcement/"
+                target="_blank"
+                rel="noopener"
+                >HPC Carpentry Enters Lesson Program Incubation (The
+                Carpentries, July 2024)</a
+              >
+            </li>
+            <li id="src-26">
+              <a
+                href="https://carpentries-incubator.github.io/hpc-intro/"
+                target="_blank"
+                rel="noopener"
+                >Using High-Performance Computing Systems, hpc-intro lesson
+                (Carpentries Incubator)</a
+              >
+            </li>
+            <li id="src-27">
+              <a
+                href="https://www.archives.gov/cui/about"
+                target="_blank"
+                rel="noopener"
+                >About Controlled Unclassified Information (National Archives,
+                ISOO)</a
+              >
+            </li>
+            <li id="src-28">
+              <a
+                href="https://csrc.nist.gov/pubs/sp/800/171/r3/final"
+                target="_blank"
+                rel="noopener"
+                >NIST SP 800-171 Rev. 3, Protecting Controlled Unclassified
+                Information in Nonfederal Systems and Organizations (NIST, May
+                2024)</a
+              >
+            </li>
+            <li id="src-29">
+              <a
+                href="https://www.ecfr.gov/current/title-32/section-170.14"
+                target="_blank"
+                rel="noopener"
+                >32 CFR 170.14 CMMC Model (eCFR)</a
+              >
+            </li>
+            <li id="src-30">
+              <a
+                href="https://www.govinfo.gov/content/pkg/FR-2025-09-10/html/2025-17359.htm"
+                target="_blank"
+                rel="noopener"
+                >DFARS: Assessing Contractor Implementation of Cybersecurity
+                Requirements, final rule, 90 FR 43560 (DoD, September 10,
+                2025)</a
+              >
+            </li>
+            <li id="src-31">
+              <a
+                href="https://www.ecfr.gov/current/title-32/section-170.3"
+                target="_blank"
+                rel="noopener"
+                >32 CFR 170.3 Applicability, CMMC implementation phases
+                (eCFR)</a
+              >
+            </li>
+            <li id="src-32">
+              <a
+                href="https://www.hhs.gov/hipaa/for-professionals/security/index.html"
+                target="_blank"
+                rel="noopener"
+                >The HIPAA Security Rule (HHS)</a
+              >
+            </li>
+            <li id="src-33">
+              <a
+                href="https://grants.nih.gov/grants/guide/notice-files/NOT-OD-24-157.html"
+                target="_blank"
+                rel="noopener"
+                >NOT-OD-24-157: Implementation Update for Data Management and
+                Access Practices Under the Genomic Data Sharing Policy (NIH,
+                July 2024)</a
+              >
+            </li>
+            <li id="src-34">
+              <a
+                href="https://grants.nih.gov/policy-and-compliance/policy-topics/sharing-policies/accessing-data/requirements"
+                target="_blank"
+                rel="noopener"
+                >Requirements for NIH Controlled-Access Data Repositories and
+                Users (NIH)</a
+              >
+            </li>
+            <li id="src-35">
+              <a
+                href="https://research.ucsb.edu/export-control/export-control-faqs"
+                target="_blank"
+                rel="noopener"
+                >Export Control FAQs (UC Santa Barbara Office of Research)</a
+              >
+            </li>
+            <li id="src-36">
+              <a
+                href="https://www.ecfr.gov/current/title-15/section-734.8"
+                target="_blank"
+                rel="noopener"
+                >15 CFR 734.8 Technology or software that arises during, or
+                results from, fundamental research (eCFR)</a
+              >
+            </li>
+            <li id="src-37">
+              <a
+                href="https://documentation.its.umich.edu/arc-hpc/armis2"
+                target="_blank"
+                rel="noopener"
+                >Armis2 HPC Cluster User Guide (University of Michigan ARC)</a
+              >
+            </li>
+            <li id="src-38">
+              <a
+                href="https://csrc.nist.gov/pubs/sp/800/223/final"
+                target="_blank"
+                rel="noopener"
+                >NIST SP 800-223, High-Performance Computing Security:
+                Architecture, Threat Analysis, and Security Posture (NIST,
+                February 2024)</a
+              >
+            </li>
+            <li id="src-39">
+              <a
+                href="https://csrc.nist.gov/pubs/sp/800/234/final"
+                target="_blank"
+                rel="noopener"
+                >NIST SP 800-234, High-Performance Computing (HPC) Security
+                Overlay (NIST, May 2026)</a
+              >
+            </li>
+            <li id="src-40">
+              <a
+                href="https://www.trustedci.org/"
+                target="_blank"
+                rel="noopener"
+                >Trusted CI, the NSF Cybersecurity Center of Excellence</a
+              >
+            </li>
+            <li id="src-41">
+              <a
+                href="https://slurm.schedmd.com/tres.html"
+                target="_blank"
+                rel="noopener"
+                >Trackable RESources (TRES) (SchedMD, Slurm 26.05
+                documentation)</a
+              >
+            </li>
+            <li id="src-42">
+              <a
+                href="https://slurm.schedmd.com/sreport.html"
+                target="_blank"
+                rel="noopener"
+                >sreport man page (SchedMD, Slurm 26.05 documentation)</a
+              >
+            </li>
+            <li id="src-43">
+              <a href="https://open.xdmod.org/" target="_blank" rel="noopener"
+                >Open XDMoD documentation (University at Buffalo CCR)</a
+              >
+            </li>
+            <li id="src-44">
+              <a
+                href="https://slurm.schedmd.com/release_notes.html"
+                target="_blank"
+                rel="noopener"
+                >Release Notes for Slurm 26.05 (SchedMD, 2026)</a
+              >
+            </li>
+            <li id="src-45">
+              <a
+                href="https://www.nsf.gov/funding/opportunities/cc-campus-cyberinfrastructure"
+                target="_blank"
+                rel="noopener"
+                >Campus Cyberinfrastructure (CC*) program (NSF)</a
+              >
+            </li>
+            <li id="src-46">
+              <a
+                href="https://www.energy.gov/articles/doe-releases-new-report-evaluating-increase-electricity-demand-data-centers"
+                target="_blank"
+                rel="noopener"
+                >DOE Releases New Report Evaluating Increase in Electricity
+                Demand from Data Centers (U.S. DOE, December 2024)</a
+              >
+            </li>
+            <li id="src-47">
+              <a
+                href="https://slurm.schedmd.com/slurm.conf.html"
+                target="_blank"
+                rel="noopener"
+                >slurm.conf man page (SchedMD, Slurm 26.05 documentation)</a
+              >
+            </li>
+            <li id="src-48">
+              <a
+                href="https://casc.org/researchpub/return-on-investment"
+                target="_blank"
+                rel="noopener"
+                >Return on Investment Working Group (Coalition for Academic
+                Scientific Computation)</a
+              >
+            </li>
+            <li id="src-49">
+              <a
+                href="https://www.mendeley.com/catalogue/0e8fd211-88d6-3c3d-a7ab-087b4464a18d/"
+                target="_blank"
+                rel="noopener"
+                >Stewart et al., Return on Investment in Research
+                Cyberinfrastructure: State of the Art (PEARC 2022)</a
+              >
+            </li>
+          </ol>
+          <nav class="doc-pager" aria-label="Chapter navigation">
+            <a class="pager-prev" href="observability.html"
+              ><span>Previous</span>Observability, Performance and Efficiency</a
+            ><a class="pager-next" href="training.html"
+              ><span>Next</span>Training at Scale</a
+            >
+          </nav>
+        </article>
+      </div>
+    </main>
+
+    <footer class="section-dark">
+      <div class="container text-center">
+        <p class="footer-note">
+          2026 edition |
+          <a href="index.html" class="subtle-link">Field Manual</a> |
+          <a href="../index.html" class="subtle-link"
+            >charles-forsyth.github.io</a
+          >
+        </p>
+      </div>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+      document.querySelectorAll('pre code').forEach(function (el) {
+        if (el.className === 'c++') el.className = 'language-cpp';
+        else if (el.className && el.className.indexOf('language-') !== 0)
+          el.className = 'language-' + el.className;
+        hljs.highlightElement(el);
+      });
+    </script>
+  </body>
+</html>

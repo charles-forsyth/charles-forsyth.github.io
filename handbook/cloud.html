@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>HPC in the Cloud | HPC Field Manual | Charles Forsyth</title>
+    <title>Cloud and Hybrid AI/HPC | Field Manual</title>
     <meta
       name="description"
-      content="On-demand private clusters on AWS in ten minutes"
+      content="Cluster tooling on AWS, Google Cloud and Azure, the GPU and TPU instance families, capacity models from spot to reserved blocks, neoclouds, cost guardrails for research, hybrid bursting from campus Slurm, security, and how to reason about cloud versus on-prem."
     />
     <link
       rel="canonical"
@@ -28,10 +28,10 @@
       <div class="container">
         <div class="hero-content">
           <p class="doc-kicker">
-            <i class="fas fa-cloud"></i> HPC Field Manual
+            <i class="fas fa-cloud"></i> AI + HPC Field Manual
           </p>
-          <h1>HPC in the Cloud</h1>
-          <h2>On-demand private clusters on AWS in ten minutes</h2>
+          <h1>Cloud and Hybrid AI/HPC</h1>
+          <h2>Renting GPU clusters by the hour, and knowing when not to</h2>
           <div class="cta-buttons">
             <a href="index.html" class="btn btn-secondary"
               ><i class="fas fa-book-open"></i> Field Manual</a
@@ -43,75 +43,1457 @@
         </div>
       </div>
     </header>
-    <nav class="doc-nav" aria-label="Field manual sections">
+    <nav class="doc-nav" aria-label="Field manual chapters">
       <div class="container">
-        <a href="linux.html">Linux Basics</a
-        ><a href="hardware.html">HPC Hardware</a
-        ><a href="provisioning.html">Provisioning</a
-        ><a href="software.html">HPC Software</a><a href="code.html">Code</a
-        ><a href="cloud.html" class="active" aria-current="page"
-          >HPC in the Cloud</a
-        ><a href="slurm.html">Slurm Submission Scripts</a
-        ><a href="presentations.html">Talks and Presentations</a
-        ><a href="../cv.html">Career</a>
+        <a href="convergence.html">Convergence</a
+        ><a href="accelerators.html">Accelerators</a
+        ><a href="memory-storage.html">Memory &amp; Storage</a
+        ><a href="interconnects.html">Interconnects</a
+        ><a href="facilities.html">Facilities</a
+        ><a href="systems-software.html">Systems Software</a
+        ><a href="scheduling.html">Scheduling</a
+        ><a href="observability.html">Observability</a
+        ><a href="operations.html">Operations</a
+        ><a href="training.html">Training</a
+        ><a href="inference.html">Inference</a
+        ><a href="scientific-computing.html">Scientific Computing</a
+        ><a href="cloud.html" class="active" aria-current="page">Cloud</a
+        ><a href="linux.html">Linux</a><a href="glossary.html">Glossary</a>
       </div>
     </nav>
     <main class="section-light">
-      <div class="container doc-layout doc-layout-single">
+      <div class="container doc-layout">
+        <aside class="doc-toc">
+          <h4><i class="fas fa-list"></i> On this page</h4>
+          <ul>
+            <li><a href="#cloud-hpc-in-2026">Cloud HPC in 2026</a></li>
+            <li>
+              <a href="#cluster-tooling">Cluster Tooling on the Big Three</a>
+            </li>
+            <li><a href="#gpu-instance-families">GPU Instance Families</a></li>
+            <li>
+              <a href="#tpus-on-google-cloud">TPU Pods on Google Cloud</a>
+            </li>
+            <li>
+              <a href="#capacity-models">Capacity Models: Getting the GPUs</a>
+            </li>
+            <li><a href="#neoclouds">Neoclouds and GPU Specialists</a></li>
+            <li>
+              <a href="#cost-management-and-guardrails"
+                >Cost Management and Guardrails for Research</a
+              >
+            </li>
+            <li>
+              <a href="#hybrid-bursting">Hybrid Bursting from Campus Slurm</a>
+            </li>
+            <li>
+              <a href="#security-and-compliance"
+                >Security and Compliance in the Cloud</a
+              >
+            </li>
+            <li>
+              <a href="#cloud-versus-on-prem"
+                >When Cloud Beats On-Prem, and Vice Versa</a
+              >
+            </li>
+            <li><a href="#key-takeaways">Key Takeaways</a></li>
+          </ul>
+        </aside>
         <article class="doc-content">
-          <h2 id="aws">AWS</h2>
-          <p>High Performance Computing in the Cloud with AWS.</p>
-          <ul>
-            <li>
-              This is work I have done at the High Performance Computing Center
-              at the University of California, Riverside.
-            </li>
-          </ul>
-          <h3 id="introduction">Introduction</h3>
           <p>
-            Getting started using HPCC and Amazon Web Service (AWS) to quickly
-            create an on-demand cluster private to you.
-          </p>
-          <h3 id="aws-cluster-benefits">AWS Cluster benefits.</h3>
-          <ul>
-            <li>Build a private cluster in 10 min.</li>
-            <li>
-              Any number of nodes, auto scaling (up and down), limit 20 to start
-            </li>
-            <li>
-              Any type of compute nodes
-              <ul>
-                <li>High memory</li>
-                <li>High CPU single/multi node</li>
-                <li>GPUs</li>
-              </ul>
-            </li>
-            <li>For only as long as you need it - delete when done</li>
-            <li>Familiar interface and job scheduler</li>
-            <li>
-              Build as many of these clusters as you need (even at the same
-              time)
-            </li>
-            <li>Pay for only the time you use it - per/min billing</li>
-          </ul>
-          <h4 id="example-cast">Example Cast</h4>
-          <p>This is an simple example of a full HPC workflow using AWS.</p>
-          <p class="embed-missing">
-            <i class="fas fa-archive"></i> The original asciinema recording is
-            no longer hosted at its source.
+            The 2019 edition of this chapter showed how to stand up an AWS
+            cluster in ten minutes with CfnCluster. The ten-minute part is still
+            true; the tools are better and the instance types are
+            unrecognizable. What changed more is the economics. In 2019 the
+            cloud question was mostly about elastic CPU capacity. In 2026 it is
+            about access to scarce GPUs and high-bandwidth fabrics, and about
+            whether a research group can get 64 GPUs next Tuesday for a week
+            without buying a rack. This chapter covers the cluster tooling on
+            the three large providers, the GPU and TPU offerings with specs
+            taken from the providers' own documentation, the capacity models
+            that decide whether you actually get the hardware, cost and security
+            guardrails for research, hybrid bursting from a campus cluster, and
+            how to think through cloud versus on-prem without inventing prices.
+            The author runs UC Riverside's Ursa Major research computing service
+            on Google Cloud with Cluster Toolkit, so some of the field notes
+            come from operating exactly this kind of environment.
           </p>
 
-          <h4 id="presentation-on-hpcc-aws-cluster">
-            Presentation on HPCC AWS Cluster
-          </h4>
-          <div class="embed">
-            <iframe
-              src="https://docs.google.com/presentation/d/e/2PACX-1vRSC8sz2w5nLCE1pUJgLU37HDnA9Hgxgy_LHI2zqugFoNNn9BtD6nqiVfEVYKYXoiHRK8h37MrsOpN7/embed?start=false&loop=false&delayms=3000"
-              title="Google Slides presentation"
-              loading="lazy"
-              allowfullscreen
-            ></iframe>
-          </div>
+          <h2 id="cloud-hpc-in-2026">Cloud HPC in 2026</h2>
+          <p>
+            Every large provider now sells three different things that are easy
+            to confuse:
+          </p>
+          <ul>
+            <li>
+              <strong>Raw instances.</strong> GPU virtual machines or bare-metal
+              nodes you provision yourself. Maximum control, maximum operational
+              work.
+            </li>
+            <li>
+              <strong>Cluster toolkits and managed schedulers.</strong> Tools
+              that assemble instances, a scheduler (almost always Slurm), shared
+              storage and networking into something that looks like a campus
+              cluster. This is where most research computing teams should start.
+            </li>
+            <li>
+              <strong>Managed AI platforms.</strong> Training and inference
+              services, notebooks and model endpoints. Useful, but they hide the
+              cluster and are harder to bring into a standard research workflow
+              or a Slurm accounting system.
+            </li>
+          </ul>
+          <p>
+            Cloud is also now a genuine capability tier, not just an overflow
+            tank. Microsoft's Eagle system (ND H100 v5, NVIDIA InfiniBand NDR)
+            was No. 5 on the November 2025 TOP500 list and No. 7 in June 2026 at
+            561.20 PFlop/s HPL.<a href="#src-1">[1]</a> Very large GPU systems
+            exist in the cloud; the question for a university is how to get a
+            useful slice of one at a price and with a process that fits research
+            funding.
+          </p>
+
+          <h2 id="cluster-tooling">Cluster Tooling on the Big Three</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Provider</th>
+                <th>Tool</th>
+                <th>Model</th>
+                <th>Scheduler</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>AWS</td>
+                <td>AWS ParallelCluster</td>
+                <td>
+                  Open-source CLI you run; builds the cluster in your account
+                </td>
+                <td>Slurm (and AWS Batch)</td>
+              </tr>
+              <tr>
+                <td>AWS</td>
+                <td>AWS Parallel Computing Service (PCS)</td>
+                <td>Managed service; AWS operates the Slurm controller</td>
+                <td>Slurm</td>
+              </tr>
+              <tr>
+                <td>Google Cloud</td>
+                <td>Cluster Toolkit</td>
+                <td>Open-source blueprints compiled to Terraform and Packer</td>
+                <td>Slurm; GKE for Kubernetes workloads</td>
+              </tr>
+              <tr>
+                <td>Azure</td>
+                <td>Azure CycleCloud / CycleCloud Workspace for Slurm</td>
+                <td>Orchestration VM plus Marketplace template</td>
+                <td>Slurm (and others via CycleCloud)</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3 id="aws-parallelcluster-and-pcs">
+            AWS ParallelCluster and AWS PCS
+          </h3>
+          <p>
+            <strong>AWS ParallelCluster</strong> is the descendant of
+            CfnCluster. You describe the cluster in YAML, run
+            <code>pcluster create-cluster</code>, and it builds a head node and
+            auto-scaling Slurm queues in your account. Version 3.16.1 (September
+            2026) ships Slurm 25.11.8.<a href="#src-2">[2]</a> Queues support a
+            <code>CapacityType</code> of <code>ONDEMAND</code>,
+            <code>SPOT</code> or <code>CAPACITY_BLOCK</code>; with Capacity
+            Blocks, <code>MinCount</code> must equal
+            <code>MaxCount</code> because the reserved instances are managed as
+            static nodes.<a href="#src-3">[3]</a> A sketch of a GPU queue
+            alongside a spot CPU queue (IDs and counts are placeholders):
+          </p>
+          <pre><code class="language-yaml">Region: us-east-1                      # example
+Image:
+  Os: alinux2023
+HeadNode:
+  InstanceType: c5.xlarge
+  Networking:
+    SubnetId: subnet-0123456789abcdef0   # placeholder
+  Ssh:
+    KeyName: mykey                       # placeholder
+Scheduling:
+  Scheduler: slurm
+  SlurmQueues:
+    - Name: cpu-spot
+      CapacityType: SPOT
+      ComputeResources:
+        - Name: c5-2xl
+          InstanceType: c5.2xlarge
+          MinCount: 0
+          MaxCount: 20
+      Networking:
+        SubnetIds:
+          - subnet-0123456789abcdef0
+    - Name: gpu
+      CapacityType: ONDEMAND
+      ComputeResources:
+        - Name: p5
+          InstanceType: p5.48xlarge
+          MinCount: 0
+          MaxCount: 2
+          Efa:
+            Enabled: true
+      Networking:
+        SubnetIds:
+          - subnet-0123456789abcdef0
+        PlacementGroup:
+          Enabled: true
+</code></pre>
+          <p>
+            <strong>AWS Parallel Computing Service (PCS)</strong> is the managed
+            alternative: AWS runs the Slurm controller, and you define compute
+            node groups and queues through the service API; PCS launches the EC2
+            instances in your account and bills you for them.<a href="#src-4"
+              >[4]</a
+            >
+            PCS publishes a support calendar for Slurm versions; as of September
+            2026 it supports Slurm 25.05, 25.11 and 26.05, with each version
+            carrying an end-of-life date.<a href="#src-5">[5]</a> Choose
+            ParallelCluster when you want full control and are comfortable
+            owning the head node; choose PCS when you would rather not patch and
+            upgrade a Slurm controller yourself.
+          </p>
+
+          <h3 id="google-cloud-cluster-toolkit">
+            Google Cloud Cluster Toolkit
+          </h3>
+          <p>
+            Cluster Toolkit (formerly HPC Toolkit) is open-source. A
+            <strong>blueprint</strong> is a YAML file that lists
+            <strong>modules</strong> (network, file systems, Slurm node sets and
+            partitions, login and controller nodes). The
+            <code>gcluster</code> tool compiles a blueprint into a deployment
+            folder of Terraform and Packer configuration, which you then
+            deploy.<a href="#src-6">[6]</a> The basic lifecycle is
+            <code>gcluster create</code>, <code>gcluster deploy</code> and
+            <code>gcluster destroy</code>.<a href="#src-7">[7]</a> An
+            abbreviated Slurm blueprint in the style of the project's
+            <code>hpc-slurm.yaml</code> example:<a href="#src-8">[8]</a>
+          </p>
+          <pre><code class="language-yaml">blueprint_name: research-slurm
+vars:
+  project_id: my-research-project        # placeholder
+  deployment_name: research-slurm
+  region: us-central1
+  zone: us-central1-a
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network
+    source: modules/network/vpc
+
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [network]
+    settings:
+      local_mount: /home
+
+  - id: compute_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      node_count_dynamic_max: 20
+      machine_type: h3-standard-88
+      enable_spot_vm: true               # example: preemptible CPU partition
+
+  - id: compute_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [compute_nodeset]
+    settings:
+      partition_name: compute
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
+    settings:
+      machine_type: n2-standard-4
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use: [network, compute_partition, homefs, slurm_login]
+</code></pre>
+          <p>
+            Node sets expose the capacity knobs directly:
+            <code>enable_spot_vm</code>, <code>reservation_name</code> for a
+            specific reservation, and <code>dws_flex</code> to provision through
+            Dynamic Workload Scheduler flex-start (with a maximum run duration
+            that should not exceed one week).<a href="#src-9">[9]</a> Google
+            also ships GPU-focused blueprints such as
+            <code>ml-slurm.yaml</code> and GKE blueprints for A3 machines.<a
+              href="#src-10"
+              >[10]</a
+            >
+          </p>
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Treat blueprints as code. Keep them
+              in Git, parameterize project and region, and review changes like
+              any other pull request. At UCR we can rebuild a cluster from the
+              blueprint when something drifts, which is far cheaper than
+              debugging a hand-modified one. The deployment folder is generated
+              output; do not hand-edit it and then lose the changes on the next
+              <code>gcluster create</code>.
+            </p>
+          </blockquote>
+
+          <h3 id="azure-cyclecloud">Azure CycleCloud</h3>
+          <p>
+            Azure CycleCloud is an orchestration application that runs on a VM
+            in your subscription and manages clusters.
+            <strong>Azure CycleCloud Workspace for Slurm</strong> is a
+            Marketplace solution template that deploys the network, a CycleCloud
+            VM, a shared file system for home directories, optional Azure
+            Managed Lustre, and preconfigured Slurm clusters with PMIx v4, Pyxis
+            and enroot for containerized jobs.<a href="#src-11">[11]</a>
+            Microsoft's own caveat is worth repeating: deploying the template
+            needs no prior Azure or Slurm knowledge, but operating and
+            customizing it does.<a href="#src-11">[11]</a>
+          </p>
+
+          <h2 id="gpu-instance-families">GPU Instance Families</h2>
+          <p>
+            All three providers sell 8-GPU HGX-style nodes with a dedicated RDMA
+            fabric, and all now sell GB200 NVL72 rack-scale systems carved into
+            smaller VMs. The table uses each provider's documentation for GPU
+            type, count, memory and scale-out network bandwidth. Scale-up
+            (NVLink) details are in
+            <a href="interconnects.html">Interconnects</a>, and the GPUs
+            themselves in <a href="accelerators.html">Accelerators</a>.
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Instance / machine type</th>
+                <th>GPUs</th>
+                <th>GPU memory (per instance)</th>
+                <th>Scale-out network</th>
+                <th>Source</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>AWS p5.48xlarge</td>
+                <td>8x H100</td>
+                <td>640 GB HBM3</td>
+                <td>3,200 Gbps EFA (v2)</td>
+                <td><a href="#src-12">[12]</a></td>
+              </tr>
+              <tr>
+                <td>AWS p5e.48xlarge</td>
+                <td>8x H200</td>
+                <td>1,128 GB HBM3e</td>
+                <td>3,200 Gbps EFA (v2)</td>
+                <td><a href="#src-12">[12]</a></td>
+              </tr>
+              <tr>
+                <td>AWS p5en.48xlarge</td>
+                <td>8x H200</td>
+                <td>1,128 GB HBM3e</td>
+                <td>3,200 Gbps EFA (v3)</td>
+                <td><a href="#src-12">[12]</a></td>
+              </tr>
+              <tr>
+                <td>AWS p6-b200.48xlarge</td>
+                <td>8x Blackwell</td>
+                <td>1,432 GB HBM3e</td>
+                <td>3.2 Tbps EFA (v4)</td>
+                <td><a href="#src-13">[13]</a></td>
+              </tr>
+              <tr>
+                <td>AWS P6-B300</td>
+                <td>8x Blackwell Ultra</td>
+                <td>2.1 TB</td>
+                <td>6.4 Tbps EFA</td>
+                <td><a href="#src-13">[13]</a></td>
+              </tr>
+              <tr>
+                <td>AWS u-p6e-gb200x36 UltraServer</td>
+                <td>36x Blackwell (GB200)</td>
+                <td>6,660 GB</td>
+                <td>14,400 Gbps aggregate EFA</td>
+                <td><a href="#src-13">[13]</a></td>
+              </tr>
+              <tr>
+                <td>Google A3 High / Mega / Edge</td>
+                <td>8x H100 80GB</td>
+                <td>80 GB HBM3 per GPU</td>
+                <td>1,000 / 1,800 / 600 Gbps</td>
+                <td><a href="#src-14">[14]</a><a href="#src-15">[15]</a></td>
+              </tr>
+              <tr>
+                <td>Google A3 Ultra (a3-ultragpu-8g)</td>
+                <td>8x H200</td>
+                <td>141 GB HBM3e per GPU</td>
+                <td>3,600 Gbps total</td>
+                <td><a href="#src-14">[14]</a><a href="#src-15">[15]</a></td>
+              </tr>
+              <tr>
+                <td>Google A4 (a4-highgpu-8g)</td>
+                <td>8x B200</td>
+                <td>1,440 GB HBM3e</td>
+                <td>3,600 Gbps total</td>
+                <td><a href="#src-16">[16]</a><a href="#src-15">[15]</a></td>
+              </tr>
+              <tr>
+                <td>Google A4X (a4x-highgpu-4g)</td>
+                <td>4x GB200</td>
+                <td>744 GB HBM3e</td>
+                <td>2,000 Gbps total</td>
+                <td><a href="#src-16">[16]</a><a href="#src-15">[15]</a></td>
+              </tr>
+              <tr>
+                <td>Google A4X Max (a4x-maxgpu-4g-metal)</td>
+                <td>4x GB300 (B300)</td>
+                <td>1,116 GB HBM3e</td>
+                <td>3,600 Gbps total</td>
+                <td><a href="#src-16">[16]</a><a href="#src-15">[15]</a></td>
+              </tr>
+              <tr>
+                <td>Azure ND H100 v5 (Standard_ND96isr_H100_v5)</td>
+                <td>8x H100 80GB</td>
+                <td>80 GB per GPU</td>
+                <td>8x 400 Gbps InfiniBand (3.2 Tbps)</td>
+                <td><a href="#src-17">[17]</a></td>
+              </tr>
+              <tr>
+                <td>Azure ND H200 v5 (Standard_ND96isr_H200_v5)</td>
+                <td>8x H200</td>
+                <td>141 GB per GPU</td>
+                <td>8x 400 Gbps InfiniBand (3.2 Tbps)</td>
+                <td><a href="#src-18">[18]</a></td>
+              </tr>
+              <tr>
+                <td>Azure ND GB200 v6 (Standard_ND128isr_NDR_GB200_v6)</td>
+                <td>4x Blackwell (GB200)</td>
+                <td>192 GiB per GPU</td>
+                <td>4x 400 Gb/s InfiniBand</td>
+                <td><a href="#src-19">[19]</a></td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Notes on the table. Google's figures for A3 Ultra, A4 and A4X Max
+            are maximum total instance bandwidth; the dedicated GPU-to-GPU
+            portion on A3 Ultra and A4 is eight ConnectX-7 NICs at 3,200 Gbps,
+            and on A4X Max it is four ConnectX-8 SuperNICs at 3,200 Gbps.<a
+              href="#src-15"
+              >[15]</a
+            >
+            The A3 Mega, High and Edge types use GPUDirect-TCPXO or
+            GPUDirect-TCPX rather than RDMA, which matters for tightly coupled
+            MPI codes.<a href="#src-15">[15]</a> AWS lists P6-B300 as 1.5x the
+            GPU memory and 2x the network bandwidth of P6-B200.<a href="#src-13"
+              >[13]</a
+            >
+            Azure's GB200 v6 page writes the Quantum-2 CX7 InfiniBand links as
+            "400 GB/s"; the same page gives 28.8 Tb/s of scale-out networking
+            per 72-GPU rack, which works out to 400 Gb/s per GPU, so the table
+            uses Gb/s.<a href="#src-19">[19]</a>
+          </p>
+          <p>
+            Two practical points. First, the cloud network name tells you what
+            the fabric really is: AWS EFA is AWS's own RDMA transport
+            (libfabric), Azure ND uses real InfiniBand, and Google uses
+            RoCE-based GPUDirect RDMA on A3 Ultra and newer. MPI and NCCL builds
+            must match the fabric; use the provider's images or documented
+            stacks. Second, rack-scale NVL72 systems are sold as groups of VMs:
+            AWS P6e-GB200 instances are only available in UltraServers, Azure
+            describes a GB200 NVL72 rack as 18 ND GB200 v6 VMs, and Google's A4X
+            scales NVLink up to 72 GPUs in one domain.<a href="#src-13">[13]</a
+            ><a href="#src-19">[19]</a><a href="#src-16">[16]</a>
+          </p>
+
+          <h2 id="tpus-on-google-cloud">TPU Pods on Google Cloud</h2>
+          <p>
+            Google's TPUs are the main non-NVIDIA option at pod scale in a
+            public cloud. They are programmed through JAX, PyTorch/XLA or
+            similar XLA-based frameworks rather than CUDA, so they suit groups
+            whose code is already in JAX or who are training transformer-style
+            models. Current generations, from Google's documentation:<a
+              href="#src-20"
+              >[20]</a
+            >
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>TPU</th>
+                <th>Chips per pod</th>
+                <th>Peak BF16 per chip</th>
+                <th>Peak FP8 per chip</th>
+                <th>HBM per chip</th>
+                <th>HBM bandwidth per chip</th>
+                <th>ICI bandwidth per chip (bidirectional)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>v5p</td>
+                <td>8,960</td>
+                <td>459 TFLOPs</td>
+                <td>459 TFLOPs</td>
+                <td>95 GiB</td>
+                <td>2,765 GBps</td>
+                <td>1,200 GBps</td>
+              </tr>
+              <tr>
+                <td>v6e (Trillium)</td>
+                <td>256</td>
+                <td>918 TFLOPs</td>
+                <td>918 TFLOPs</td>
+                <td>32 GiB</td>
+                <td>1,638 GBps</td>
+                <td>800 GBps</td>
+              </tr>
+              <tr>
+                <td>TPU7x (Ironwood)</td>
+                <td>9,216</td>
+                <td>2,307 TFLOPs</td>
+                <td>4,614 TFLOPs</td>
+                <td>192 GiB</td>
+                <td>7,380 GBps</td>
+                <td>1,200 GBps</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            All figures are Google's stated peak values from the TPU7x and TPU
+            machine documentation.<a href="#src-20">[20]</a
+            ><a href="#src-21">[21]</a> On v5p the largest schedulable job is
+            6,144 chips out of the 8,960-chip pod.<a href="#src-22">[22]</a>
+            TPUs are a poor fit for classic FP64 simulation codes. For AI for
+            science, they matter: GenCast inference, for example, was
+            characterized on a Cloud TPU v5 device (see
+            <a href="scientific-computing.html">Scientific Computing</a>).
+          </p>
+
+          <h2 id="capacity-models">Capacity Models: Getting the GPUs</h2>
+          <p>
+            For CPU work, cloud capacity is effectively unlimited. For
+            current-generation GPUs, it is not, and the purchase model decides
+            whether your job starts.
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th>What you get</th>
+                <th>Key limits (from provider docs)</th>
+                <th>Good for</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>On-demand</td>
+                <td>Pay per second or hour, no commitment</td>
+                <td>High-end GPUs may simply be unavailable in a zone</td>
+                <td>Small tests, CPU work</td>
+              </tr>
+              <tr>
+                <td>Spot / preemptible</td>
+                <td>Deep discount on spare capacity; can be reclaimed</td>
+                <td>
+                  AWS: two-minute interruption notice. Azure: up to 30 seconds
+                  via Scheduled Events. Google: default no dedicated notice,
+                  120-second option in preview.<a href="#src-23">[23]</a
+                  ><a href="#src-24">[24]</a><a href="#src-25">[25]</a>
+                </td>
+                <td>Checkpointed, restartable jobs; parameter sweeps</td>
+              </tr>
+              <tr>
+                <td>AWS EC2 Capacity Blocks for ML</td>
+                <td>Reserved GPU instances for a future window</td>
+                <td>
+                  Start up to 8 weeks ahead; durations in 1-day steps up to 14
+                  days and 7-day steps up to 182 days; up to 64 instances per
+                  block, 256 across blocks.<a href="#src-26">[26]</a
+                  ><a href="#src-27">[27]</a>
+                </td>
+                <td>Planned training runs, workshops, deadlines</td>
+              </tr>
+              <tr>
+                <td>Google DWS flex-start</td>
+                <td>Discounted VMs that start when capacity frees up</td>
+                <td>
+                  Runs uninterrupted up to 7 days; request fails if not obtained
+                  within your window; uses preemptible quota.<a href="#src-28"
+                    >[28]</a
+                  >
+                </td>
+                <td>Jobs that can wait to start but must not be interrupted</td>
+              </tr>
+              <tr>
+                <td>Google DWS calendar mode</td>
+                <td>Future reservation for a fixed period</td>
+                <td>
+                  1 to 90 days; availability visible up to 60 days ahead for
+                  GPUs, 120 days for TPUs.<a href="#src-29">[29]</a>
+                </td>
+                <td>Planned GPU or TPU campaigns</td>
+              </tr>
+              <tr>
+                <td>Reservations and committed use</td>
+                <td>Capacity or price commitment over months or years</td>
+                <td>You pay whether or not you use it</td>
+                <td>Steady baseline load</td>
+              </tr>
+            </tbody>
+          </table>
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Spot GPUs are the cheapest hours in
+              the cloud and the easiest to waste. A job that checkpoints every
+              few hours and gets preempted every hour makes no progress at all.
+              Before you put users on spot GPU partitions, make sure their codes
+              checkpoint on a signal or at short intervals, that Slurm requeues
+              preempted jobs, and that checkpoints go to durable storage, not
+              local SSD that vanishes with the VM.
+            </p>
+          </blockquote>
+          <p>
+            A pattern that works well in research: run interactive and
+            development work on small on-demand or spot nodes, and book Capacity
+            Blocks or calendar-mode reservations for the handful of large runs
+            each term. The reservation start date becomes a project deadline,
+            which helps groups get their data staged and their code tested
+            before the expensive hours begin.
+          </p>
+
+          <h2 id="neoclouds">Neoclouds and GPU Specialists</h2>
+          <p>
+            A set of GPU-focused providers (often called neoclouds) sells large
+            NVIDIA clusters with InfiniBand and Slurm or Kubernetes on top,
+            usually with fewer surrounding services than the hyperscalers and
+            often with simpler pricing. Examples, described from their own
+            documentation:
+          </p>
+          <ul>
+            <li>
+              <strong>CoreWeave</strong> offers SUNK (Slurm on Kubernetes), a
+              Helm-deployed Slurm running inside its Kubernetes service so
+              training and inference can share the same nodes.<a href="#src-30"
+                >[30]</a
+              >
+            </li>
+            <li>
+              <strong>Lambda</strong> 1-Click Clusters provide 16 to 512 NVIDIA
+              H100 or B200 GPUs on a 400 Gb/s Quantum-2 InfiniBand
+              rail-optimized fabric, with GPUDirect RDMA up to 3,200 Gb/s per
+              node.<a href="#src-31">[31]</a>
+            </li>
+            <li>
+              <strong>Nebius</strong> offers VMs clustered over InfiniBand,
+              managed Kubernetes and Soperator, its Kubernetes operator for
+              Slurm.<a href="#src-32">[32]</a>
+            </li>
+          </ul>
+          <p>
+            Neoclouds can be a good fit for a single well-defined training or
+            simulation campaign with a grant budget attached. Check the things
+            hyperscalers bundle and neoclouds may not: identity federation with
+            your campus, data egress terms, storage durability, compliance
+            attestations, and contract terms your procurement office will
+            accept. Kubernetes-hosted Slurm is covered in
+            <a href="scheduling.html">Scheduling and Orchestration</a>.
+          </p>
+
+          <h2 id="cost-management-and-guardrails">
+            Cost Management and Guardrails for Research
+          </h2>
+          <p>
+            The fastest way to lose faculty trust in cloud is a surprise bill.
+            Guardrails must be in place before the first GPU node starts.
+          </p>
+          <h3 id="credits-and-subsidized-access">
+            Credits and subsidized access
+          </h3>
+          <ul>
+            <li>
+              <strong>Provider research credits.</strong> Google Cloud
+              advertises research credit applications (currently $5,000 per
+              application on its researcher page), and AWS runs the Cloud Credit
+              for Research program.<a href="#src-33">[33]</a
+              ><a href="#src-34">[34]</a> Credits expire and are tied to
+              accounts; track them like any other award.
+            </li>
+            <li>
+              <strong>NSF programs.</strong> CloudBank provides no-cost,
+              NSF-sponsored access to commercial clouds through ACCESS and the
+              NAIRR Pilot, along with account management and cost monitoring.<a
+                href="#src-35"
+                >[35]</a
+              >
+              The NAIRR Pilot accepts requests from US-based researchers and
+              educators for computing, model and platform resources for AI
+              research, with 12-month awards.<a href="#src-36">[36]</a>
+            </li>
+          </ul>
+          <h3 id="budgets-quotas-and-hard-stops">
+            Budgets, quotas and hard stops
+          </h3>
+          <ul>
+            <li>
+              <strong
+                >Budgets alert; they do not stop spending by default.</strong
+              >
+              Google says plainly that an alerts-only budget does not cap usage,
+              and offers programmatic notifications (Pub/Sub) that can disable
+              billing on a project, plus a spend-cap budget type in preview.<a
+                href="#src-37"
+                >[37]</a
+              >
+              AWS Budgets can run actions when a threshold is crossed, including
+              applying an IAM policy or service control policy, or targeting
+              specific EC2 or RDS instances.<a href="#src-38">[38]</a>
+            </li>
+            <li>
+              <strong>Quotas are your cheapest hard limit.</strong> A project
+              with a GPU quota of 8 cannot run 64 GPUs by accident. Keep GPU
+              quotas at what a project actually needs and raise them
+              deliberately.
+            </li>
+            <li>
+              <strong>Scheduler limits still apply.</strong> In a cloud Slurm
+              cluster, the maximum node count per partition (for example
+              <code>MaxCount</code> in ParallelCluster or
+              <code>node_count_dynamic_max</code> in Cluster Toolkit) is a
+              spending cap. Slurm accounting (QOS, association limits) gives
+              per-group control, exactly as on campus.
+            </li>
+            <li>
+              <strong>One project or account per grant.</strong> Separate
+              billing projects per award make chargeback trivial and let you
+              shut down one group without touching others. Label or tag every
+              resource with owner and fund.
+            </li>
+          </ul>
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> The most common runaway costs we see
+              are not big GPU jobs. They are things left running: a login node
+              sized for a workshop, a forgotten notebook VM with a GPU attached,
+              a Filestore or FSx file system for a project that ended, or
+              snapshots nobody deletes. Schedule a weekly report of running
+              resources per project and send it to the PI, not just to IT.
+            </p>
+          </blockquote>
+
+          <h3 id="egress-and-storage-costs">Egress and storage costs</h3>
+          <p>
+            Compute is billed while it runs; storage is billed forever, and
+            moving data out is billed per byte. For research, three rules cover
+            most cases:
+          </p>
+          <ul>
+            <li>
+              <strong>Ingress is generally free; egress is not.</strong> Plan
+              where results end up. Moving a finished multi-terabyte dataset
+              back to campus is a real line item unless a waiver applies.
+            </li>
+            <li>
+              <strong>Check the research egress waivers.</strong> AWS's Global
+              Data Egress Waiver for eligible researchers and institutions
+              waives data transfer out to the internet up to 15 percent of total
+              monthly AWS spend.<a href="#src-39">[39]</a> Google waives
+              internet data transfer fees at list price for qualifying research
+              and education customers, up to 15 percent of total monthly Google
+              Cloud fees.<a href="#src-40">[40]</a> Both have eligibility
+              requirements (typically routing over a national research and
+              education network and an institutional agreement); confirm with
+              your account team.
+            </li>
+            <li>
+              <strong>Tier storage deliberately.</strong> Parallel file systems
+              (FSx for Lustre, Managed Lustre, Filestore and partner products)
+              are for active jobs. Object storage is for everything else. AWS
+              notes that P6 instances pair with FSx for Lustre for
+              high-throughput access and with S3 for bulk storage.<a
+                href="#src-13"
+                >[13]</a
+              >
+              Delete or tier scratch when the job ends; lifecycle policies do
+              this automatically.
+            </li>
+          </ul>
+          <p>
+            Data pipelines, staging and parallel file system design are covered
+            in <a href="memory-storage.html">Memory and Storage</a>.
+          </p>
+
+          <h2 id="hybrid-bursting">Hybrid Bursting from Campus Slurm</h2>
+          <p>
+            Most universities will run a campus cluster and use cloud for peaks,
+            special hardware and deadlines. There are three common patterns, in
+            rising order of integration:
+          </p>
+          <ol>
+            <li>
+              <strong>Separate cloud cluster, same user experience.</strong>
+              Build a cloud Slurm cluster with the same modules, container
+              images and job script conventions as campus, and give users both.
+              Simple and robust; data movement is manual.
+            </li>
+            <li>
+              <strong>Multi-cluster Slurm.</strong> Campus and cloud clusters
+              share a Slurm database so users can target either with
+              <code>sbatch --clusters=</code> (<code>-M</code>), and accounting
+              lands in one place.<a href="#src-41">[41]</a> Slurm federation
+              goes further, scheduling jobs peer-to-peer across member clusters
+              by creating sibling jobs.<a href="#src-42">[42]</a>
+            </li>
+            <li>
+              <strong>Cloud nodes inside the campus scheduler.</strong> Slurm's
+              power saving machinery can manage cloud instances directly: nodes
+              defined with <code>State=CLOUD</code> are created by a
+              <code>ResumeProgram</code> when jobs need them and removed by a
+              <code>SuspendProgram</code> after <code>SuspendTime</code> of
+              idleness; nodes that do not register within
+              <code>ResumeTimeout</code> are marked DOWN and their jobs
+              requeued.<a href="#src-43">[43]</a> This is the same mechanism the
+              cloud toolkits use internally.
+            </li>
+          </ol>
+          <p>
+            A minimal <code>slurm.conf</code> fragment for pattern 3. The
+            programs are scripts you (or a toolkit) provide that call the cloud
+            API; names and sizes are examples.
+          </p>
+          <pre><code class="language-plaintext"># Cloud burst partition (example values)
+SuspendProgram=/opt/slurm/cloud/suspend.sh
+ResumeProgram=/opt/slurm/cloud/resume.sh
+ResumeFailProgram=/opt/slurm/cloud/resume_fail.sh
+SuspendTime=600          # seconds idle before a cloud node is deleted
+SuspendTimeout=300
+ResumeTimeout=900        # GPU VMs can take several minutes to boot and register
+ResumeRate=20
+SuspendRate=20
+
+GresTypes=gpu
+NodeName=burst-gpu-[001-016] State=CLOUD CPUs=96 RealMemory=1800000 Gres=gpu:8 Feature=cloud,h100
+PartitionName=burst Nodes=burst-gpu-[001-016] MaxTime=2-00:00:00 State=UP
+</code></pre>
+          <p>The hard parts of bursting are not the scheduler configuration:</p>
+          <ul>
+            <li>
+              <strong>Data gravity.</strong> If a job reads 50 TB from campus
+              storage, bursting it is slow and may be expensive. Burst workloads
+              whose inputs are small, already in the cloud, or can be staged
+              ahead of time.
+            </li>
+            <li>
+              <strong>Identity and networking.</strong> Cloud nodes need the
+              same users, groups and file permissions, and a secure path back to
+              campus (VPN or dedicated interconnect). Plan the IP address space
+              so cloud subnets do not collide with campus ranges.
+            </li>
+            <li>
+              <strong>Software.</strong> Container images (Apptainer or enroot)
+              are the easiest way to guarantee the same stack on both sides. A
+              shared Spack build cache also works.
+            </li>
+            <li>
+              <strong>Accounting.</strong> Decide in advance who pays for burst
+              hours and how they are charged back; Slurm accounting can record
+              them, but a policy has to price them.
+            </li>
+          </ul>
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Burst the jobs, not the users. A
+              small number of well-understood, containerized, restartable
+              workloads (parameter sweeps, ensemble members, inference batches)
+              move to cloud easily. Trying to make every campus job
+              cloud-portable is a multi-year project that rarely pays off.
+            </p>
+          </blockquote>
+
+          <h2 id="security-and-compliance">
+            Security and Compliance in the Cloud
+          </h2>
+          <p>
+            Cloud providers run a <strong>shared responsibility model</strong>:
+            the provider secures the facilities, hardware and virtualization
+            layer, and the customer is responsible for the guest operating
+            system (including patches), application software and the
+            configuration of the provider's security controls.<a href="#src-44"
+              >[44]</a
+            >
+            For a research cluster, that means you still own the OS images,
+            Slurm, user accounts, firewall rules and data access policy.
+          </p>
+          <ul>
+            <li>
+              <strong>Identity.</strong> Federate cloud consoles and cluster
+              logins with campus identity (SAML or OIDC, with MFA). Avoid
+              long-lived access keys on login nodes; use instance roles or
+              service accounts scoped to the project.
+            </li>
+            <li>
+              <strong>Network.</strong> Keep compute nodes on private subnets.
+              Expose only login nodes or a web portal (such as Open OnDemand),
+              ideally behind campus VPN or an identity-aware proxy.
+            </li>
+            <li>
+              <strong>Organization-level policy.</strong> Use AWS Organizations
+              service control policies, Google Cloud organization policies or
+              Azure Policy to block risky configurations (public buckets,
+              unapproved regions) across every research project.
+            </li>
+            <li>
+              <strong>Regulated data.</strong> Controlled Unclassified
+              Information falls under NIST SP 800-171 (Revision 3 published May
+              2024).<a href="#src-45">[45]</a> Cloud can host CUI and other
+              regulated data, but only in an environment designed and documented
+              for it, usually a separate enclave with its own accounts, logging
+              and review. Do not let regulated data wander into a
+              general-purpose research project.
+            </li>
+            <li>
+              <strong>Logging.</strong> Turn on audit logs (CloudTrail, Cloud
+              Audit Logs, Azure Activity Log) for every project from day one and
+              send them to a central, write-protected location.
+            </li>
+          </ul>
+          <p>
+            Governance, access and data policy for research computing generally
+            are in <a href="operations.html">Operations</a>.
+          </p>
+
+          <h2 id="cloud-versus-on-prem">
+            When Cloud Beats On-Prem, and Vice Versa
+          </h2>
+          <p>
+            This section deliberately contains no prices. List prices change
+            monthly, negotiated research pricing varies by institution, and GPU
+            availability swings the real cost more than the rate card. The
+            reasoning, however, is stable.
+          </p>
+          <h3 id="utilization-breakeven">The utilization breakeven</h3>
+          <p>
+            An on-prem GPU node has a mostly fixed cost over its life: purchase,
+            installation, power and cooling, data center space, support
+            contracts and staff time, spread over the years you run it. A cloud
+            GPU node has a variable cost: you pay for the hours you use. So the
+            comparison comes down to one number,
+            <strong>expected sustained utilization</strong>:
+          </p>
+          <pre><code class="language-plaintext">on-prem cost per useful GPU-hour =
+    (total lifetime cost of the node)
+    / (GPUs x hours in service life x utilization)
+
+cloud cost per useful GPU-hour =
+    (effective hourly rate after discounts, credits, waivers)
+    + (storage and egress attributable to the work)
+    + (staff time to operate the cloud environment, per hour)
+
+breakeven utilization U* = the utilization where the two are equal
+</code></pre>
+          <p>
+            If you expect to keep the hardware busy well above U*, buying wins.
+            If demand is spiky, uncertain or short-lived, renting wins. Fill in
+            the terms with your institution's real quotes (hardware, facilities
+            rates, negotiated cloud pricing) rather than numbers from a blog
+            post. Two effects push U* around: a shared campus cluster that is
+            always queued is running at high utilization and is hard to beat,
+            while a lab-owned node that sits idle between papers is often more
+            expensive than cloud even at on-demand rates.
+          </p>
+          <h3 id="cloud-tends-to-win-when">Cloud tends to win when</h3>
+          <ul>
+            <li>
+              Demand is bursty or tied to deadlines, conferences or a single
+              grant period.
+            </li>
+            <li>
+              You need hardware you cannot get or house: the newest GPU
+              generation, NVL72 racks, TPU pods, or more power and cooling than
+              your data center has (see
+              <a href="facilities.html">Facilities</a>).
+            </li>
+            <li>
+              The project is short or exploratory, and buying would create
+              stranded hardware.
+            </li>
+            <li>
+              Data already lives in the cloud (public datasets hosted by
+              providers, instrument data delivered there).
+            </li>
+            <li>
+              Teaching and workshops need many identical environments for a few
+              days.
+            </li>
+          </ul>
+          <h3 id="on-prem-tends-to-win-when">On-prem tends to win when</h3>
+          <ul>
+            <li>
+              Utilization is high and steady, typically a well-run shared
+              cluster with a queue.
+            </li>
+            <li>
+              Data is large and generated or used on campus, so egress and
+              transfer time dominate.
+            </li>
+            <li>
+              Jobs are long-running and tightly coupled, and need predictable
+              fabric performance over months.
+            </li>
+            <li>
+              Funding comes as capital (equipment grants) rather than operating
+              money, or indirect-cost rules make cloud spending expensive for
+              the PI.
+            </li>
+            <li>
+              Regulated data requirements are already met by an existing on-prem
+              enclave.
+            </li>
+          </ul>
+          <blockquote>
+            <p>
+              <strong>Field note:</strong> Most campuses end up hybrid, and that
+              is the right answer, not a compromise. Own the baseline you can
+              keep busy, rent the peaks and the exotic hardware, and make the
+              two feel the same to users with shared containers, job script
+              conventions and identity. The worst outcome is two disconnected
+              worlds that each require their own training and support.
+            </p>
+          </blockquote>
+
+          <h2 id="key-takeaways">Key Takeaways</h2>
+          <ul>
+            <li>
+              Start with the cluster tooling, not raw instances: AWS
+              ParallelCluster or PCS, Google Cloud Cluster Toolkit, or Azure
+              CycleCloud Workspace for Slurm all deliver Slurm clusters that
+              feel like campus.
+            </li>
+            <li>
+              All three providers offer 8-GPU H100, H200 and B200 nodes with
+              RDMA fabrics and GB200-class rack-scale systems; check the fabric
+              type (EFA, InfiniBand, RoCE or TCPX) before running tightly
+              coupled MPI.
+            </li>
+            <li>
+              Getting GPUs is a capacity question. Use Capacity Blocks or DWS
+              calendar reservations for planned runs, flex-start for jobs that
+              can wait to start, and spot only for checkpointed work.
+            </li>
+            <li>
+              Budgets alert but do not stop spending by default. Use quotas,
+              scheduler node caps, one project per grant, and automated actions
+              as hard limits.
+            </li>
+            <li>
+              Plan data movement: ingress is generally free, egress is not, and
+              both AWS and Google offer research egress waivers up to 15 percent
+              of monthly spend.
+            </li>
+            <li>
+              Burst well-understood, containerized, restartable workloads;
+              Slurm's cloud node support (<code>State=CLOUD</code>,
+              ResumeProgram/SuspendProgram) is the underlying mechanism.
+            </li>
+            <li>
+              Decide cloud versus on-prem on expected sustained utilization with
+              your own institution's quotes; high, steady load favors owning,
+              spiky or exotic demand favors renting.
+            </li>
+          </ul>
+
+          <h2 id="sources">Sources</h2>
+          <ol class="sources">
+            <li id="src-1">
+              <a
+                href="https://www.top500.org/system/180236/"
+                target="_blank"
+                rel="noopener"
+                >Eagle - Microsoft NDv5, NVIDIA H100, InfiniBand NDR (TOP500,
+                2026)</a
+              >
+            </li>
+            <li id="src-2">
+              <a
+                href="https://docs.aws.amazon.com/parallelcluster/latest/ug/document_history.html"
+                target="_blank"
+                rel="noopener"
+                >AWS ParallelCluster release notes and document history (AWS,
+                2026)</a
+              >
+            </li>
+            <li id="src-3">
+              <a
+                href="https://docs.aws.amazon.com/parallelcluster/latest/ug/Scheduling-v3.html"
+                target="_blank"
+                rel="noopener"
+                >AWS ParallelCluster Scheduling section: SlurmQueues,
+                CapacityType (AWS, 2026)</a
+              >
+            </li>
+            <li id="src-4">
+              <a
+                href="https://docs.aws.amazon.com/pcs/latest/APIReference/Welcome.html"
+                target="_blank"
+                rel="noopener"
+                >AWS Parallel Computing Service API Reference: Welcome (AWS,
+                2026)</a
+              >
+            </li>
+            <li id="src-5">
+              <a
+                href="https://docs.aws.amazon.com/pcs/latest/userguide/slurm-versions.html"
+                target="_blank"
+                rel="noopener"
+                >Slurm versions in AWS PCS (AWS, 2026)</a
+              >
+            </li>
+            <li id="src-6">
+              <a
+                href="https://docs.cloud.google.com/cluster-toolkit/docs/overview"
+                target="_blank"
+                rel="noopener"
+                >Cluster Toolkit overview (Google Cloud, 2026)</a
+              >
+            </li>
+            <li id="src-7">
+              <a
+                href="https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/README.md"
+                target="_blank"
+                rel="noopener"
+                >Cluster Toolkit README (Google Cloud, 2026)</a
+              >
+            </li>
+            <li id="src-8">
+              <a
+                href="https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/examples/hpc-slurm.yaml"
+                target="_blank"
+                rel="noopener"
+                >Cluster Toolkit example blueprint hpc-slurm.yaml (Google Cloud,
+                2026)</a
+              >
+            </li>
+            <li id="src-9">
+              <a
+                href="https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/community/modules/compute/schedmd-slurm-gcp-v6-nodeset/README.md"
+                target="_blank"
+                rel="noopener"
+                >schedmd-slurm-gcp-v6-nodeset module README (Google Cloud
+                Cluster Toolkit, 2026)</a
+              >
+            </li>
+            <li id="src-10">
+              <a
+                href="https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/examples/README.md"
+                target="_blank"
+                rel="noopener"
+                >Cluster Toolkit example blueprints (Google Cloud, 2026)</a
+              >
+            </li>
+            <li id="src-11">
+              <a
+                href="https://learn.microsoft.com/en-us/azure/cyclecloud/overview-ccws?view=cyclecloud-8"
+                target="_blank"
+                rel="noopener"
+                >What is Azure CycleCloud Workspace for Slurm? (Microsoft Learn,
+                2026)</a
+              >
+            </li>
+            <li id="src-12">
+              <a
+                href="https://aws.amazon.com/ec2/instance-types/p5"
+                target="_blank"
+                rel="noopener"
+                >Amazon EC2 P5 instances (AWS, 2026)</a
+              >
+            </li>
+            <li id="src-13">
+              <a
+                href="https://aws.amazon.com/ec2/instance-types/p6/"
+                target="_blank"
+                rel="noopener"
+                >Amazon EC2 P6e UltraServers and P6 instances (AWS, 2026)</a
+              >
+            </li>
+            <li id="src-14">
+              <a
+                href="https://docs.cloud.google.com/compute/docs/gpus"
+                target="_blank"
+                rel="noopener"
+                >GPU machine types (Google Cloud Compute Engine, 2026)</a
+              >
+            </li>
+            <li id="src-15">
+              <a
+                href="https://docs.cloud.google.com/compute/docs/gpus/gpu-network-bandwidth"
+                target="_blank"
+                rel="noopener"
+                >Network bandwidth and GPU machine types (Google Cloud Compute
+                Engine, 2026)</a
+              >
+            </li>
+            <li id="src-16">
+              <a
+                href="https://docs.cloud.google.com/compute/docs/accelerator-optimized-machines"
+                target="_blank"
+                rel="noopener"
+                >GPU machines in the accelerator-optimized machine family
+                (Google Cloud Compute Engine, 2026)</a
+              >
+            </li>
+            <li id="src-17">
+              <a
+                href="https://learn.microsoft.com/en-us/azure/virtual-machines/sizes/gpu-accelerated/ndh100v5-series"
+                target="_blank"
+                rel="noopener"
+                >ND-H100-v5 sizes series (Microsoft Learn, 2026)</a
+              >
+            </li>
+            <li id="src-18">
+              <a
+                href="https://learn.microsoft.com/en-us/azure/virtual-machines/sizes/gpu-accelerated/nd-h200-v5-series"
+                target="_blank"
+                rel="noopener"
+                >ND-H200-v5 size series (Microsoft Learn, 2025)</a
+              >
+            </li>
+            <li id="src-19">
+              <a
+                href="https://learn.microsoft.com/en-us/azure/virtual-machines/sizes/gpu-accelerated/nd-gb200-v6-series"
+                target="_blank"
+                rel="noopener"
+                >ND GB200-v6 sizes series (Microsoft Learn, 2026)</a
+              >
+            </li>
+            <li id="src-20">
+              <a
+                href="https://docs.cloud.google.com/tpu/docs/tpu7x"
+                target="_blank"
+                rel="noopener"
+                >TPU7x (Ironwood) architecture and specifications (Google Cloud,
+                2026)</a
+              >
+            </li>
+            <li id="src-21">
+              <a
+                href="https://cloud.google.com/compute/docs/tpus/tpu-machines"
+                target="_blank"
+                rel="noopener"
+                >TPU machines in the accelerator-optimized machine family
+                (Google Cloud, 2026)</a
+              >
+            </li>
+            <li id="src-22">
+              <a
+                href="https://docs.cloud.google.com/tpu/docs/v5p"
+                target="_blank"
+                rel="noopener"
+                >TPU v5p (Google Cloud, 2026)</a
+              >
+            </li>
+            <li id="src-23">
+              <a
+                href="https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/spot-instance-termination-notices.html"
+                target="_blank"
+                rel="noopener"
+                >Spot Instance interruption notices (AWS, 2026)</a
+              >
+            </li>
+            <li id="src-24">
+              <a
+                href="https://learn.microsoft.com/en-us/azure/virtual-machines/spot-vms"
+                target="_blank"
+                rel="noopener"
+                >About Azure Spot Virtual Machines (Microsoft Learn, 2026)</a
+              >
+            </li>
+            <li id="src-25">
+              <a
+                href="https://docs.cloud.google.com/compute/docs/instances/spot"
+                target="_blank"
+                rel="noopener"
+                >Spot VMs (Google Cloud Compute Engine, 2026)</a
+              >
+            </li>
+            <li id="src-26">
+              <a
+                href="https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/capacity-blocks-purchase.html"
+                target="_blank"
+                rel="noopener"
+                >Find and purchase Capacity Blocks (AWS, 2026)</a
+              >
+            </li>
+            <li id="src-27">
+              <a
+                href="https://docs.amazonaws.cn/en_us/AWSEC2/latest/UserGuide/ec2-capacity-blocks.html"
+                target="_blank"
+                rel="noopener"
+                >Capacity Blocks for ML (Amazon EC2 User Guide, 2026)</a
+              >
+            </li>
+            <li id="src-28">
+              <a
+                href="https://docs.cloud.google.com/compute/docs/instances/about-flex-start-vms"
+                target="_blank"
+                rel="noopener"
+                >About Flex-start VMs (Google Cloud Compute Engine, 2026)</a
+              >
+            </li>
+            <li id="src-29">
+              <a
+                href="https://docs.cloud.google.com/compute/docs/instances/future-reservations-calendar-mode-overview"
+                target="_blank"
+                rel="noopener"
+                >About future reservation requests in calendar mode (Google
+                Cloud Compute Engine, 2026)</a
+              >
+            </li>
+            <li id="src-30">
+              <a
+                href="https://docs.coreweave.com/products/sunk/index"
+                target="_blank"
+                rel="noopener"
+                >About SUNK (CoreWeave documentation, 2026)</a
+              >
+            </li>
+            <li id="src-31">
+              <a
+                href="https://docs.lambda.ai/public-cloud/1-click-clusters"
+                target="_blank"
+                rel="noopener"
+                >1-Click Clusters introduction (Lambda documentation, 2026)</a
+              >
+            </li>
+            <li id="src-32">
+              <a
+                href="https://docs.nebius.com/slurm-soperator"
+                target="_blank"
+                rel="noopener"
+                >Slurm and Soperator in Nebius AI Cloud (Nebius documentation,
+                2026)</a
+              >
+            </li>
+            <li id="src-33">
+              <a
+                href="https://cloud.google.com/edu/researchers"
+                target="_blank"
+                rel="noopener"
+                >Google Cloud for researchers: research credits (Google Cloud,
+                2026)</a
+              >
+            </li>
+            <li id="src-34">
+              <a
+                href="https://aws.amazon.com/government-education/research-and-technical-computing/cloud-credit-for-research/"
+                target="_blank"
+                rel="noopener"
+                >AWS Cloud Credit for Research (AWS, 2026)</a
+              >
+            </li>
+            <li id="src-35">
+              <a href="https://cloudbank.org/" target="_blank" rel="noopener"
+                >CloudBank (NSF-funded, 2026)</a
+              >
+            </li>
+            <li id="src-36">
+              <a
+                href="https://nairrpilot.org/allocations"
+                target="_blank"
+                rel="noopener"
+                >NAIRR Pilot resource requests to advance AI research (NAIRR
+                Pilot, 2026)</a
+              >
+            </li>
+            <li id="src-37">
+              <a
+                href="https://docs.cloud.google.com/billing/docs/how-to/budgets"
+                target="_blank"
+                rel="noopener"
+                >Create, edit, or delete budgets and budget alerts (Google Cloud
+                Billing, 2026)</a
+              >
+            </li>
+            <li id="src-38">
+              <a
+                href="https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-controls.html"
+                target="_blank"
+                rel="noopener"
+                >Configuring budget actions (AWS Cost Management, 2026)</a
+              >
+            </li>
+            <li id="src-39">
+              <a
+                href="https://aws.amazon.com/blogs/publicsector/data-egress-waiver-available-for-eligible-researchers-and-institutions"
+                target="_blank"
+                rel="noopener"
+                >Data egress waiver available for eligible researchers and
+                institutions (AWS Public Sector Blog, 2021)</a
+              >
+            </li>
+            <li id="src-40">
+              <a
+                href="https://docs.cloud.google.com/billing/docs/how-to/data-transfer-waiver"
+                target="_blank"
+                rel="noopener"
+                >Get a data transfer discount for research and education (Google
+                Cloud Billing, 2026)</a
+              >
+            </li>
+            <li id="src-41">
+              <a
+                href="https://slurm.schedmd.com/sbatch.html"
+                target="_blank"
+                rel="noopener"
+                >sbatch man page: --clusters (SchedMD, 2026)</a
+              >
+            </li>
+            <li id="src-42">
+              <a
+                href="https://slurm.schedmd.com/federation.html"
+                target="_blank"
+                rel="noopener"
+                >Slurm Federated Scheduling Guide (SchedMD, 2026)</a
+              >
+            </li>
+            <li id="src-43">
+              <a
+                href="https://slurm.schedmd.com/power_save.html"
+                target="_blank"
+                rel="noopener"
+                >Slurm Power Saving Guide: cloud nodes, ResumeProgram and
+                SuspendProgram (SchedMD, 2026)</a
+              >
+            </li>
+            <li id="src-44">
+              <a
+                href="https://aws.amazon.com/compliance/shared-responsibility-model/"
+                target="_blank"
+                rel="noopener"
+                >Shared Responsibility Model (AWS, 2026)</a
+              >
+            </li>
+            <li id="src-45">
+              <a
+                href="https://csrc.nist.gov/pubs/sp/800/171/r3/final"
+                target="_blank"
+                rel="noopener"
+                >NIST SP 800-171 Rev. 3: Protecting Controlled Unclassified
+                Information in Nonfederal Systems (NIST, 2024)</a
+              >
+            </li>
+          </ol>
+          <nav class="doc-pager" aria-label="Chapter navigation">
+            <a class="pager-prev" href="scientific-computing.html"
+              ><span>Previous</span>Scientific Computing in the AI Era</a
+            ><a class="pager-next" href="linux.html"
+              ><span>Next</span>Linux Essentials</a
+            >
+          </nav>
         </article>
       </div>
     </main>
@@ -119,8 +1501,7 @@
     <footer class="section-dark">
       <div class="container text-center">
         <p class="footer-note">
-          Originally published 2018-2019 on the legacy HPC documentation site,
-          preserved here in full. |
+          2026 edition |
           <a href="index.html" class="subtle-link">Field Manual</a> |
           <a href="../index.html" class="subtle-link"
             >charles-forsyth.github.io</a
@@ -131,12 +1512,10 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script>
       document.querySelectorAll('pre code').forEach(function (el) {
-        {
-          if (el.className === 'c++') el.className = 'language-cpp';
-          else if (el.className && el.className.indexOf('language-') !== 0)
-            el.className = 'language-' + el.className;
-          hljs.highlightElement(el);
-        }
+        if (el.className === 'c++') el.className = 'language-cpp';
+        else if (el.className && el.className.indexOf('language-') !== 0)
+          el.className = 'language-' + el.className;
+        hljs.highlightElement(el);
       });
     </script>
   </body>
