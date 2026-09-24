@@ -412,6 +412,62 @@ h4 {
   margin-right: 6px;
 }
 
+/* HPC Field Manual teaser */
+#field-manual h3 {
+  text-align: center;
+  color: var(--accent);
+  font-size: 2rem;
+  margin-bottom: 15px;
+}
+
+.section-lead {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  max-width: 700px;
+  margin: 0 auto 35px;
+}
+
+.manual-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+  margin-bottom: 40px;
+}
+
+.manual-strip a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-main);
+  text-decoration: none;
+  font-family: var(--font-tech);
+  font-size: 0.95rem;
+  transition: all 0.3s ease;
+}
+
+.manual-strip a i {
+  color: var(--primary);
+  font-size: 1.3rem;
+  width: 24px;
+  text-align: center;
+  transition: color 0.3s ease;
+}
+
+.manual-strip a:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-3px);
+}
+
+.manual-strip a:hover i {
+  color: var(--accent);
+}
+
 /* Footer / Contact */
 footer {
   border-top: 1px solid var(--border-color);
@@ -471,6 +527,9 @@ footer h3 {
 
 /* Responsive */
 @media (max-width: 768px) {
+  .manual-strip {
+    grid-template-columns: 1fr 1fr;
+  }
   .about-grid {
     grid-template-columns: 1fr;
   }
