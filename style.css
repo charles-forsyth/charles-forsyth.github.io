@@ -412,6 +412,170 @@ h4 {
   margin-right: 6px;
 }
 
+/* Flagship + experiments cards (moved from inline <style> blocks in index.html) */
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+  margin-top: 30px;
+}
+
+/* Standardization for Flagship Innovation Cards */
+.project-card {
+  background: var(--card-bg, #1a1e29);
+  border: 1px solid var(--border-color, #2ea043);
+  border-radius: 6px;
+  padding: 25px;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
+  display: flex;
+  flex-direction: column;
+  min-height: 280px; /* Force minimum height for alignment */
+}
+
+/* The Advanced SIGINT card needs special handling because it has an image on top */
+.project-card:has(.project-image) {
+  padding: 0;
+  overflow: hidden;
+}
+
+.project-card:has(.project-image) .project-info {
+  padding: 25px;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
+
+.project-card h4 {
+  color: var(--primary-color, #2ea043);
+  margin-top: 0;
+  margin-bottom: 15px;
+  font-size: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.project-card p {
+  color: var(--text-secondary, #8b949e);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  margin-bottom: 20px;
+  flex-grow: 1; /* Pushes the button/tags to the bottom uniformly */
+}
+
+.project-card .btn-link {
+  display: inline-block;
+  text-decoration: none;
+  color: var(--primary-color, #2ea043);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.9rem;
+  margin-top: auto; /* Always aligns at the bottom of the card */
+  font-weight: bold;
+  transition: color 0.2s;
+}
+
+.project-card .btn-link:hover {
+  color: #ffffff;
+}
+
+.experiment-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+  margin-top: 30px;
+}
+.experiment-card {
+  background: var(--card-bg, #1a1e29);
+  border: 1px solid var(--border-color, #2ea043);
+  border-radius: 6px;
+  padding: 20px;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
+  display: flex;
+  flex-direction: column;
+}
+.experiment-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 4px 15px rgba(46, 160, 67, 0.2);
+}
+.experiment-card h4 {
+  color: var(--primary-color, #2ea043);
+  margin-top: 0;
+  margin-bottom: 10px;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.experiment-card p {
+  font-size: 0.9rem;
+  color: var(--text-secondary, #8b949e);
+  flex-grow: 1;
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+.experiment-link {
+  display: inline-block;
+  text-decoration: none;
+  color: #ffffff;
+  background: var(--primary-color, #2ea043);
+  padding: 8px 15px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  text-align: center;
+  transition: background 0.2s;
+  font-family: 'Share Tech Mono', monospace;
+}
+.experiment-link:hover {
+  background: #238636;
+  color: #ffffff;
+}
+
+/* Former inline styles on the OmNet card and experiments intro */
+.project-image-img {
+  width: 100%;
+  border-radius: 4px;
+  transition: 0.3s;
+}
+
+.plain-link {
+  text-decoration: none;
+  color: inherit;
+}
+
+.pill-row {
+  margin-top: 15px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pill-link {
+  padding: 5px 15px;
+  border-radius: 20px;
+  text-decoration: none;
+  font-size: 0.9rem;
+  transition: 0.3s;
+  display: inline-block;
+}
+
+.pill-primary {
+  border: 1px solid var(--primary-color);
+  color: var(--primary-color);
+}
+
+.pill-secondary {
+  border: 1px solid var(--secondary-color, #00a8ff);
+  color: var(--secondary-color, #00a8ff);
+}
+
+.muted-lead {
+  color: var(--text-secondary);
+}
+
 /* HPC Field Manual teaser */
 #field-manual h3 {
   text-align: center;
