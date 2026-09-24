@@ -1,304 +1,360 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Advanced SIGINT Data Lake | Architecture</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Inter:wght@300;400;600&display=swap');
-        
-        :root {
-            --bg-color: #090a0f;
-            --panel-bg: rgba(18, 21, 31, 0.85);
-            --border-color: #00ff41;
-            --text-main: #c9d1d9;
-            --accent: #00ff41;
-            --accent-glow: rgba(0, 255, 65, 0.4);
-            --secondary: #00a8ff;
-        }
+      @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Inter:wght@300;400;600&display=swap');
 
-        * { box-sizing: border-box; }
+      :root {
+        --bg-color: #090a0f;
+        --panel-bg: rgba(18, 21, 31, 0.85);
+        --border-color: #00ff41;
+        --text-main: #c9d1d9;
+        --accent: #00ff41;
+        --accent-glow: rgba(0, 255, 65, 0.4);
+        --secondary: #00a8ff;
+      }
 
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            font-family: 'Inter', sans-serif;
-            overflow-x: hidden;
-        }
+      * {
+        box-sizing: border-box;
+      }
 
-        /* Canvas Background */
-        #network-canvas {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            z-index: -1;
-        }
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: var(--bg-color);
+        color: var(--text-main);
+        font-family: 'Inter', sans-serif;
+        overflow-x: hidden;
+      }
 
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 40px 20px;
-            position: relative;
-            z-index: 1;
-        }
+      /* Canvas Background */
+      #network-canvas {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: -1;
+      }
 
-        header {
-            text-align: center;
-            margin-bottom: 50px;
-            border-bottom: 1px solid rgba(0, 255, 65, 0.3);
-            padding-bottom: 30px;
-        }
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 40px 20px;
+        position: relative;
+        z-index: 1;
+      }
 
-        h1, h2, h3, .mono {
-            font-family: 'Share Tech Mono', monospace;
-        }
+      header {
+        text-align: center;
+        margin-bottom: 50px;
+        border-bottom: 1px solid rgba(0, 255, 65, 0.3);
+        padding-bottom: 30px;
+      }
 
-        h1 {
-            color: var(--accent);
-            font-size: 3rem;
-            letter-spacing: 2px;
-            text-shadow: 0 0 15px var(--accent-glow);
-            margin-bottom: 10px;
-        }
+      h1,
+      h2,
+      h3,
+      .mono {
+        font-family: 'Share Tech Mono', monospace;
+      }
 
-        .subtitle {
-            color: var(--secondary);
-            font-size: 1.2rem;
-            letter-spacing: 1px;
-        }
+      h1 {
+        color: var(--accent);
+        font-size: 3rem;
+        letter-spacing: 2px;
+        text-shadow: 0 0 15px var(--accent-glow);
+        margin-bottom: 10px;
+      }
 
-        .diagram-container {
-            background: var(--panel-bg);
-            border: 1px solid var(--accent);
-            border-radius: 8px;
-            padding: 20px;
-            box-shadow: 0 0 30px rgba(0, 255, 65, 0.15);
-            margin-bottom: 50px;
-            backdrop-filter: blur(10px);
-        }
+      .subtitle {
+        color: var(--secondary);
+        font-size: 1.2rem;
+        letter-spacing: 1px;
+      }
 
-        .diagram-container img {
-            width: 100%;
-            height: auto;
-            border-radius: 4px;
-            display: block;
-        }
+      .diagram-container {
+        background: var(--panel-bg);
+        border: 1px solid var(--accent);
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 0 30px rgba(0, 255, 65, 0.15);
+        margin-bottom: 50px;
+        backdrop-filter: blur(10px);
+      }
 
+      .diagram-container img {
+        width: 100%;
+        height: auto;
+        border-radius: 4px;
+        display: block;
+      }
+
+      .content-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 30px;
+      }
+
+      @media (max-width: 768px) {
         .content-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 30px;
+          grid-template-columns: 1fr;
         }
+      }
 
-        @media (max-width: 768px) {
-            .content-grid { grid-template-columns: 1fr; }
-        }
+      .card {
+        background: var(--panel-bg);
+        border-left: 3px solid var(--accent);
+        padding: 25px;
+        border-radius: 0 8px 8px 0;
+        backdrop-filter: blur(10px);
+        transition:
+          transform 0.3s ease,
+          box-shadow 0.3s ease;
+      }
 
-        .card {
-            background: var(--panel-bg);
-            border-left: 3px solid var(--accent);
-            padding: 25px;
-            border-radius: 0 8px 8px 0;
-            backdrop-filter: blur(10px);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-        }
+      .card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 25px rgba(0, 255, 65, 0.1);
+      }
 
-        .card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 25px rgba(0, 255, 65, 0.1);
-        }
+      .card h3 {
+        color: var(--accent);
+        font-size: 1.4rem;
+        margin-top: 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
 
-        .card h3 {
-            color: var(--accent);
-            font-size: 1.4rem;
-            margin-top: 0;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
+      .card p {
+        line-height: 1.6;
+        color: #a3b3c4;
+        font-size: 0.95rem;
+      }
 
-        .card p {
-            line-height: 1.6;
-            color: #a3b3c4;
-            font-size: 0.95rem;
-        }
+      .tech-stack {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 15px;
+      }
 
-        .tech-stack {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-top: 15px;
-        }
+      .tag {
+        background: rgba(0, 255, 65, 0.1);
+        color: var(--accent);
+        border: 1px solid var(--accent);
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-family: 'Share Tech Mono', monospace;
+      }
 
-        .tag {
-            background: rgba(0, 255, 65, 0.1);
-            color: var(--accent);
-            border: 1px solid var(--accent);
-            padding: 5px 12px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-family: 'Share Tech Mono', monospace;
-        }
+      .back-link {
+        display: inline-block;
+        margin-bottom: 20px;
+        color: var(--text-main);
+        text-decoration: none;
+        font-family: 'Share Tech Mono', monospace;
+        transition: color 0.3s;
+      }
 
-        .back-link {
-            display: inline-block;
-            margin-bottom: 20px;
-            color: var(--text-main);
-            text-decoration: none;
-            font-family: 'Share Tech Mono', monospace;
-            transition: color 0.3s;
-        }
-
-        .back-link:hover {
-            color: var(--accent);
-            text-shadow: 0 0 8px var(--accent-glow);
-        }
+      .back-link:hover {
+        color: var(--accent);
+        text-shadow: 0 0 8px var(--accent-glow);
+      }
     </style>
-</head>
-<body>
-
+  </head>
+  <body>
     <canvas id="network-canvas"></canvas>
 
     <div class="container">
-        <a href="index.html" class="back-link"><i class="fas fa-arrow-left"></i> RETURN TO MAIN</a>
-        
-        <header>
-            <h1>OMNET: SOVEREIGN CYBER-PHYSICAL ARCHITECTURE</h1>
-            <div class="subtitle">Deterministic Edge Sentinels &bull; Phased Array Telemetry &bull; Zero-LLM Ingestion</div>
-        </header>
+      <a href="index.html" class="back-link"
+        ><i class="fas fa-arrow-left"></i> RETURN TO MAIN</a
+      >
 
-        <div class="diagram-container">
-            <img src="assets/camp_tioga_sigint_arch.png" alt="OmNet Architecture Diagram">
+      <header>
+        <h1>OMNET: SOVEREIGN CYBER-PHYSICAL ARCHITECTURE</h1>
+        <div class="subtitle">
+          Deterministic Edge Sentinels &bull; Phased Array Telemetry &bull;
+          Zero-LLM Ingestion
+        </div>
+      </header>
+
+      <div class="diagram-container">
+        <img
+          src="assets/camp_tioga_sigint_arch.png"
+          alt="OmNet Architecture Diagram"
+        />
+      </div>
+
+      <div class="content-grid">
+        <div class="card">
+          <h3>
+            <i class="fas fa-microchip"></i> 1. Multi-Spectrum Edge Sensing
+          </h3>
+          <p>
+            The foundation of the architecture relies on distributed edge nodes.
+            ESP32 headless payloads passively ingest and filter multi-spectrum
+            telemetry (802.11, BLE), 915 MHz LoRa mesh nodes log spatial
+            mesoclimates, and RTL-SDR dongles track 1090 MHz ADS-B transponders.
+            Directly integrates Starlink phased array gRPC telemetry to stream
+            real-time dish orientation, sky obstruction grids, ground station
+            POP pings, and per-device Wi-Fi RSSI signal quality.
+          </p>
+          <div class="tech-stack">
+            <span class="tag">C++ (ESP32)</span>
+            <span class="tag">Starlink gRPC</span>
+            <span class="tag">LoRa Mesh</span>
+            <span class="tag">RTL-SDR</span>
+          </div>
         </div>
 
-        <div class="content-grid">
-            <div class="card">
-                <h3><i class="fas fa-microchip"></i> 1. Multi-Spectrum Edge Sensing</h3>
-                <p>The foundation of the architecture relies on distributed edge nodes. ESP32 headless payloads passively ingest and filter multi-spectrum telemetry (802.11, BLE), 915 MHz LoRa mesh nodes log spatial mesoclimates, and RTL-SDR dongles track 1090 MHz ADS-B transponders. Directly integrates Starlink phased array gRPC telemetry to stream real-time dish orientation, sky obstruction grids, ground station POP pings, and per-device Wi-Fi RSSI signal quality.</p>
-                <div class="tech-stack">
-                    <span class="tag">C++ (ESP32)</span>
-                    <span class="tag">Starlink gRPC</span>
-                    <span class="tag">LoRa Mesh</span>
-                    <span class="tag">RTL-SDR</span>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3><i class="fas fa-network-wired"></i> 2. Sovereign Local Core & Bus</h3>
-                <p>Telemetry routing is completely sovereign and operates independently of public cloud dependencies. Dual Raspberry Pi edge nodes run a high-throughput Mosquitto MQTT broker, ingesting sensor payloads into local SQLite time-series databases (tioga_telemetry.db). Autonomous Python sentries and logrotators execute continuous 8-subsystem health diagnostics and self-healing token rotations.</p>
-                <div class="tech-stack">
-                    <span class="tag">Mosquitto MQTT</span>
-                    <span class="tag">SQLite Time-Series</span>
-                    <span class="tag">Raspberry Pi</span>
-                    <span class="tag">Self-Healing</span>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3><i class="fab fa-rust"></i> 3. Compiled Native Sentinels</h3>
-                <p>Eliminates high-overhead LLM polling for real-time operations in favor of native compiled binaries (omnet-sentinel). Statically compiled in Rust for ARMv7, this background engine runs in sub-milliseconds: executing automated Open Port Warden scans, astronomical solar ephemeris, 72-hour predictive freeze models, GDD agronomy integration, and live node throughput tracking with zero token burn.</p>
-                <div class="tech-stack">
-                    <span class="tag">Rust (ARMv7)</span>
-                    <span class="tag">Zero-LLM Overhead</span>
-                    <span class="tag">Deterministic Math</span>
-                    <span class="tag">musl/gnueabihf</span>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3><i class="fab fa-golang"></i> 4. Command & Control (CLI & HUD)</h3>
-                <p>Unified tactical situational awareness across the entire ecosystem. Anchored by a high-speed compiled Go binary (omnet) delivering structured ASCII HUDs, raw JSON, and downloadable CSV exports. Complemented by a dark-neon Web Command Center on port 8080 featuring interactive SVG time-series graphs, per-node throughput popup modals, and P2P WireGuard mesh routing linking homestead, outposts, and fleet.</p>
-                <div class="tech-stack">
-                    <span class="tag">Go CLI</span>
-                    <span class="tag">Tailscale WireGuard</span>
-                    <span class="tag">Real-Time Web HUD</span>
-                    <span class="tag">CSV/JSON Export</span>
-                </div>
-            </div>
+        <div class="card">
+          <h3>
+            <i class="fas fa-network-wired"></i> 2. Sovereign Local Core & Bus
+          </h3>
+          <p>
+            Telemetry routing is completely sovereign and operates independently
+            of public cloud dependencies. Dual Raspberry Pi edge nodes run a
+            high-throughput Mosquitto MQTT broker, ingesting sensor payloads
+            into local SQLite time-series databases (tioga_telemetry.db).
+            Autonomous Python sentries and logrotators execute continuous
+            8-subsystem health diagnostics and self-healing token rotations.
+          </p>
+          <div class="tech-stack">
+            <span class="tag">Mosquitto MQTT</span>
+            <span class="tag">SQLite Time-Series</span>
+            <span class="tag">Raspberry Pi</span>
+            <span class="tag">Self-Healing</span>
+          </div>
         </div>
+
+        <div class="card">
+          <h3><i class="fab fa-rust"></i> 3. Compiled Native Sentinels</h3>
+          <p>
+            Eliminates high-overhead LLM polling for real-time operations in
+            favor of native compiled binaries (omnet-sentinel). Statically
+            compiled in Rust for ARMv7, this background engine runs in
+            sub-milliseconds: executing automated Open Port Warden scans,
+            astronomical solar ephemeris, 72-hour predictive freeze models, GDD
+            agronomy integration, and live node throughput tracking with zero
+            token burn.
+          </p>
+          <div class="tech-stack">
+            <span class="tag">Rust (ARMv7)</span>
+            <span class="tag">Zero-LLM Overhead</span>
+            <span class="tag">Deterministic Math</span>
+            <span class="tag">musl/gnueabihf</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>
+            <i class="fab fa-golang"></i> 4. Command & Control (CLI & HUD)
+          </h3>
+          <p>
+            Unified tactical situational awareness across the entire ecosystem.
+            Anchored by a high-speed compiled Go binary (omnet) delivering
+            structured ASCII HUDs, raw JSON, and downloadable CSV exports.
+            Complemented by a dark-neon Web Command Center on port 8080
+            featuring interactive SVG time-series graphs, per-node throughput
+            popup modals, and P2P WireGuard mesh routing linking homestead,
+            outposts, and fleet.
+          </p>
+          <div class="tech-stack">
+            <span class="tag">Go CLI</span>
+            <span class="tag">Tailscale WireGuard</span>
+            <span class="tag">Real-Time Web HUD</span>
+            <span class="tag">CSV/JSON Export</span>
+          </div>
+        </div>
+      </div>
     </div>
 
     <script>
-        // Interactive Canvas Network Effect
-        const canvas = document.getElementById('network-canvas');
-        const ctx = canvas.getContext('2d');
+      // Interactive Canvas Network Effect
+      const canvas = document.getElementById('network-canvas');
+      const ctx = canvas.getContext('2d');
 
-        let width, height;
-        let particles = [];
+      let width, height;
+      let particles = [];
 
-        function resize() {
-            width = canvas.width = window.innerWidth;
-            height = canvas.height = window.innerHeight;
+      function resize() {
+        width = canvas.width = window.innerWidth;
+        height = canvas.height = window.innerHeight;
+      }
+
+      window.addEventListener('resize', resize);
+      resize();
+
+      class Particle {
+        constructor() {
+          this.x = Math.random() * width;
+          this.y = Math.random() * height;
+          this.vx = (Math.random() - 0.5) * 0.5;
+          this.vy = (Math.random() - 0.5) * 0.5;
+          this.radius = Math.random() * 1.5 + 0.5;
         }
 
-        window.addEventListener('resize', resize);
-        resize();
+        update() {
+          this.x += this.vx;
+          this.y += this.vy;
 
-        class Particle {
-            constructor() {
-                this.x = Math.random() * width;
-                this.y = Math.random() * height;
-                this.vx = (Math.random() - 0.5) * 0.5;
-                this.vy = (Math.random() - 0.5) * 0.5;
-                this.radius = Math.random() * 1.5 + 0.5;
-            }
-
-            update() {
-                this.x += this.vx;
-                this.y += this.vy;
-
-                if (this.x < 0 || this.x > width) this.vx *= -1;
-                if (this.y < 0 || this.y > height) this.vy *= -1;
-            }
-
-            draw() {
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(0, 255, 65, 0.5)';
-                ctx.fill();
-            }
+          if (this.x < 0 || this.x > width) this.vx *= -1;
+          if (this.y < 0 || this.y > height) this.vy *= -1;
         }
 
-        function initParticles() {
-            particles = [];
-            let numParticles = Math.floor((width * height) / 15000); // Responsive density
-            for (let i = 0; i < numParticles; i++) {
-                particles.push(new Particle());
-            }
+        draw() {
+          ctx.beginPath();
+          ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(0, 255, 65, 0.5)';
+          ctx.fill();
         }
+      }
 
-        function animate() {
-            ctx.clearRect(0, 0, width, height);
-            
-            for (let i = 0; i < particles.length; i++) {
-                particles[i].update();
-                particles[i].draw();
-                
-                for (let j = i + 1; j < particles.length; j++) {
-                    let dx = particles[i].x - particles[j].x;
-                    let dy = particles[i].y - particles[j].y;
-                    let dist = Math.sqrt(dx * dx + dy * dy);
-                    
-                    if (dist < 120) {
-                        ctx.beginPath();
-                        ctx.strokeStyle = `rgba(0, 255, 65, ${0.15 - dist/800})`;
-                        ctx.lineWidth = 0.5;
-                        ctx.moveTo(particles[i].x, particles[i].y);
-                        ctx.lineTo(particles[j].x, particles[j].y);
-                        ctx.stroke();
-                    }
-                }
-            }
-            requestAnimationFrame(animate);
+      function initParticles() {
+        particles = [];
+        let numParticles = Math.floor((width * height) / 15000); // Responsive density
+        for (let i = 0; i < numParticles; i++) {
+          particles.push(new Particle());
         }
+      }
 
-        initParticles();
-        animate();
+      function animate() {
+        ctx.clearRect(0, 0, width, height);
+
+        for (let i = 0; i < particles.length; i++) {
+          particles[i].update();
+          particles[i].draw();
+
+          for (let j = i + 1; j < particles.length; j++) {
+            let dx = particles[i].x - particles[j].x;
+            let dy = particles[i].y - particles[j].y;
+            let dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist < 120) {
+              ctx.beginPath();
+              ctx.strokeStyle = `rgba(0, 255, 65, ${0.15 - dist / 800})`;
+              ctx.lineWidth = 0.5;
+              ctx.moveTo(particles[i].x, particles[i].y);
+              ctx.lineTo(particles[j].x, particles[j].y);
+              ctx.stroke();
+            }
+          }
+        }
+        requestAnimationFrame(animate);
+      }
+
+      initParticles();
+      animate();
     </script>
-</body>
+  </body>
 </html>
