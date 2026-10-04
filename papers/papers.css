@@ -1,0 +1,48 @@
+/* Field Notes: technical reports, sharing the Field Manual's layout */
+
+.doc-figure {
+  margin: 1.6em 0 2em;
+  padding: 12px;
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.doc-figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+.doc-figure figcaption {
+  margin-top: 10px;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+
+.notes-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.notes-list li {
+  margin: 0 0 22px;
+  padding: 18px 22px;
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.notes-list .note-date {
+  font-family: var(--font-tech);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--primary);
+}
+
+.notes-list h3 {
+  margin: 6px 0 8px;
+}
