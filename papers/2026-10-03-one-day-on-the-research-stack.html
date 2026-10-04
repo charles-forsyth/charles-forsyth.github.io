@@ -1,0 +1,770 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>One Day on the Research Stack | Field Notes</title>
+    <meta
+      name="description"
+      content="A field report from 3 October 2026: 38 releases across a cloud HPC cluster, its MCP gateway, an AI research engine, an operator desk and a notes server, with the measurements, the trade-offs and the mistakes."
+    />
+    <link
+      rel="canonical"
+      href="https://charles-forsyth.github.io/papers/2026-10-03-one-day-on-the-research-stack.html"
+    />
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="../handbook/handbook.css" />
+    <link rel="stylesheet" href="papers.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+  </head>
+  <body>
+    <header class="hero doc-hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="doc-kicker">
+            <i class="fas fa-flask"></i> Field Notes | 3 October 2026
+          </p>
+          <h1>One Day on the Research Stack</h1>
+          <h2>
+            38 releases across a cloud cluster, its AI gateway, a research
+            engine, an operator desk and a notes server
+          </h2>
+          <div class="cta-buttons">
+            <a href="index.html" class="btn btn-secondary"
+              ><i class="fas fa-file-alt"></i> All Field Notes</a
+            >
+            <a href="../index.html" class="btn btn-secondary"
+              ><i class="fas fa-arrow-left"></i> Main Site</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+    <main class="section-light">
+      <div class="container doc-layout">
+        <aside class="doc-toc">
+          <h4><i class="fas fa-list"></i> On this page</h4>
+          <ul>
+            <li><a href="#abstract">Abstract</a></li>
+            <li><a href="#the-stack">The Stack</a></li>
+            <li>
+              <a href="#the-cluster">The Cluster: Fewer, Cheaper Nodes</a>
+            </li>
+            <li><a href="#the-gateway">The Gateway: ursa-bifrost</a></li>
+            <li>
+              <a href="#the-research-engine"
+                >The Research Engine: deep-research</a
+              >
+            </li>
+            <li><a href="#the-operator-desk">The Operator Desk: Ultra</a></li>
+            <li><a href="#the-notes-server">The Notes Server: vault-mcp</a></li>
+            <li>
+              <a href="#software-parity"
+                >Software Parity, Built by the Cluster</a
+              >
+            </li>
+            <li><a href="#media-tooling">Media Tooling</a></li>
+            <li><a href="#what-went-wrong">What Went Wrong</a></li>
+            <li><a href="#patterns">Patterns Worth Keeping</a></li>
+            <li><a href="#whats-next">What Is Next</a></li>
+            <li><a href="#sources">Repositories and Specs</a></li>
+          </ul>
+        </aside>
+        <article class="doc-content">
+          <h2 id="abstract">Abstract</h2>
+          <p>
+            On Saturday, 3 October 2026, I shipped 38 releases across five
+            projects that together make up how UCR Research Computing's cloud
+            cluster, Ursa Major, is operated, used by AI tools, and explained to
+            people. The cluster itself was re-laid out around cheaper node types
+            and gained an always-on test partition. Its MCP gateway,
+            <strong>ursa-bifrost</strong>, got a reliability fix for a morning
+            outage and became the only path the AI research engine uses for
+            cluster work. The research engine, <strong>deep-research</strong>,
+            went through 14 releases, retired about 970 lines of legacy code and
+            gained a cluster dashboard, capacity-aware queueing and a plan-first
+            launch mode. My operator desk, <strong>Ultra</strong>, went through
+            12 releases, from a calmer layout to fully separate Work and
+            Personal workspaces. A new Go server, <strong>vault-mcp</strong>,
+            gives AI tools append-only access to a personal notes vault. In the
+            evening the cluster began installing itself a large share of the
+            software catalog of UCR's on-premises cluster, as Slurm jobs.
+          </p>
+          <p>
+            The work was directed by me and carried out mostly by an AI agent
+            (Hermes) working under written specs, test gates and explicit
+            approval steps. This report gives the measurements behind each
+            change, the trade-offs, and the mistakes, which were real and are
+            listed in their own section.
+          </p>
+          <figure class="doc-figure">
+            <img
+              src="img/2026-10-03/releases-timeline.png"
+              alt="Timeline of 38 releases on 3 October 2026 across deep-research, Ultra, ursa-bifrost, vault-mcp and the voice tool"
+            />
+            <figcaption>
+              Every release of the day, by project and time (EDT), taken from
+              the git tags. The voice tool's fix shipped as a merged PR without
+              a tag.
+            </figcaption>
+          </figure>
+
+          <h2 id="the-stack">The Stack</h2>
+          <p>
+            Each layer has a written spec that is kept in step with the code;
+            several of them were re-read against the code and updated the same
+            night.
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Layer</th>
+                <th>What it is</th>
+                <th>Releases today</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Ursa Major</td>
+                <td>
+                  Slurm cluster on Google Cloud, built with Cluster Toolkit;
+                  shared Filestore for /home, /apps and /scratch
+                </td>
+                <td>2 merged infrastructure changes</td>
+              </tr>
+              <tr>
+                <td>ursa-bifrost</td>
+                <td>
+                  Go MCP server and CLI: a closed list of validated cluster
+                  commands, per-user Google sign-in, tiered permissions,
+                  two-step approval for anything that spends money; plus
+                  ursa-agent, a web front door for people without their own AI
+                  tool
+                </td>
+                <td>9 (v0.9.5 to v0.9.10, agent 0.4.0 to 0.4.2)</td>
+              </tr>
+              <tr>
+                <td>deep-research</td>
+                <td>
+                  Cited research reports from Gemini Deep Research, plus a Lab
+                  that plans, pilots and runs computational checks on the
+                  cluster
+                </td>
+                <td>14 (v0.54.0 to v0.61.2)</td>
+              </tr>
+              <tr>
+                <td>Ultra</td>
+                <td>
+                  A local operator desk: mail, calendar, tickets, Slack, the
+                  team's relationship ledger (Nexus) and the cluster in one
+                  keyboard-driven screen
+                </td>
+                <td>12 (v1.5.0 to v1.14.1)</td>
+              </tr>
+              <tr>
+                <td>vault-mcp</td>
+                <td>Go MCP server over a personal Obsidian vault</td>
+                <td>2 (v0.1.0, v0.1.1)</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h2 id="the-cluster">The Cluster: Fewer, Cheaper Nodes</h2>
+          <h3 id="an-always-on-check-partition">
+            An always-on check partition
+          </h3>
+          <p>
+            Before today, the only fast place to run a tiny test was a 22-core
+            node that deep-research kept warm for itself at about $1.87 an hour.
+            Anyone else either waited for a node to boot or ran checks on the
+            login node, which we do not allow. The new
+            <code>check</code> partition is one <code>e2-standard-4</code> that
+            is always on (about $0.13 an hour), scales out to three more nodes
+            when tests pile up, and retracts slowly, after an hour idle. Jobs
+            there are capped at 15 minutes.
+          </p>
+          <p>
+            Tested with real jobs: two started within one second on the
+            always-on node; a third waited about 70 seconds while a second node
+            booted, which is the auto-expand working. Python, NumPy, OpenMPI and
+            GROMACS loaded. One surprise: Google would not boot an e2 with the
+            cluster's default maintenance policy, so the partition uses live
+            migration, which also keeps the always-on node up through Google's
+            host maintenance.
+          </p>
+          <h3 id="five-kinds-of-partition-instead-of-eight">
+            Five kinds of partition instead of eight
+          </h3>
+          <p>
+            Three numbers drove the re-layout. In the previous 30 days Google
+            had failed to start our <code>standard</code> nodes 390 times,
+            <code>spot</code> nodes 84 times and <code>computehigh</code> nodes
+            54 times, with each partition able to use only one zone. The
+            <code>computehigh</code>
+            partition accounted for about 95% of 60-day cluster spend. And
+            across all jobs, CPU efficiency was about 27%: jobs held far more
+            cores than they used.
+          </p>
+          <figure class="doc-figure">
+            <img
+              src="img/2026-10-03/vcpu-price.png"
+              alt="Bar chart of on-demand price per vCPU-hour for e2-standard-32, n2d-standard-32, c3-highcpu-44 and c2d-standard-32"
+            />
+            <figcaption>
+              Google on-demand list prices for us-central1, pulled the same day.
+              The e2 is the cheapest per core; its cores are also the slowest,
+              which matters less when jobs use about a quarter of what they ask
+              for.
+            </figcaption>
+          </figure>
+          <p>The layout that went live:</p>
+          <ul>
+            <li>
+              <strong>standard</strong> (the default) and
+              <strong>spot</strong> moved to <code>e2-standard-32</code>, at
+              $1.07 and about $0.64 an hour, and may start nodes in any of the
+              four us-central1 zones, up to 48 nodes each.
+            </li>
+            <li>
+              <strong>check</strong> as above; <strong>gpul4</strong> and
+              <strong>highmem</strong> unchanged.
+            </li>
+            <li>
+              <strong>computehigh</strong> capped at 4 nodes, kept for
+              multi-node MPI and AVX-512 code;
+              <strong>nvmescratch</strong> capped at 2; the short-lived
+              <strong>lab</strong> partition removed.
+            </li>
+          </ul>
+          <p>
+            The apply matched the read-only plan exactly (2 added, 4 changed, 9
+            removed), with deployment and Terraform state backed up first. A
+            real job on the new <code>standard</code> booted a fresh e2 node in
+            about 60 seconds and found the software stack and all three shared
+            file systems. The login banner, cost tool, quick-start guide and the
+            machine-readable catalog the AI tools read were all updated to
+            match.
+          </p>
+          <p>
+            The trade-off that needed handling: e2 chips have AVX2 but not
+            AVX-512. Our software stack is built for <code>x86_64_v3</code>, so
+            all of it runs, but a binary someone compiled for AVX-512 crashes
+            with an illegal instruction. That became gateway work (next
+            section). Still unproven: a node starting in a zone other than
+            us-central1-a. That will happen on its own the next time zone a runs
+            short.
+          </p>
+
+          <h2 id="the-gateway">The Gateway: ursa-bifrost</h2>
+          <h3 id="a-15-minute-outage-and-its-fix">
+            A 15-minute outage, and its fix
+          </h3>
+          <p>
+            The day started with the hosted dashboard showing a wall of errors.
+            The cause was in bifrost's cluster login. It signs in to the login
+            node with a short-lived OS Login key that lasts 8 hours. The
+            overnight key had lapsed. On the morning's first request bifrost
+            imported a new key, but the login node takes up to about 30 seconds
+            to accept a new key, and bifrost gave up after about 40 seconds,
+            deleted the key and started over. Five dashboard panels queued
+            behind that one login. After a few rounds a key got through; the
+            outage lasted about 15 minutes.
+          </p>
+          <p>
+            v0.9.5 changed three things: it extends the expiry of the existing
+            key in place once less than 2 hours remain, which works with no gap
+            (measured live before the change shipped); it renews in the
+            background while a connection is in use; and a newly imported key is
+            stored before its first login and never deleted for being slow. The
+            test fake now behaves like the real login node, refusing a new key
+            for a while. Every new safeguard was broken on purpose and a test
+            caught each one. That evening the hosted bifrost extended its key in
+            place, which is the renewal path proven in production.
+          </p>
+          <p>
+            The dashboard (ursa-agent) also lost every sign-in whenever Cloud
+            Run scaled it to zero. ursa-agent 0.4.0 seals each sign-in into its
+            own private bucket with the service's own key; only identity, access
+            tier and gateway tokens are stored, never chat text.
+          </p>
+          <h3 id="checks-move-off-the-login-node">
+            Checks move off the login node
+          </h3>
+          <p>
+            <code>env_check</code> answers "does this module load, and which
+            compiler, MPI and Python do I get?" It used to run on the login
+            node. In v0.9.6 it runs its fixed template as a one-core, three
+            minute Slurm job on <code>check</code> and reports the job and node
+            it used. A check of two real modules and one made-up one came back
+            in 3.6 seconds, with Lmod's own error for the fake.
+          </p>
+          <p>
+            A second finding: check jobs finished in two or three seconds but
+            took about 85 seconds to show as done. Slurm was not slow; the
+            gateway was answering from its queue cache. In v0.9.7, a
+            <code>jobs_list</code> call naming specific job IDs asks Slurm for
+            just those jobs, uncached, and keeps only the caller's own rows. End
+            to end, quick checks dropped to 6 to 10 seconds.
+          </p>
+          <h3 id="teaching-the-gateway-about-the-hardware">
+            Teaching the gateway about the hardware
+          </h3>
+          <p>
+            v0.9.8 to v0.9.10 made the gateway aware of the new layout: when a
+            partition is short of machines it suggests <code>standard</code>,
+            then <code>spot</code>, then <code>computehigh</code>; the partition
+            list shows time limits and instruction sets; the script checker
+            warns before an AVX-512 build lands on an e2 partition; and
+            <code>job_explain</code> recognizes an illegal instruction from the
+            log line or exit code 132. This was tested end to end with a small
+            AVX-512 program on <code>standard</code>: the checker warned, the
+            job crashed as predicted, and the explanation named the cause and
+            the fix. The cost was about a penny.
+          </p>
+
+          <h2 id="the-research-engine">The Research Engine: deep-research</h2>
+          <p>
+            deep-research turns a question into a cited report and can then test
+            a claim from that report computationally in its Lab: plan a job, run
+            a pilot, run the real job on the cluster, and judge the result
+            against criteria written down in advance.
+          </p>
+          <h3 id="from-ssh-to-the-gateway">From SSH to the gateway</h3>
+          <p>
+            Until today the Lab drove the cluster over SSH. The migration
+            happened in steps, each live before the next:
+          </p>
+          <ol>
+            <li>
+              <strong>v0.55.0:</strong> real jobs go through bifrost. Pressing
+              Submit on a reviewed plan counts as approval, but the Lab only
+              sends the job if bifrost's plan is for exactly the script the Lab
+              built, the worst-case cost is no more than three times the
+              reviewed estimate and never over $10, and the run has sent no more
+              than six jobs. bifrost's own per-program caps apply on top.
+            </li>
+            <li>
+              <strong>v0.56.0:</strong> fact checks and pilots run as short jobs
+              on <code>check</code> through bifrost. A full test run went fact
+              check, pilot, real run with zero SSH calls.
+            </li>
+            <li>
+              <strong>v0.58.0:</strong> the warm-node code is gone, about 970
+              lines including a worker script, a keeper thread and its routes.
+            </li>
+          </ol>
+          <p>
+            The last step, removing the SSH fallback entirely, is deliberately
+            on hold. Our migration plan requires a week of real use on the new
+            path without falling back, and that week started today.
+          </p>
+          <h3 id="making-the-lab-cluster-aware">
+            Making the Lab cluster-aware
+          </h3>
+          <ul>
+            <li>
+              <strong>Cluster view (v0.57.0):</strong> cost per hour now, nodes
+              by state per partition, our jobs over 14 days, spend and CPU
+              efficiency over 30 days, and storage. Each section keeps its last
+              answer and refreshes in the background, because the storage read
+              alone takes about 100 seconds.
+            </li>
+            <li>
+              <strong>Capacity before queueing (v0.57.1):</strong> Google offers
+              no way to ask in advance whether it has machines to spare, so the
+              Lab uses recent evidence: if a partition reported a shortage, or
+              lost one of our nodes in the last three hours, the run goes to a
+              partition that suits the same kind of job. A job bounced while
+              waiting now moves after the first failure, not the third.
+            </li>
+            <li>
+              <strong>Certificates in every job:</strong> one run's pilot failed
+              because the cluster's Python could not verify an HTTPS
+              certificate. Every Lab job now sets up the CA bundle before the
+              user's script starts.
+            </li>
+            <li>
+              <strong>Core advice from history (v0.59.0):</strong> before
+              submit, the check warns when similar past runs used far fewer
+              cores than the plan requests and suggests a number. This goes
+              straight at the 27% efficiency figure.
+            </li>
+          </ul>
+          <h3 id="a-calmer-interface-max-and-plan-first">
+            A calmer interface, Max and Plan first
+          </h3>
+          <p>
+            v0.54.0 and v0.60.0 cut the interface down: the report page went
+            from about 20 buttons to four plus a menu, and each Lab run card now
+            shows one status line and one main button. v0.61.0 added
+            <strong>Deep Research Max</strong> as a launch option and
+            <strong>Plan first</strong>, which shows the agent's research plan
+            for editing before anything is spent; nothing launches on its own.
+            Cost estimates now include Google's search charges: the spec's
+            worked table puts one run at about $0.95 to $2.07 on the regular
+            agent and $1.79 to $4.03 on Max. Projects can also be linked to a
+            lab, grant or GCP project in the team ledger; v0.61.2 fixed that
+            picker after live testing showed the ledger's own search ranked
+            loose matches above real name matches.
+          </p>
+          <p>
+            The spec was re-read section by section against the code at the end
+            of the day (354 lines added, 208 removed; 3,323 lines). All 756
+            tests pass, including checks that keep the spec and code in step.
+          </p>
+
+          <h2 id="the-operator-desk">The Operator Desk: Ultra</h2>
+          <h3 id="a-calm-layout-driven-by-one-table">
+            A calm layout driven by one table
+          </h3>
+          <p>
+            Ultra had grown a button for everything. v1.5.0 moved every action
+            into one table that drives the toolbar, the menus and the command
+            palette. Tests fail if an action goes unplaced or a toolbar grows
+            past its budget, so nothing can be silently dropped. The classic
+            layout stays, switchable both ways from the keyboard.
+          </p>
+          <figure class="doc-figure">
+            <img
+              src="img/2026-10-03/desk-controls.png"
+              alt="Bar chart: visible controls in classic versus calm layout, 69 to 31 with an email open, 15 to 5 toolbar buttons, 47 to 20 with nothing open"
+            />
+            <figcaption>
+              Visible controls on demo data at 1440x900, counted by the test
+              suite.
+            </figcaption>
+          </figure>
+          <h3 id="ledger-writes-over-mcp-without-duplicates">
+            Ledger writes over MCP, without duplicates
+          </h3>
+          <p>
+            In v1.6.0, logs, tasks and links go to the team ledger through its
+            MCP server instead of a local CLI. The rule that matters is about
+            uncertain outcomes: if the server refuses before running anything,
+            Ultra falls back to the CLI; if the result is unknown (a timeout or
+            dropped connection), Ultra reports a failure and asks the operator
+            to check the record. It never re-sends, so a flaky network cannot
+            produce a duplicate log. Deletes stay on the CLI by design. Later
+            releases added cluster facts to support mail (a job ID in an email
+            shows the job's state and a likely cause) and a read-only Ask Hermes
+            that can look things up but not act.
+          </p>
+          <h3 id="two-workspaces-and-nothing-crosses">
+            Two workspaces, and nothing crosses
+          </h3>
+          <p>
+            v1.11.0 split Ultra into Work and Personal, each with its own
+            config, state database, Google sign-ins, drafts, history and
+            signature, switched with one key and colour-coded so it is always
+            clear which one is open. Personal has no team ledger, no Slack and
+            no tickets; its ledger is the notes vault. Later releases let
+            Personal log to and add tasks in the vault through vault-mcp, gave
+            it a "Life" home organized by area, added read-only house sensor
+            readings from a home server, and let a task be ticked done with a
+            one-time token that refuses if the note changed since the page
+            loaded.
+          </p>
+          <p>
+            The separation was tested the hard way. In the evening, Personal's
+            daily plan showed work tasks. The cause was a cached copy of the
+            work task list left in Personal's database from before the ledger
+            was switched off there, and nothing stopped Personal from reading
+            it. v1.14.1 makes a workspace with the ledger off unable to read it
+            at all and ignores any leftover cache. 783 tests pass. The spec's
+            workspace, vault and Life sections were rewritten against the code
+            the same night (2,861 lines).
+          </p>
+
+          <h2 id="the-notes-server">The Notes Server: vault-mcp</h2>
+          <p>
+            The personal vault is about 950 Markdown notes. An off-the-shelf MCP
+            server was tried first, code-reviewed and run read-only. It handled
+            safety well, but writing in the vault's own conventions called for
+            something purpose-built. vault-mcp is a small Go binary with no
+            network, no login and no database. It reads the notes directly (1 to
+            40 ms per answer) and follows the vault's own layout rules note to
+            decide where things go.
+          </p>
+          <ul>
+            <li>
+              <strong>Append or create only.</strong> A guard checks that every
+              existing line survives each write; the only in-place edit allowed
+              is ticking a task done.
+            </li>
+            <li>
+              <strong>One git commit per write</strong>, of just that note,
+              authored as the owner "via" the client that wrote it.
+            </li>
+            <li>
+              <strong>Stale-write guard:</strong> a write carries the hash from
+              the read and fails if the note changed meanwhile, for example
+              while open in Obsidian.
+            </li>
+            <li>
+              <strong>Never follows a symlink.</strong> The vault contains a
+              link to a work folder; it stays invisible.
+            </li>
+            <li>A read-only mode removes the write tools entirely.</li>
+          </ul>
+          <p>
+            Before the server, the vault itself was reorganized: one place and
+            one file name per log type, 172 notes moved with history kept, and
+            links rewritten. Every write was first run against a throwaway copy
+            of the vault, which caught one bug before release: new tasks landed
+            under the wrong heading because that heading happened to contain the
+            text "(active".
+          </p>
+
+          <h2 id="software-parity">Software Parity, Built by the Cluster</h2>
+          <p>
+            UCR's on-premises cluster publishes its module tree. The catalog
+            holds 625 modules and 1,223 version files with history back to 2012.
+            Each module was matched against our live modules, our pinned Spack
+            recipes (9,084), bioconda (12,739 names) and conda-forge (34,560),
+            then assigned one install lane.
+          </p>
+          <figure class="doc-figure">
+            <img
+              src="img/2026-10-03/software-lanes.png"
+              alt="Bar chart of install lanes: 87 already installed, 275 bioconda, 42 Spack, 14 conda-forge, 7 pip, 18 GPU or containers, 14 databases, 63 manual, 49 licensed, 56 skipped"
+            />
+            <figcaption>
+              Lanes from the parity plan's inventory. If the automated lanes
+              land, coverage is about 443 of the 573 modules worth installing,
+              roughly 77%.
+            </figcaption>
+          </figure>
+          <p>
+            Every build runs as a Slurm job on compute nodes; the login node
+            only syncs files. Each bioconda or conda-forge tool gets its own
+            Pixi environment and a clean-shell smoke test, and its module is
+            published only if the test passes. A ten-tool pilot passed first;
+            the rest ran 24 at a time as a spot array.
+          </p>
+          <h3 id="a-crash-on-exit">A crash on exit</h3>
+          <p>
+            The most instructive failure was a new time-series environment,
+            <code>python-ts</code> (statsforecast, neuralforecast, stumpy,
+            ruptures, cfgrib and friends, 51 packages). Every import and fit
+            test passed on an L4 GPU node, then Python aborted on shutdown with
+            "double free or corruption". A bisect job found the pair: eccodes
+            2.43 and later pull in a library that ships its own copy of libproj,
+            and pyproj ships another. Two copies of the same library in one
+            process crash on exit. Pinning <code>eccodes==2.42.0</code>, which
+            bundles its own library without the second libproj, fixed it. The
+            rebuild added a GRIB2 write-and-read round trip and checks every
+            risky import pair in both orders. On a synthetic series with noise
+            of standard deviation 0.5, AutoETS forecast error came in at 0.417
+            and NHITS at 0.437. The environment is published as a module.
+          </p>
+          <h3 id="status-at-midnight">Status at midnight</h3>
+          <p>As of the last check, 23:39 EDT, with jobs still running:</p>
+          <ul>
+            <li>
+              Pixi tools: 226 tried, 208 published. Failures each have a cause:
+              misnamed packages, a Python 3.12 removal, a binary needing a newer
+              glibc than Rocky 8's 2.28, and one needing AVX-512. Those go to a
+              retry pass or to containers.
+            </li>
+            <li>
+              Spack: 47 roots built, 5 failed, diagnosis pending the job's error
+              output.
+            </li>
+            <li>
+              Containers: all six passed (DeepVariant CPU and GPU, NCBI FCS-GX,
+              RAPT, PGAP and the SimVascular solver).
+            </li>
+            <li>
+              Also live: WPS 4.6.0, wgrib2 3.8.0 and eccodes 2.47.0, so WRF can
+              be fed real weather data.
+            </li>
+          </ul>
+
+          <h2 id="media-tooling">Media Tooling</h2>
+          <p>
+            For a set of short demo videos (the cluster dashboard, the desk, the
+            research engine, the gateway and the ledger server), narration came
+            from Gemini text-to-speech. Every clip ended in an eighth of a
+            second of static. The cause: the WAV response carries a trailer, a
+            C2PA manifest marking the audio as AI-generated, and the voice tool
+            played it as sound. v0.3.1 of the voice tool keeps only the audio
+            frames. Each narration line was transcribed and compared word for
+            word with the script, which also caught an earlier bug where the
+            tone instruction was being read aloud as part of the narration.
+          </p>
+
+          <h2 id="what-went-wrong">What Went Wrong</h2>
+          <p>
+            A day this dense produces mistakes. These are the ones worth
+            recording, most of them the agent's, caught by checks rather than by
+            luck:
+          </p>
+          <ul>
+            <li>
+              <strong>A test wrote to the real database.</strong> One new test
+              added 16 fake "running" reports to the live history. They were
+              removed from a backup-protected copy, and v0.61.1 makes the test
+              suite unable to touch the real database, verified by removing the
+              per-test fix and confirming nothing changed.
+            </li>
+            <li>
+              <strong>An interrupted test may have launched a paid run.</strong>
+              A cut-off test of the Max agent may have started one run before
+              saving its ID. Worst case is a few dollars; it cannot be checked
+              or cancelled from our side.
+            </li>
+            <li>
+              <strong>Files pushed over a running job.</strong> The first
+              python-ts rebuild exited 0 having built nothing, because repo
+              files were synced over its script mid-run. Jobs now run from
+              private copies.
+            </li>
+            <li>
+              <strong>A version label went out wrong.</strong> Two tags on one
+              commit made the hosted gateway report the agent's version. The fix
+              shipped as a new release rather than moving a published tag.
+            </li>
+            <li>
+              <strong>A workspace leak.</strong> Work tasks appeared in Personal
+              through a stale cache, described above.
+            </li>
+            <li>
+              <strong>A session that hung.</strong> One long agent session
+              stalled for several minutes under gateway load while other
+              sessions sent very large requests. Nothing was corrupted; the work
+              resumed in a fresh session from the saved transcript.
+            </li>
+          </ul>
+
+          <h2 id="patterns">Patterns Worth Keeping</h2>
+          <ol>
+            <li>
+              <strong>Measure the bottleneck before fixing it.</strong> The
+              85-second check was a cache, not Slurm. The stockouts were one
+              zone and one machine family, not "the cloud".
+            </li>
+            <li>
+              <strong>Prefer renewal to replacement</strong> for anything with
+              propagation delay: keys, certificates, DNS.
+            </li>
+            <li>
+              <strong>Never re-send a write whose outcome is unknown.</strong>
+              Report it and let a person look.
+            </li>
+            <li>
+              <strong>Approval binds to the exact artifact.</strong> A reviewed
+              plan authorizes that script and that cost bound, not whatever the
+              system builds next.
+            </li>
+            <li>
+              <strong
+                >Delete code only after the replacement has carried real
+                load,</strong
+              >
+              and write the waiting period into the plan.
+            </li>
+            <li>
+              <strong>Separation is a property you test,</strong> not a setting
+              you trust.
+            </li>
+            <li>
+              <strong>Publish only what passes a smoke test,</strong> and keep
+              the reason for every failure.
+            </li>
+            <li>
+              <strong>Keep the spec current the same day.</strong> Three specs
+              were re-read against their code before midnight.
+            </li>
+          </ol>
+
+          <h2 id="whats-next">What Is Next</h2>
+          <ul>
+            <li>
+              Finish the parity install: the retry pass, the Spack failures,
+              then decisions on reference databases and licensed codes.
+            </li>
+            <li>
+              Remove deep-research's SSH fallback after a clean week on the
+              gateway.
+            </li>
+            <li>
+              Recalibrate the Lab's cost estimate against real runs, and price
+              job arrays correctly in the gateway.
+            </li>
+            <li>
+              Keep pushing CPU efficiency up from 27%, which is now the largest
+              cost lever left.
+            </li>
+          </ul>
+
+          <h2 id="sources">Repositories and Specs</h2>
+          <p>Public repositories touched today:</p>
+          <ul>
+            <li>
+              <a
+                href="https://github.com/UCR-Research-Computing/ursa-bifrost"
+                target="_blank"
+                rel="noopener"
+                >UCR-Research-Computing/ursa-bifrost</a
+              >
+              (spec: <code>docs/SPEC.md</code>, 1,155 lines)
+            </li>
+            <li>
+              <a
+                href="https://github.com/charles-forsyth/deep-research"
+                target="_blank"
+                rel="noopener"
+                >charles-forsyth/deep-research</a
+              >
+              (spec: <code>docs/SPEC.md</code>, 3,323 lines)
+            </li>
+            <li>
+              <a
+                href="https://github.com/charles-forsyth/ultra-workstation"
+                target="_blank"
+                rel="noopener"
+                >charles-forsyth/ultra-workstation</a
+              >
+              (spec: <code>SPEC.md</code>, 2,861 lines)
+            </li>
+            <li>
+              <a
+                href="https://github.com/charles-forsyth/generate-gemini-voice"
+                target="_blank"
+                rel="noopener"
+                >charles-forsyth/generate-gemini-voice</a
+              >
+            </li>
+          </ul>
+          <p>
+            The cluster deployment, the team ledger and vault-mcp live in
+            private repositories. Figures in this report come from the git
+            history, the specs, the test runs and the live checks recorded
+            during the day; prices are Google's published on-demand rates for
+            us-central1 on 3 October 2026.
+          </p>
+          <nav class="doc-pager" aria-label="Field notes navigation">
+            <a class="pager-prev" href="index.html"
+              ><span>Back</span>All Field Notes</a
+            ><span></span>
+          </nav>
+        </article>
+      </div>
+    </main>
+
+    <footer class="section-dark">
+      <div class="container text-center">
+        <p class="footer-note">
+          Field Notes |
+          <a href="index.html" class="subtle-link">All notes</a> |
+          <a href="../index.html" class="subtle-link"
+            >charles-forsyth.github.io</a
+          >
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>
