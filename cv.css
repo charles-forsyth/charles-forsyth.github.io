@@ -189,6 +189,21 @@
 }
 
 /* Print / PDF: clean black-on-white resume */
+.cv-downloads,
+.cv-list {
+  margin: 0 0 8px 0;
+  padding-left: 20px;
+}
+
+.cv-downloads li,
+.cv-list li {
+  margin-bottom: 6px;
+}
+
+.cv-downloads a {
+  font-weight: 600;
+}
+
 @media print {
   @page {
     margin: 14mm 14mm;
