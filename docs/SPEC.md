@@ -154,7 +154,8 @@ surface `#132219`, accent `#d4b886`, green `#3c6e47`, text `#e4ebe6`.
   padding) with a `.doc-kicker` line (mono, uppercase, green).
 - **Buttons**: `.btn.btn-primary` (green fill, glow, inverts on hover),
   `.btn.btn-secondary` (tan outline, fills tan on hover), `.btn-link` (inline arrow
-  link in cards).
+  link in cards). Cards for public projects that have a GitHub Pages showcase use
+  `.card-links` with two links: Project Page (the showcase) and Repo (GitHub icon).
 - **Sections**: alternate `section-light` (surface, borders, 80 px padding) and
   `section-dark`. Section titles are h3 with a Font Awesome icon.
 - **Cards**: `.stat-card` (about grid), `.project-card` (flagship grid, equal heights,

@@ -749,3 +749,15 @@ footer h3 {
 .ai-timeline a:focus {
   color: #fff;
 }
+
+/* Project cards with a project page and a repo link */
+.project-card .card-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  margin-top: auto;
+}
+
+.project-card .card-links .btn-link {
+  margin-top: 0;
+}
