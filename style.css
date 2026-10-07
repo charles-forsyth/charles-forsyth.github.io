@@ -35,11 +35,15 @@ h4 {
 
 /* Hero Section */
 .hero {
-  background: radial-gradient(
-    circle at 50% 120%,
-    var(--bg-surface-alt) 0%,
-    var(--bg-deep) 80%
-  );
+  background:
+    linear-gradient(
+      90deg,
+      rgba(14, 26, 20, 0.92) 0%,
+      rgba(14, 26, 20, 0.78) 45%,
+      rgba(14, 26, 20, 0.55) 100%
+    ),
+    url('assets/hero-ai-network.jpg') center / cover no-repeat,
+    var(--bg-deep);
   border-bottom: 1px solid var(--border-color);
   padding: 120px 20px;
   text-align: center;
