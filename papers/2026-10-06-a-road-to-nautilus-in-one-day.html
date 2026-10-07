@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>A Road to Nautilus in One Day | Field Notes</title>
+    <meta
+      name="description"
+      content="A field report from 6 October 2026: nrp-mcp, an open-source MCP server that lets researchers run work on the NRP Nautilus Kubernetes cluster from the AI assistant they already use, built, released and then put through five adversarial reviews in one day."
+    />
+    <link
+      rel="canonical"
+      href="https://charles-forsyth.github.io/papers/2026-10-06-a-road-to-nautilus-in-one-day.html"
+    />
+    <meta property="og:type" content="article" />
+    <meta
+      property="og:url"
+      content="https://charles-forsyth.github.io/papers/2026-10-06-a-road-to-nautilus-in-one-day.html"
+    />
+    <meta
+      property="og:title"
+      content="A Road to Nautilus in One Day | Field Notes"
+    />
+    <meta
+      property="og:description"
+      content="nrp-mcp went from a written plan to a public, cross-platform release in one day, and then five adversarial reviewers told us exactly what was not ready yet."
+    />
+    <meta
+      property="og:image"
+      content="https://charles-forsyth.github.io/assets/og-share.jpg"
+    />
+    <meta property="twitter:card" content="summary_large_image" />
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="../handbook/handbook.css" />
+    <link rel="stylesheet" href="papers.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+  </head>
+  <body>
+    <header class="hero doc-hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="doc-kicker">
+            <i class="fas fa-flask"></i> Field Notes | 6 October 2026
+          </p>
+          <h1>A Road to Nautilus in One Day</h1>
+          <h2>
+            An open-source MCP server that turns plain requests into
+            policy-checked work on a national Kubernetes cluster, and what five
+            adversarial reviews said about it
+          </h2>
+          <div class="cta-buttons">
+            <a href="index.html" class="btn btn-secondary"
+              ><i class="fas fa-file-alt"></i> All Field Notes</a
+            >
+            <a href="../index.html" class="btn btn-secondary"
+              ><i class="fas fa-arrow-left"></i> Main Site</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+    <main class="section-light">
+      <div class="container doc-layout">
+        <aside class="doc-toc">
+          <h4><i class="fas fa-list"></i> On this page</h4>
+          <ul>
+            <li><a href="#abstract">Abstract</a></li>
+            <li><a href="#the-problem">The Problem</a></li>
+            <li><a href="#the-tool">The Tool</a></li>
+            <li><a href="#the-day">The Day, Release by Release</a></li>
+            <li><a href="#the-guides">The Guides Behind It</a></li>
+            <li><a href="#the-reviews">Five Adversarial Reviews</a></li>
+            <li><a href="#what-went-wrong">What Went Wrong</a></li>
+            <li><a href="#patterns">Patterns Worth Keeping</a></li>
+            <li><a href="#whats-next">What Is Next</a></li>
+            <li><a href="#sources">Repositories</a></li>
+          </ul>
+        </aside>
+        <article class="doc-content">
+          <h2 id="abstract">Abstract</h2>
+          <p>
+            On Tuesday, 6 October 2026, UCR Research Computing built and
+            released <strong>nrp-mcp</strong>, an open-source Model Context
+            Protocol (MCP) server that lets a researcher use the National
+            Research Platform's Nautilus cluster from the AI assistant they
+            already use. The researcher describes what they want in plain
+            language; nrp-mcp reads the project, writes the Kubernetes
+            manifests, checks them against NRP policy, explains the plan, and
+            runs nothing until the person says yes. It went from a written plan
+            to version 0.3.0 by late morning and to 0.6.4, public and tested on
+            Windows, macOS and Linux, by late afternoon. That evening five
+            independent adversarial reviews judged the idea sound and the tool
+            not yet safe for unsupervised students. This note covers what was
+            built, how it was tested, and what the reviews found.
+          </p>
+          <p>
+            As with earlier field notes, the work was directed by me and carried
+            out mostly by an AI agent (Hermes) under a written spec, live tests
+            and explicit approval steps.
+          </p>
+
+          <h2 id="the-problem">The Problem</h2>
+          <p>
+            Nautilus is a large, shared Kubernetes cluster run by the National
+            Research Platform and open to researchers at member institutions. It
+            has GPUs, storage and hosted language models, at no charge to the
+            researcher. The barrier is the interface. A researcher whose work
+            lives in a Slurm batch script has to learn containers, Jobs, Indexed
+            Jobs, persistent volumes, Ingress and NRP's own usage rules before
+            the first result comes back. Most of them have papers to write
+            instead, and the ones who do learn it can still break NRP policy
+            without meaning to.
+          </p>
+
+          <h2 id="the-tool">The Tool</h2>
+          <p>
+            nrp-mcp is a single Go binary that runs on the researcher's own
+            computer, uses their own kubeconfig and NRP sign-in, and offers nine
+            tools named for intent rather than for Kubernetes objects:
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Tool</th>
+                <th>Changes things?</th>
+                <th>What it does</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>nrp_setup</code></td>
+                <td>only when asked to fix</td>
+                <td>
+                  Laptop readiness: kubectl version, the sign-in plugin, the NRP
+                  config file, sign-in; installs or updates with a yes
+                </td>
+              </tr>
+              <tr>
+                <td><code>nrp_status</code></td>
+                <td>no</td>
+                <td>
+                  Namespaces, GPU quotas, running work, volumes, public URLs,
+                  policy warnings
+                </td>
+              </tr>
+              <tr>
+                <td><code>nrp_plan</code></td>
+                <td>no</td>
+                <td>
+                  Reads a project and a goal (job, sweep, web, session,
+                  llm-batch, volume, pull), applies every rule, and returns the
+                  plan, the refusals, the manifests and a confirm token
+                </td>
+              </tr>
+              <tr>
+                <td><code>nrp_run</code></td>
+                <td>yes, with a token</td>
+                <td>
+                  Runs an approved plan; anything public also needs an explicit
+                  acknowledgement
+                </td>
+              </tr>
+              <tr>
+                <td><code>nrp_watch</code></td>
+                <td>no</td>
+                <td>Progress, logs, a plain-language diagnosis with a fix</td>
+              </tr>
+              <tr>
+                <td><code>nrp_cleanup</code></td>
+                <td>yes, two steps</td>
+                <td>Lists your runs, deletes one after a second confirm</td>
+              </tr>
+              <tr>
+                <td><code>nrp_session</code></td>
+                <td>no</td>
+                <td>A private Jupyter or VS Code session via port-forward</td>
+              </tr>
+              <tr>
+                <td><code>nrp_data</code></td>
+                <td>uploads only</td>
+                <td>Small uploads and result downloads on a volume</td>
+              </tr>
+              <tr>
+                <td><code>nrp_build</code></td>
+                <td>no</td>
+                <td>
+                  Suggests a Dockerfile and an NRP GitLab CI file to build an
+                  image
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            In practice a researcher says things like "run this script on a
+            GPU", "run it 200 times with different seeds", "move my Slurm job
+            here" or "put my lab's tool on the web". A Slurm script's
+            <code>#SBATCH</code> lines are translated, and anything with no
+            equivalent is named rather than silently dropped.
+          </p>
+
+          <h2 id="the-day">The Day, Release by Release</h2>
+          <ul>
+            <li>
+              <strong>Morning: plan.</strong> A written plan named the server,
+              fixed the tool prefix, and added web hosting to version 1 with a
+              guard that refuses to publish until the person types the URL back.
+            </li>
+            <li>
+              <strong>0.3.0 (10:52 EDT).</strong> Eight tools, a rules engine,
+              and the plan, confirm, run sequence.
+            </li>
+            <li>
+              <strong>0.4.0 and 0.4.1 (11:04 to 11:13).</strong> Data and
+              session tools tested live; a live parameter sweep as an Indexed
+              Job; a first public web publish of a small leaf-area example app,
+              live over HTTPS in about a minute and then taken down and cleaned
+              up.
+            </li>
+            <li>
+              <strong>0.5.0 (12:06).</strong> <code>nrp_setup</code>, because
+              the real first step is the laptop, not the cluster.
+            </li>
+            <li>
+              <strong>0.6.0 (12:47).</strong> Public release preparation:
+              per-person cleanup, one namespace resolution path, a release
+              workflow, an install script, community files and a rewritten
+              README. The repository went public.
+            </li>
+            <li>
+              <strong>Cross-platform CI (13:15).</strong> A setup test on fresh
+              Windows, macOS and Linux runners, with a no-sign-in mode for CI.
+            </li>
+            <li>
+              <strong>0.6.2 (13:50).</strong> Tool schemas made single-typed
+              after one assistant rejected a schema the others accepted. Three
+              assistants tested end to end: Hermes Agent, Gemini CLI and
+              OpenCode.
+            </li>
+            <li>
+              <strong>0.6.3 (15:05).</strong> Each Slurm array task now gets its
+              own <code>SLURM_ARRAY_TASK_ID</code>, with a bootstrap example and
+              a live array check.
+            </li>
+            <li>
+              <strong>0.6.4 (16:49).</strong> Pod and GPU caps now count what
+              runs at once, not a sweep's total.
+            </li>
+          </ul>
+          <p>
+            The largest live run of the day was a 60-task sweep that ran 20 at a
+            time under the default limit. No GPUs were used for testing, and the
+            namespace was left empty at the end of the day.
+          </p>
+
+          <h2 id="the-guides">The Guides Behind It</h2>
+          <p>
+            The tool leans on documentation that went live the same morning: an
+            eight-part researcher guide to Nautilus on the Research Computing
+            website (KB023 to KB030) covering access, notebooks, batch and GPU
+            work, storage, the hosted language models, hosting a lab web tool,
+            and teaching a class. nrp-mcp serves those guides as resources, so
+            the assistant can point a person to the page that explains what it
+            just did. A set of 20 worked research examples, from seismic
+            waveform processing to econometrics Monte Carlo studies, was written
+            and reviewed alongside it.
+          </p>
+
+          <h2 id="the-reviews">Five Adversarial Reviews</h2>
+          <p>
+            Anything handed to students has to be read by people looking for its
+            faults. Five independent reviewers each took one area. None of them
+            touched the live cluster; bugs were reproduced on local test
+            clusters, in containers and in unit tests.
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Area</th>
+                <th>Critical</th>
+                <th>High</th>
+                <th>Medium</th>
+                <th>Low</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Security</td>
+                <td>0</td>
+                <td>2</td>
+                <td>7</td>
+                <td>7</td>
+              </tr>
+              <tr>
+                <td>Correctness and fuzzing</td>
+                <td>0</td>
+                <td>12</td>
+                <td>15</td>
+                <td>14</td>
+              </tr>
+              <tr>
+                <td>Cross-platform installs</td>
+                <td>2</td>
+                <td>3</td>
+                <td>7</td>
+                <td>8</td>
+              </tr>
+              <tr>
+                <td>Robustness on Kubernetes</td>
+                <td>1</td>
+                <td>10</td>
+                <td>10</td>
+                <td>6</td>
+              </tr>
+              <tr>
+                <td>Design and value</td>
+                <td>1</td>
+                <td>8</td>
+                <td>5</td>
+                <td>3</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Many findings overlap; together they make about 30 distinct issues.
+            The headline answers:
+          </p>
+          <ul>
+            <li>
+              <strong>Is it a good idea?</strong> Yes. Nothing else the
+              reviewers found takes a researcher from a Slurm script or a folder
+              of code to a policy-compliant sweep on Nautilus. The Go code was
+              called clean and portable, the confirm tokens well built, the
+              downloads properly verified.
+            </li>
+            <li>
+              <strong>Is it secure?</strong> Mostly by design: no local shell,
+              argument-only kubectl calls, cryptographic tokens, checksummed
+              downloads. But it has two real holes. The project packer could
+              include credential files, and two people in one shared namespace
+              choosing the same volume name could end with one deleting the
+              other's data. The "nothing runs without your yes" promise is also
+              not enforced, because the model can see the token.
+            </li>
+            <li>
+              <strong>Is it stable?</strong> The happy paths work. Just off
+              them, common inputs break: projects over 256 KB, file names with
+              spaces, static sites, a volume used for over an hour, and
+              real-world Slurm time strings. A request for
+              <code>--time=0-06:00</code> was being read as one hour.
+            </li>
+            <li>
+              <strong>Is it cross-platform?</strong> The binary is. The install
+              story is not yet: some macOS and fresh Linux setups leave it off
+              the PATH, and Windows lacks a student-ready installer.
+            </li>
+          </ul>
+          <p>
+            The reviewers' recommendation: a supervised, CPU-only workshop
+            exercise is fine once the priority list is fixed; other labs get a
+            supervised pilot in their own namespace; wider promotion waits.
+          </p>
+
+          <h2 id="what-went-wrong">What Went Wrong</h2>
+          <ul>
+            <li>
+              <strong>Released before it was reviewed.</strong> The repository
+              went public at midday and the adversarial reviews came back that
+              evening. The order should have been the other way round for
+              anything a student might run unsupervised. Nothing was harmed, but
+              the README briefly claimed shared namespaces were safe, and they
+              are not yet.
+            </li>
+            <li>
+              <strong>A schema only one client rejected.</strong> A tool schema
+              that most assistants accepted was refused by one. Testing against
+              a single client would have shipped it broken for that client's
+              users.
+            </li>
+            <li>
+              <strong>One reviewer was stopped by a content filter.</strong>
+              The first security review was blocked partway through by the model
+              provider's filter and had to be rerun with a narrower, defensive
+              brief.
+            </li>
+            <li>
+              <strong>The large-project path is untested.</strong> Small
+              projects are copied straight into a stock container. Bigger ones
+              need an image built on NRP GitLab, and that path has generated its
+              files correctly but has never been driven end to end.
+            </li>
+          </ul>
+
+          <h2 id="patterns">Patterns Worth Keeping</h2>
+          <ul>
+            <li>
+              <strong>Plan, confirm, run.</strong> Every change returns a plan
+              and a token first; nothing changes on the cluster without the
+              second step.
+            </li>
+            <li>
+              <strong>Start at the laptop.</strong> Most first-day failures are
+              local: wrong kubectl, no sign-in plugin, no config file.
+            </li>
+            <li>
+              <strong>Name intents, not objects.</strong> "sweep" and "web" are
+              what people want; Indexed Jobs and Ingress are how.
+            </li>
+            <li>
+              <strong>Test against several assistants.</strong> MCP clients
+              differ in what they accept.
+            </li>
+            <li>
+              <strong>Publish the reviews.</strong> The five reports, a summary
+              and a combined fix list are kept with the project, so the gap
+              between what the tool claims and what it does is on the record.
+            </li>
+          </ul>
+
+          <h2 id="whats-next">What Is Next</h2>
+          <ul>
+            <li>
+              Fix the two security holes and the issues that would break a
+              supervised workshop exercise, before next Monday's lab workshop.
+            </li>
+            <li>
+              Drive the GitLab image-build path end to end with a project shaped
+              like a real lab web application, before recommending it to labs
+              with larger tools.
+            </li>
+            <li>
+              A courtesy note to the NRP administrators about the tool, now that
+              it is public and other labs may use it on a shared cluster.
+            </li>
+          </ul>
+
+          <h2 id="sources">Repositories</h2>
+          <ul>
+            <li>
+              <a
+                href="https://github.com/UCR-Research-Computing/nrp-mcp"
+                target="_blank"
+                rel="noopener"
+                >UCR-Research-Computing/nrp-mcp</a
+              >
+              (Go, public)
+            </li>
+            <li>
+              <a
+                href="https://ucr-research-computing.github.io/kb/kb023-nautilus-researcher-guide/"
+                target="_blank"
+                rel="noopener"
+                >Researcher guide to NRP Nautilus (KB023 to KB030)</a
+              >
+            </li>
+          </ul>
+          <p>
+            The review reports, the research examples and the workshop materials
+            live in a private planning repository. Figures in this note come
+            from the git history, the review summary and the live test runs
+            recorded during the day.
+          </p>
+          <nav class="doc-pager" aria-label="Field notes navigation">
+            <a class="pager-prev" href="index.html"
+              ><span>Back</span>All Field Notes</a
+            ><span></span>
+          </nav>
+        </article>
+      </div>
+    </main>
+
+    <footer class="section-dark">
+      <div class="container text-center">
+        <p class="footer-note">
+          Field Notes |
+          <a href="index.html" class="subtle-link">All notes</a> |
+          <a href="../index.html" class="subtle-link"
+            >charles-forsyth.github.io</a
+          >
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>
