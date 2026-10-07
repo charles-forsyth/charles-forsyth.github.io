@@ -1,0 +1,16 @@
+####   Sudo Code  ####
+## shows how IFs, WHILEs, and FORs work.
+
+if condition:                  #Checks is something is true
+    action                     #If true performs action
+elif condition:                #Then checks is this is true
+    action                     #If true performs action
+else                           #if none of that is true
+    action                     #perform this action
+
+while condition:               #while something is true
+    action                     #perform this action
+
+for iterating_var in sequence: #iterate over a sequence
+    action on iterating_var    #perform action on each iteration
+
