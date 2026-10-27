@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Directing a Fleet of AI Builders | Field Notes</title>
+    <meta
+      name="description"
+      content="A field report from 24 to 27 October 2026: a dozen apps started on five machines with four AI models, what finished, what broke, and the rules that came out of it."
+    />
+    <link
+      rel="canonical"
+      href="https://charles-forsyth.github.io/papers/2026-10-27-directing-a-fleet-of-ai-builders.html"
+    />
+    <meta property="og:type" content="article" />
+    <meta
+      property="og:url"
+      content="https://charles-forsyth.github.io/papers/2026-10-27-directing-a-fleet-of-ai-builders.html"
+    />
+    <meta
+      property="og:title"
+      content="Directing a Fleet of AI Builders | Field Notes"
+    />
+    <meta
+      property="og:description"
+      content="A dozen apps, five machines, four models and one long weekend. The agents were capable; the failures came from what they were allowed to touch and from trusting reports instead of the live system."
+    />
+    <meta
+      property="og:image"
+      content="https://charles-forsyth.github.io/assets/og-share.jpg"
+    />
+    <meta property="twitter:card" content="summary_large_image" />
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="../handbook/handbook.css" />
+    <link rel="stylesheet" href="papers.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+  </head>
+  <body>
+    <header class="hero doc-hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="doc-kicker">
+            <i class="fas fa-flask"></i> Field Notes | 27 October 2026
+          </p>
+          <h1>Directing a Fleet of AI Builders</h1>
+          <h2>
+            A dozen apps, five machines, four models and one long weekend: what
+            finished, what broke, and the rules that came out of it
+          </h2>
+          <div class="cta-buttons">
+            <a href="index.html" class="btn btn-secondary"
+              ><i class="fas fa-file-alt"></i> All Field Notes</a
+            >
+            <a href="../index.html" class="btn btn-secondary"
+              ><i class="fas fa-arrow-left"></i> Main Site</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+    <main class="section-light">
+      <div class="container doc-layout">
+        <aside class="doc-toc">
+          <h4><i class="fas fa-list"></i> On this page</h4>
+          <ul>
+            <li><a href="#abstract">Abstract</a></li>
+            <li><a href="#setup">The Setup</a></li>
+            <li><a href="#what-came-out">What Came Out</a></li>
+            <li><a href="#ultra-pocket">Ultra Pocket</a></li>
+            <li><a href="#other-apps">The Other Apps</a></li>
+            <li><a href="#what-worked">What Worked</a></li>
+            <li><a href="#what-went-wrong">What Went Wrong</a></li>
+            <li><a href="#bugs">Three Bugs Worth Telling</a></li>
+            <li><a href="#models">Models and Tokens</a></li>
+            <li><a href="#rules">Rules Going Forward</a></li>
+            <li><a href="#sources">Sources</a></li>
+          </ul>
+        </aside>
+        <article class="doc-content">
+          <h2 id="abstract">Abstract</h2>
+          <p>
+            From Saturday 24 to Tuesday 27 October 2026 I ran an experiment in
+            directing AI coding agents at scale. About a dozen applications were
+            started on five machines with four models: Android apps, Windows
+            desktop apps, a macOS app and a small server. Each build was handed
+            to an agent running on the target machine, with a written brief and
+            a second, stronger model reviewing the work in rounds. Most of the
+            apps are personal experiments. One, a phone version of the AI
+            operator desk I use for my Research Computing work, became a real
+            tool with 141 commits and 465 unit tests.
+          </p>
+          <p>
+            The useful result is less the apps than the lessons. The agents were
+            capable. The failures came from what they were allowed to touch, and
+            from my orchestrator trusting a file or a report instead of checking
+            the live system. This note covers both.
+          </p>
+          <p>
+            As with earlier field notes, the work was directed by me and carried
+            out by AI agents under written briefs, independent checks and
+            explicit approval steps. Figures come from git history, test reports
+            and the AI gateway's usage report.
+          </p>
+
+          <h2 id="setup">The Setup</h2>
+          <ul>
+            <li>
+              <strong>The orchestrator.</strong> Hermes, the agent I work with
+              every day, ran on my laptop. It wrote each brief, launched the
+              build, watched its progress and checked the result.
+            </li>
+            <li>
+              <strong>The builders.</strong> A separate agent on each target
+              machine: a Windows virtual machine with a full developer
+              toolchain, a 16-core cloud workstation for Android builds, a few
+              Linux test machines, and the laptop itself for macOS. Each one did
+              its own installs, builds and debugging.
+            </li>
+            <li>
+              <strong>The models.</strong> Four did the building and reviewing:
+              Claude Opus, Sonnet and Haiku 5.5, and an open model (Qwen 3)
+              hosted on the National Research Platform. Gemini models run inside
+              some of the apps. All traffic went through a campus AI gateway
+              that records usage per key.
+            </li>
+            <li>
+              <strong>The loop.</strong> A builder model works in phases; a
+              reviewer model reads the result, writes a review file, and sends
+              it back with a list of fixes; the round repeats until the reviewer
+              signs off. Then the orchestrator checks it independently before I
+              hear the word "done".
+            </li>
+          </ul>
+
+          <h2 id="what-came-out">What Came Out</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>App</th>
+                <th>Platform</th>
+                <th>What it is</th>
+                <th>State</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Ultra Pocket</td>
+                <td>Android</td>
+                <td>
+                  My AI operator desk, rethought for a phone: mail triage, AI
+                  briefings, drafted replies, chat with my work tools
+                </td>
+                <td>In daily use; version 1.3.3; 465 unit tests</td>
+              </tr>
+              <tr>
+                <td>Telescope</td>
+                <td>macOS</td>
+                <td>
+                  A read-only viewer for the research cloud projects I oversee:
+                  spend, budgets, credits, compute, exposure and access
+                </td>
+                <td>Installed and used; 126 unit tests</td>
+              </tr>
+              <tr>
+                <td>Beacon</td>
+                <td>Android + server</td>
+                <td>
+                  Bluetooth and Wi-Fi signal mapping on drives, family location
+                  sharing and chat, over a private message broker
+                </td>
+                <td>Version 2.1; 92 app and 18 server tests</td>
+              </tr>
+              <tr>
+                <td>Field journal</td>
+                <td>Android</td>
+                <td>
+                  An offline-first field journal for garden, wildlife and land
+                  notes, using the phone's sensors
+                </td>
+                <td>Version 1.2; 64 unit tests</td>
+              </tr>
+              <tr>
+                <td>DungeonMind</td>
+                <td>Windows</td>
+                <td>
+                  A roguelike played by a Q-learning agent, with a slow "watch"
+                  mode to follow its decisions
+                </td>
+                <td>Finished, built by an open model</td>
+              </tr>
+              <tr>
+                <td>Four smaller apps</td>
+                <td>Android, Windows</td>
+                <td>
+                  A system monitor, a cluster dashboard, a gateway client, a
+                  home dashboard
+                </td>
+                <td>Finished, frozen as is</td>
+              </tr>
+              <tr>
+                <td>Three more</td>
+                <td>Windows</td>
+                <td>
+                  An AI overlay, two overnight tests, an early spend board
+                </td>
+                <td>Removed or replaced</td>
+              </tr>
+            </tbody>
+          </table>
+          <figure class="doc-figure">
+            <img
+              src="img/2026-10-27/commit-timeline.png"
+              alt="Timeline of 195 commits from Sunday to Tuesday across Ultra Pocket (141), Telescope (35), Beacon (13) and the field journal (6), split into build commits and review commits"
+            />
+            <figcaption>
+              Every commit in the four main repositories, by time (EDT).
+              Diamonds are commits written by the reviewer model. Telescope was
+              built and reviewed through eight rounds in one afternoon; Ultra
+              Pocket ran in phases over two days.
+            </figcaption>
+          </figure>
+
+          <h2 id="ultra-pocket">Ultra Pocket</h2>
+          <p>
+            The app that mattered. Ultra is the desktop AI operator desk I use
+            for Research Computing work (on the main site). Ultra Pocket is the
+            same idea rethought for a phone, not a port: the screens are built
+            around one-thumb decisions on mail and follow-ups, and it reaches
+            the same back-end tools.
+          </p>
+          <ul>
+            <li>
+              <strong>A summary and a briefing.</strong> One button gives a
+              quick summary from a small, fast model. A second, "Context",
+              searches my work ledger, past sent and received mail, and the
+              Research Computing website for the people and the topic, then
+              writes a briefing on what is going on.
+            </li>
+            <li>
+              <strong>Drafted replies.</strong> Opening Reply produces a draft
+              that has already read the thread, the ledger and the relevant
+              website policy, in a professional but soft tone. Nothing is sent
+              from the draft screen; sending takes two approvals.
+            </li>
+            <li>
+              <strong>Chat with my tools.</strong> A chat tab lets me ask any of
+              several models to search mail, log and link work in the ledger, or
+              look something up, with voice in and natural voice out.
+            </li>
+            <li>
+              <strong>Built in phases.</strong> A written spec gave each phase a
+              concrete "done" bar. Sonnet built, Opus reviewed, and 65 of the
+              141 commits are review rounds.
+            </li>
+          </ul>
+          <figure class="doc-figure">
+            <img
+              src="img/2026-10-27/ultra-pocket-demo.jpg"
+              alt="Three phone screens from Ultra Pocket in demo mode: a mail thread with an AI summary, a drafted reply with an approval step, and a Today list of items waiting on me"
+            />
+            <figcaption>
+              Ultra Pocket's demo build, which uses invented people and mail so
+              it can be shown. Left to right: a thread with its summary, a
+              drafted reply waiting for approval, and the Today view.
+            </figcaption>
+          </figure>
+
+          <h2 id="other-apps">The Other Apps</h2>
+          <p>
+            <strong>Telescope</strong> is a macOS app that reads the research
+            cloud projects I oversee through an MCP server and shows spend,
+            budgets, billing credits, compute, public exposure, service accounts
+            and more, per project and across the fleet. It signs in as the
+            person using it, so each person sees only what their own account can
+            see. Its reviewer caught a chart that drew negative net spend the
+            wrong way and a month-accuracy bug before release.
+          </p>
+          <p>
+            <strong>Beacon</strong> started as a family location-sharing and
+            chat app and grew into a revival of an old hobby project: logging
+            the Bluetooth and Wi-Fi signals a phone can already see while
+            driving, then estimating where each one sits from how its strength
+            changes along the route. It is passive. It records only what any
+            phone receives anyway, never connects to anything it finds, and
+            sends data only to my own private broker over an encrypted network.
+            Version 2.1 came from blunt feedback: version 2.0 worked but, in my
+            words at the time, "looks like a Fisher-Price child's app". A full
+            redesign followed, with a calm dark palette, proper vector icons and
+            a full-screen map with floating instrument panels.
+          </p>
+          <p>
+            <strong>The field journal</strong> is a personal app for garden,
+            wildlife and land notes. It stamps each entry with compass bearing,
+            tilt, pressure and location, measures distance by triangulation,
+            draws a live audio spectrogram, and switches between a sunlight
+            mode, a dusk mode and a red night mode from the light sensor. Opus
+            built and reviewed the first version in about fifteen minutes on the
+            cloud workstation; two redesigns followed.
+          </p>
+          <figure class="doc-figure">
+            <img
+              src="img/2026-10-27/field-journal-lens.jpg"
+              alt="The field journal's camera view in dusk mode and in red night mode, showing azimuth, pitch, range, pressure and temperature readouts"
+            />
+            <figcaption>
+              The field journal's camera view in dusk mode and in red night
+              mode, with the sensor readouts used to stamp each entry.
+            </figcaption>
+          </figure>
+          <p>
+            <strong>DungeonMind</strong> was the slow-lane experiment: a
+            Q-learning agent learning to play a large procedural dungeon, built
+            by a free open model running unattended on the Windows machine. It
+            finished, but took about six hours for roughly an hour of a frontier
+            model's work, and needed a second attempt.
+          </p>
+
+          <h2 id="what-worked">What Worked</h2>
+          <ul>
+            <li>
+              <strong
+                >Hand the whole build to an agent on the target machine.</strong
+              >
+              A brief written to a file, and an agent that does its own setup,
+              installs and debugging. This scaled far better than driving builds
+              remotely.
+            </li>
+            <li>
+              <strong>A builder plus a stronger reviewer, in rounds.</strong>
+              The reviewer caught real problems the builders missed: the true
+              cause of an unwanted sign-in, a chart drawing the wrong way, an
+              accuracy bug, and work marked done that was not.
+            </li>
+            <li>
+              <strong>An independent check before "done".</strong> The
+              orchestrator launched each app, took a screenshot, looked for
+              crashes and, for data apps, ran one query against the source. One
+              spend dashboard matched the billing data exactly. One Windows
+              build had quietly stopped before its own final checks, and only
+              the independent check showed it.
+            </li>
+            <li>
+              <strong>The phone is the final test.</strong> A real sign-in on a
+              real phone, and a real drive, found problems no emulator or unit
+              test did.
+            </li>
+            <li>
+              <strong>Hard rules in every brief.</strong> Keys are read at run
+              time and never compiled in, a key-leak scan runs at the end, and
+              only real output counts. No key leaked in any build.
+            </li>
+          </ul>
+
+          <h2 id="what-went-wrong">What Went Wrong</h2>
+          <ul>
+            <li>
+              <strong>An agent clicked through a real sign-in.</strong> During
+              automated tests on my live laptop, a release build opened over my
+              desktop, a click meant for another window hit its Sign in button,
+              and the browser's existing session finished the sign-in silently.
+              It happened five times. The builder wrote itself a note promising
+              to stop, then did it twice more. The fix was policy, not code:
+              that model now builds only on sandboxed machines, and signed-in
+              apps run only as demo builds during automation.
+            </li>
+            <li>
+              <strong>Production was the default.</strong> One brief said "find
+              my hosted message broker in your notes". The notes named the one
+              that runs my home systems, and the agent pointed the new app at
+              it, test messages included. A correction arrived after the agent
+              had started and was never read. Briefs now name the services an
+              agent may not touch, and never ask it to discover a back end.
+            </li>
+            <li>
+              <strong>A model switch that never happened.</strong> I asked for
+              the laptop builds to move to a different model. The orchestrator
+              edited the driver script and reported it done, but the running
+              loop had already loaded the old version, and builds ran on the old
+              model for five more hours. Changes are now confirmed in the
+              running process list, not in the file.
+            </li>
+            <li>
+              <strong>Builds that stopped early.</strong> Some agents ended
+              their turn while "waiting" for something and left work half done.
+              Only the independent check caught them.
+            </li>
+            <li>
+              <strong>Too much at once.</strong> Starting a build costs one
+              brief. Finishing one costs sign-ins, keys, installs and live
+              checks, and those land on a person. Ideas arrived faster than
+              builds finished, and by the second day the work felt scattered.
+              The answer was a cap of two apps in active work and everything
+              else frozen.
+            </li>
+            <li>
+              <strong>Wrong numbers, confidently stated.</strong> Even writing
+              this note, an earlier summary claimed one app had twice as many
+              tests as it does. Every figure here was recounted from the test
+              reports.
+            </li>
+          </ul>
+          <p>
+            The common thread in all of these is autonomy without a check on the
+            result. The agents were capable; the failures came from what they
+            were allowed to touch and from trusting a report instead of the live
+            system.
+          </p>
+
+          <h2 id="bugs">Three Bugs Worth Telling</h2>
+          <p>
+            <strong>A burst of static after every spoken reply.</strong> Ultra
+            Pocket reads briefings aloud with a cloud text-to-speech model.
+            Every clip ended in a short, loud burst of noise, like a
+            walkie-talkie signing off. Smoothing the end of the audio did not
+            fix it. The cause was in the file itself: the service returns a
+            standard WAV file with a content-provenance (C2PA) record of about 6
+            KB attached after the audio. The app was playing the whole file, so
+            the player treated that record as sound. The fix keeps only the
+            audio data chunk and adds a short fade and silence so the speaker
+            drains cleanly. The same bug had been found and fixed weeks earlier
+            in a desktop voice tool, and searching my own notes found it.
+          </p>
+          <p>
+            <strong>A briefing button that almost always failed.</strong> The
+            Context briefing gathers material with tool calls, then asks for a
+            final answer with tools turned off. Ending the conversation on a
+            tool result with that setting made one model return an empty answer
+            and another keep calling tools anyway. Adding a short user message
+            after the tool results and removing the tool list entirely on the
+            final turn made it work with every model.
+          </p>
+          <p>
+            <strong>A colleague who resolved to no one.</strong> Exchange writes
+            names as "Last, First", so a header listing several people is full
+            of commas. The address parser split on commas, so "Last" and "First"
+            became two strangers and the directory lookup found neither. Parsing
+            name and address as pairs, and flipping "Last, First" before the
+            lookup, fixed it.
+          </p>
+
+          <h2 id="models">Models and Tokens</h2>
+          <p>
+            Different models earned different jobs. Opus did every review and
+            the hardest builds, and found root causes others missed. Sonnet was
+            a solid default builder. Haiku was cheap and accurate on a sandboxed
+            machine, and careless on a live one. The open model was free and
+            slow.
+          </p>
+          <figure class="doc-figure">
+            <img
+              src="img/2026-10-27/model-share.png"
+              alt="Bar chart of share of requests and share of cost by model over five days: Opus 36 percent of requests and 75 percent of cost; Sonnet 15 and 13; Haiku 16 and 2; Gemini Flash models 17 and 4; Gemini Argon 7 and 7; NRP open models 9 and 0"
+            />
+            <figcaption>
+              Share of requests and of cost by model over five days, from the AI
+              gateway's report for my keys. This covers all of my AI use those
+              days, not only the app builds.
+            </figcaption>
+          </figure>
+          <p>
+            Cost follows the top model, not the request count: about a third of
+            the requests went to Opus and three quarters of the cost. Prompt
+            caching mattered more than any model choice. 89 percent of all input
+            tokens over those five days were served from cache. Ultra Pocket is
+            built for that: its instructions and tool lists come first and stay
+            fixed so the cache can reuse them, mail is trimmed of quoted history
+            and signatures before a model sees it, a small model gathers
+            material and a larger one writes, and website search runs on the
+            phone itself.
+          </p>
+
+          <h2 id="rules">Rules Going Forward</h2>
+          <ul>
+            <li>
+              At most two apps in active work at once; the rest stay frozen.
+            </li>
+            <li>
+              An app is finished when I have installed it and used it, not when
+              a file exists.
+            </li>
+            <li>
+              The strongest model reviews; the builder depends on where it runs.
+              The cheapest model builds only on sandboxed machines.
+            </li>
+            <li>
+              After any change to a running system, confirm it in the running
+              system.
+            </li>
+            <li>
+              Briefs name the production services an agent may not use, and
+              never ask it to discover a back end.
+            </li>
+            <li>
+              Signed-in release builds never launch on a live desktop during
+              automated work; demo builds only for screenshots.
+            </li>
+            <li>
+              Every finished build gets an independent check before anyone hears
+              "done".
+            </li>
+          </ul>
+
+          <h2 id="sources">Sources</h2>
+          <p>
+            The repositories for these apps are private: some hold personal
+            settings, and one reaches internal campus systems. The figures in
+            this note come from their git history, their test reports, the AI
+            gateway's usage report for my keys, and a lessons-learned document
+            written from the session record on the second day. Related public
+            work:
+          </p>
+          <ul>
+            <li>
+              <a
+                href="https://charles-forsyth.github.io/ultra-workstation/"
+                target="_blank"
+                rel="noopener"
+                >Ultra AI Workstation</a
+              >, the desktop operator desk that Ultra Pocket rethinks
+            </li>
+            <li>
+              <a
+                href="https://github.com/UCR-Research-Computing/ursa-bifrost"
+                target="_blank"
+                rel="noopener"
+                >UCR-Research-Computing/ursa-bifrost</a
+              >, the cluster MCP server one of the dashboards uses
+            </li>
+          </ul>
+          <nav class="doc-pager" aria-label="Field notes navigation">
+            <a class="pager-prev" href="index.html"
+              ><span>Back</span>All Field Notes</a
+            ><span></span>
+          </nav>
+        </article>
+      </div>
+    </main>
+
+    <footer class="section-dark">
+      <div class="container text-center">
+        <p class="footer-note">
+          Field Notes |
+          <a href="index.html" class="subtle-link">All notes</a> |
+          <a href="../index.html" class="subtle-link"
+            >charles-forsyth.github.io</a
+          >
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>
