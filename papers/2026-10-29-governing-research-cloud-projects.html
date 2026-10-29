@@ -1,0 +1,1343 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Governing 176 Research Cloud Projects | Field Notes</title>
+    <meta
+      name="description"
+      content="How UC Riverside Research Computing governs 176 Google Cloud projects with budgets shown as allocations, a throttle at the cap and a read-only audit tool."
+    />
+    <link
+      rel="canonical"
+      href="https://charles-forsyth.github.io/papers/2026-10-29-governing-research-cloud-projects.html"
+    />
+    <meta property="og:type" content="article" />
+    <meta
+      property="og:url"
+      content="https://charles-forsyth.github.io/papers/2026-10-29-governing-research-cloud-projects.html"
+    />
+    <meta
+      property="og:title"
+      content="Governing 176 Research Cloud Projects | Field Notes"
+    />
+    <meta
+      property="og:description"
+      content="Ursa Major gives UCR labs Google Cloud without a purchase order in the way. This note covers the controls behind that, where they fall short, and how they compare with other approaches: budgets as allocations, a throttle that keeps data, and an audit engine that can only read."
+    />
+    <meta
+      property="og:image"
+      content="https://charles-forsyth.github.io/assets/og-share.jpg"
+    />
+    <meta property="twitter:card" content="summary_large_image" />
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="../handbook/handbook.css" />
+    <link rel="stylesheet" href="papers.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+  </head>
+  <body>
+    <header class="hero doc-hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="doc-kicker">
+            <i class="fas fa-flask"></i> Field Notes | 29 October 2026
+          </p>
+          <h1>Governing 176 Research Cloud Projects</h1>
+          <h2>
+            Budgets that act as allocations, a throttle that stops spending but
+            keeps data, and an audit engine that can only read, with the gaps
+            still open
+          </h2>
+          <div class="cta-buttons">
+            <a
+              href="pdf/2026-10-29-governing-research-cloud-projects.pdf"
+              class="btn btn-primary"
+              ><i class="fas fa-file-pdf"></i> Download PDF</a
+            >
+            <a href="index.html" class="btn btn-secondary"
+              ><i class="fas fa-file-alt"></i> All Field Notes</a
+            >
+            <a href="../index.html" class="btn btn-secondary"
+              ><i class="fas fa-arrow-left"></i> Main Site</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+    <main class="section-light">
+      <div class="container doc-layout">
+        <aside class="doc-toc">
+          <h4><i class="fas fa-list"></i> On this page</h4>
+          <ul>
+            <li><a href="#abstract">Abstract</a></li>
+            <li><a href="#context">Context</a></li>
+            <li><a href="#related-work">Related Work</a></li>
+            <li><a href="#principles">The Rules I Govern By</a></li>
+            <li><a href="#controls">The Controls, Layer by Layer</a></li>
+            <li><a href="#skywalker">Skywalker: Seeing the Fleet</a></li>
+            <li><a href="#fleet">What the Fleet Looks Like</a></li>
+            <li><a href="#allocations">Budgets as Allocations</a></li>
+            <li><a href="#comparison">Other Ways to Do This</a></li>
+            <li><a href="#what-went-wrong">What Went Wrong</a></li>
+            <li><a href="#lessons">Lessons</a></li>
+            <li><a href="#next">What's Next</a></li>
+            <li><a href="#references">References</a></li>
+            <li><a href="#sources">Sources</a></li>
+          </ul>
+        </aside>
+        <article class="doc-content">
+          <h2 id="abstract">Abstract</h2>
+          <p>
+            Ursa Major is UC Riverside's research program on Google Cloud, run
+            by Research Computing with UCR Information Technology Solutions
+            (ITS). The Research Computing knowledge graph listed 176 Google
+            Cloud projects on 5 October 2026, counting Research Computing's own
+            projects; about 90 lab projects used anything in October. Most labs
+            want to start work today without a purchase order. I want to give
+            them a project the day they ask, with a spending limit already on
+            it.
+          </p>
+          <p>
+            The controls are a budget set by Research Computing, an automatic
+            throttle that stops running virtual machines (VMs) and AI calls at
+            the cap but deletes nothing, caps on the shared cluster, and a
+            read-only audit engine called Skywalker. They have limits. Google's
+            cost data arrives hours after use, so the throttle acts late; it
+            does not stop storage; I have no record of how often it has fired.
+            In a late-October snapshot nearly 150 budgets existed, and some
+            spending projects had none, a gap we are closing. A 2025 quota tool
+            remains a prototype.
+          </p>
+          <p>
+            The work was directed by me and carried out with AI agents under
+            written briefs, independent checks and explicit approval steps.
+            Figures come from the Skywalker repository and its tests, the
+            Ursa-Major-Quota-Management repository, the Atrium planning
+            documents, the knowledge graph specification and the public Research
+            Computing site. Some counts are rounded and no lab is named; where a
+            count is rounded, the text says "about". Counts and dates are
+            representative values from the stated snapshots, not continuously
+            maintained figures. This note was drafted with AI assistance from
+            those records and reviewed by me.
+          </p>
+
+          <h2 id="context">Context</h2>
+          <p>
+            A lab usually needs cloud resources for one paper, one grant aim or
+            one semester. If a project takes weeks of paperwork, the student
+            puts it on a credit card or gives up. If it takes an hour and nobody
+            watches it, a forgotten graphics processing unit (GPU) machine runs
+            all summer. I have to avoid both. On-demand self-service and metered
+            billing define a public cloud<sup class="cite"
+              ><a href="#ref-1">[1]</a></sup
+            >, and the same elasticity that lets a lab start in an hour lets its
+            bill grow without a limit<sup class="cite"
+              ><a href="#ref-2">[2]</a></sup
+            >.
+          </p>
+          <p>
+            The public
+            <a
+              href="https://ucr-research-computing.github.io/kb/kb005-ursa-major-service-tiers/"
+              target="_blank"
+              rel="noopener"
+              >KB005: Ursa Major service tiers</a
+            >
+            article sets the shape. Tier 1 is campus-supported, with no recharge
+            to the lab under current terms: AI model access with a per-lab
+            allowance, specialized hardware such as Tensor Processing Units
+            (TPUs) or Arm processors, and archive storage. Tier 2 is recharge:
+            all other cloud work, billed to a lab funding source through ITS
+            under a memorandum of understanding (MOU). Tier 3 covers very large
+            or multi-year projects that need their own contract. Projects set up
+            before October 2026 may still sit under the older arrangement, which
+            covered a list of general cloud services.
+          </p>
+          <p>
+            Research Computing is a small team, and labs own the projects.
+            Governance has to work without a person approving every change.
+          </p>
+
+          <h2 id="related-work">Related Work</h2>
+          <p>
+            The closest research peer is CloudBank, the National Science
+            Foundation (NSF)-funded service that gives computer science
+            researchers and educators managed access to several commercial
+            clouds<sup class="cite"><a href="#ref-3">[3]</a></sup
+            >. Its designers had the same problem as ours: grants and campus
+            purchasing were not built for metered, pay-as-you-go spending, so
+            CloudBank handles billing on the researcher's behalf. Today it
+            monitors spending across clouds and sends automated balance
+            alerts<sup class="cite"><a href="#ref-4">[4]</a></sup
+            >. Ursa Major differs in scale and in who holds the money. It serves
+            one campus on one provider, and for most lab projects UCR ITS pays
+            the bill, so we present the budget as an allocation rather than a
+            balance the lab is spending down.
+          </p>
+          <p>
+            Industry practice is codified in the FinOps Framework, which
+            describes cloud financial management as shared accountability
+            between engineers, finance and the business, with spending made
+            visible to the people who cause it<sup class="cite"
+              ><a href="#ref-5">[5]</a></sup
+            >. Our budget meter follows that idea. Where we part ways is the
+            units: a researcher sees allocation, used and left, while dollar
+            figures stay in the staff view.
+          </p>
+          <p>
+            The provider gives the building blocks. Google Cloud budgets send
+            alerts at thresholds, but Google says a budget is not a hard cap and
+            advises setting it below available funds because of delays in usage
+            reporting<sup class="cite"><a href="#ref-6">[6]</a></sup
+            >. Google publishes a sample that unlinks billing from a project
+            when a budget notification arrives<sup class="cite"
+              ><a href="#ref-7">[7]</a></sup
+            >, and now offers spend cap budgets that pause eligible services
+            once gross estimated cost passes the budget<sup class="cite"
+              ><a href="#ref-8">[8]</a></sup
+            >. Cost anomaly detection flags spikes without a fixed threshold<sup
+              class="cite"
+              ><a href="#ref-9">[9]</a></sup
+            >. Organization policy constraints are preventive: they restrict
+            what resources can be created anywhere in the hierarchy, before any
+            cost exists<sup class="cite"><a href="#ref-10">[10]</a></sup
+            >. Cloud Custodian, an open-source rules engine, expresses filters
+            and actions on cloud resources as policy files<sup class="cite"
+              ><a href="#ref-11">[11]</a></sup
+            >. Our throttle sits between Google's blunt sample and the native
+            spend cap: it stops running VMs, turns off two named AI services and
+            never touches storage.
+          </p>
+          <p>
+            Skywalker's design draws on old security principles. Least privilege
+            and separation of privilege go back to Saltzer and Schroeder<sup
+              class="cite"
+              ><a href="#ref-12">[12]</a></sup
+            >
+            and appear as controls in NIST SP 800-53<sup class="cite"
+              ><a href="#ref-13">[13]</a></sup
+            >; Google's own guidance warns against broad basic roles for the
+            same reason<sup class="cite"><a href="#ref-14">[14]</a></sup
+            >. Skywalker applies them twice, through the caller's Identity and
+            Access Management (IAM) roles and through a check in code, and it
+            keeps the reading path apart from the one automatic actor. Its
+            interface follows the Model Context Protocol (MCP) specification,
+            which defines how a client such as an AI assistant discovers and
+            calls tools on a server<sup class="cite"
+              ><a href="#ref-15">[15]</a></sup
+            >.
+          </p>
+          <p>
+            On the compute side, the shared cluster runs Slurm<sup class="cite"
+              ><a href="#ref-16">[16]</a></sup
+            >, and labs whose work fits a Kubernetes cluster<sup class="cite"
+              ><a href="#ref-17">[17]</a></sup
+            >
+            can use the National Research Platform (NRP), which grew out of the
+            Pacific Research Platform<sup class="cite"
+              ><a href="#ref-18">[18]</a></sup
+            >
+            and offers shared GPUs at no charge to researchers<sup class="cite"
+              ><a href="#ref-19">[19]</a></sup
+            >. The NIH STRIDES Initiative is a second program peer: it partners
+            with commercial cloud providers so NIH-funded researchers get
+            discounted cloud services, with monthly spending reports, account
+            monitoring and overage alerts<sup class="cite"
+              ><a href="#ref-20">[20]</a></sup
+            >. I found no published account of a campus governing a fleet of
+            this size on a single provider with a non-destructive throttle; that
+            is a result of a limited search, not a novelty claim.
+          </p>
+
+          <h2 id="principles">The Rules I Govern By</h2>
+          <p>Four rules sit behind every control below.</p>
+          <ol>
+            <li>
+              <strong>Throttle the one thing.</strong> Google Cloud's blunt tool
+              is to unlink the project from billing; Google publishes a sample
+              that does exactly that from a budget notification<sup class="cite"
+                ><a href="#ref-7">[7]</a></sup
+              >. It stops the spending, and it stops everything else too, puts
+              data at risk, and is a pain to undo. I would rather stop the
+              running VMs or turn off one expensive application programming
+              interface (API). Usually it is one service running away.
+            </li>
+            <li>
+              <strong>Then stop for real, after data is safe.</strong> A cap
+              that only sends email does not stop spending. When a project hits
+              its limit, work stops, but only in ways that cannot lose what a
+              student or a course needs. The throttle never deletes anything,
+              and that is why I am comfortable automating it.
+            </li>
+            <li>
+              <strong>Treat a budget as an allocation.</strong> For most lab
+              projects UCR ITS pays the bill. Researchers should see how much of
+              their allocation is left, in the units they think in.
+            </li>
+            <li>
+              <strong>Plan on how fast a project could spend.</strong> Inside
+              Research Computing I look at daily rate and the week-over-week
+              trend more than at last month's total.
+            </li>
+          </ol>
+
+          <h2 id="controls">The Controls, Layer by Layer</h2>
+          <p>Table 1 lists the controls in order of visibility.</p>
+          <p class="table-caption">
+            Table 1. The controls from what a lab sees to what only staff see.
+            None requires a lab to ask before using its project; they act on
+            limits set up front. The quota row is a prototype, not a control in
+            use.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Layer</th>
+                  <th>What it does</th>
+                  <th>When it acts</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Tier and terms</td>
+                  <td>
+                    Decides who pays for what; sets Tier 1 limits per project
+                  </td>
+                  <td>At setup</td>
+                  <td>In use (KB005)</td>
+                </tr>
+                <tr>
+                  <td>Budget and alerts</td>
+                  <td>
+                    A cap per project, set by Research Computing; alerts at
+                    thresholds the lab chooses
+                  </td>
+                  <td>As reported cost nears the cap</td>
+                  <td>In use where a budget exists</td>
+                </tr>
+                <tr>
+                  <td>Throttle</td>
+                  <td>
+                    Stops running VMs, turns off Vertex AI and the Gemini API;
+                    keeps disks, buckets and the project
+                  </td>
+                  <td>When reported cost reaches the cap, hours after use</td>
+                  <td>In use where the budget is wired to it</td>
+                </tr>
+                <tr>
+                  <td>Job caps</td>
+                  <td>
+                    Limit nodes, hours and spend per job and per day on the
+                    shared cluster
+                  </td>
+                  <td>Before a job reaches the scheduler</td>
+                  <td>In use, light traffic so far</td>
+                </tr>
+                <tr>
+                  <td>Audit</td>
+                  <td>
+                    Reads spend, budgets, exposure, access and idle resources
+                    across the fleet
+                  </td>
+                  <td>On demand, read-only</td>
+                  <td>In use (Skywalker)</td>
+                </tr>
+                <tr>
+                  <td>Quotas</td>
+                  <td>
+                    Would narrow what a project can create, service by service
+                  </td>
+                  <td>Set by staff</td>
+                  <td>2025 prototype, not in use</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Budgets and the throttle</h3>
+          <p>
+            The public article on
+            <a
+              href="https://ucr-research-computing.github.io/kb/ursa-major-project-budget/"
+              target="_blank"
+              rel="noopener"
+              >project budgets and spending alerts</a
+            >
+            states the policy. Every Ursa Major project can have a budget, Tier
+            1 and Tier 2. Research Computing sets budgets up; project owners do
+            not. On a Tier 2 project the budget matches the lab's funding on
+            request. On a Tier 1 project the budget is the project's Tier 1
+            limit.
+          </p>
+          <p>
+            The check runs each time Google Cloud updates the project's costs,
+            several times an hour. When reported spending for the period reaches
+            the budget, running VMs are stopped and Vertex AI and the Gemini API
+            are turned off for the project. Disks, Cloud Storage buckets and the
+            project itself are left alone.
+          </p>
+          <p>
+            Stopping a VM costs time and nothing else, though anything held only
+            in memory is lost. Turning off the AI APIs makes calls fail, which a
+            researcher notices in minutes, but their code and data stay put. I
+            picked those two because, in my experience, that is where runaway
+            bills come from: a VM nobody shut down, or a script calling a model
+            in a loop. I have not measured that against the billing export.
+          </p>
+          <p>
+            Raising the budget does not turn anything back on. The lab tells us
+            what it needs running, and we restart it, so nothing comes back on
+            by accident through the budget path.
+          </p>
+          <p>
+            A Google budget is not a hard cap.
+            <a
+              href="https://cloud.google.com/billing/docs/how-to/budgets"
+              target="_blank"
+              rel="noopener"
+              >Google's budget documentation</a
+            >
+            says there is a delay between using a resource and its cost reaching
+            Cloud Billing, and recommends setting a budget below the funds you
+            actually have<sup class="cite"><a href="#ref-6">[6]</a></sup
+            >. The throttle can only act on cost Google has reported, so a GPU
+            machine or a model loop keeps running through that delay. I do not
+            yet have a measured figure for how far past the cap a project has
+            gone before the throttle acted.
+          </p>
+
+          <h3>What the throttle has to reach, and what can undo it</h3>
+          <p>
+            Stopping a VM is not always the end of it. A managed instance group
+            (MIG) recreates or restarts instances to hold its target size<sup
+              class="cite"
+              ><a href="#ref-21">[21]</a></sup
+            >. A Google Kubernetes Engine (GKE) node pool is a MIG underneath,
+            and its autoscaler can add nodes back<sup class="cite"
+              ><a href="#ref-22">[22]</a></sup
+            >. A Slurm cluster that uses power saving, as the shared cluster's
+            Tier 1 partitions do, starts nodes on demand when jobs arrive<sup
+              class="cite"
+              ><a href="#ref-23">[23]</a></sup
+            >. In each case a stopped VM can come back without anyone raising a
+            budget. The real fix is to scale the group, pool or partition to
+            zero, or to block new instances, not to stop the instances one by
+            one. The public article describes only the VM stop, and I have not
+            yet verified how the throttle behaves against each of these.
+          </p>
+          <p>
+            The throttle also runs as a service account that needs the right to
+            stop instances and to turn services off in every budgeted project.
+            It holds broad privileges. Its permissions should be limited to
+            those two actions, granted only on Ursa Major projects, and its use
+            logged<sup class="cite"><a href="#ref-14">[14]</a></sup
+            >; who can act as that account matters as much as what it can do.
+            Writing that review down is listed under What's Next.
+          </p>
+
+          <h3>Caps on the shared cluster</h3>
+          <p>
+            Labs that need TPUs, Arm or other specialized hardware are meant to
+            move onto the shared Ursa Major Slurm cluster, which Research
+            Computing runs in Google Cloud. Its Tier 1 <code>arm</code>,
+            <code>tpu</code> and <code>tpuspot</code> partitions, built in
+            October 2026, power down to zero when idle, and the project budget
+            covers their Compute Engine spend. Researchers reach the cluster
+            through
+            <a
+              href="https://github.com/UCR-Research-Computing/ursa-bifrost"
+              target="_blank"
+              rel="noopener"
+              >ursa-bifrost</a
+            >, our job tool and Model Context Protocol (MCP) server, a standard
+            interface that lets AI assistants call tools<sup class="cite"
+              ><a href="#ref-15">[15]</a></sup
+            >. Its caps limit nodes, hours and spend per job and per day, and a
+            job over a cap is refused before it reaches the scheduler, the same
+            idea as the throttle applied to one job.
+          </p>
+
+          <h2 id="skywalker">Skywalker: Seeing the Fleet</h2>
+          <p>
+            <a
+              href="https://github.com/charles-forsyth/Skywalker"
+              target="_blank"
+              rel="noopener"
+              >Skywalker</a
+            >
+            is how I check whether the other controls are doing their job. It
+            began on 18 December 2025 as a command-line audit tool and became an
+            MCP server on 4 October 2026 (<code>v0.34.0</code>), with per-person
+            project scope in <code>v0.35.0</code> the same day.
+          </p>
+
+          <h3>Read-only, enforced in code</h3>
+          <p>
+            The MCP server acts as the person asking. Each person signs in with
+            Google, and every tool call runs on their own access token, so they
+            see what their account can already see and Google's audit logs name
+            them. The server's own service account has no Google Cloud data
+            roles.
+          </p>
+          <p>
+            The broad <code>cloud-platform</code> scope is needed because
+            Google's read-only scopes do not cover budgets, asset search,
+            Identity and Access Management (IAM), Recommender, quotas or
+            Security Command Center. Because the scope is broad, I added a
+            second limit in code. <code>check_read_only</code> in
+            <code>src/skywalker/intel/gcp.py</code> refuses any request that is
+            not a GET or one of three read calls (<code>getIamPolicy</code>,
+            Logging <code>entries:list</code>, and a single BigQuery
+            <code>SELECT</code>) before it leaves the process. There are no
+            write tools.
+          </p>
+          <p>
+            That check is defense in depth. The real limit is the caller's own
+            IAM roles, and a pattern check on SQL is not a parser. Read-only is
+            also not free: a BigQuery <code>SELECT</code> against the billing
+            export is billed by the bytes it scans<sup class="cite"
+              ><a href="#ref-24">[24]</a></sup
+            >. The repository holds 134 test functions, and a mutation check
+            script lists 37 deliberate code changes, each of which must make at
+            least one test fail.
+          </p>
+
+          <h3>What it answers</h3>
+          <p>
+            The server has 21 tools. Seventeen are open to anyone on the user
+            list, limited to their own projects; four are staff-only because
+            they read the whole billing account or every project. The one I use
+            most is <code>skywalker_overview</code>: findings first, then spend
+            with a 7-day trend, budget, VMs and GPUs, idle disks and addresses,
+            risky IAM grants, public exposure and recent admin changes. The
+            staff tool <code>skywalker_budgets</code> marks every budget as over
+            (100% or more), warning (75% to 100%) or unbudgeted, and counts
+            budgets with no throttle topic attached. That count is the most
+            useful thing it reports, because a budget with no throttle topic
+            only sends email and looks the same as any other budget on a list.
+          </p>
+          <p>
+            Two older bugs shaped how it scopes queries. In June 2026 one fix
+            stopped metric queries under a shared monitoring scope from counting
+            one project's usage against another, and another made the fleet-wide
+            model, API key and idle-resource audits refuse to run without an
+            explicit scope. Both errors would have produced numbers that looked
+            right and were not.
+          </p>
+          <p>Figure 1 shows how the pieces connect.</p>
+          <figure class="doc-figure">
+            <pre><code>  researcher / staff
+        |  Google sign-in (domain-limited)
+        v
+  Skywalker MCP server  -- role check, project scope, rate limits, audit line
+        |  caller's own token; GET and 3 read calls only
+        v
+  Google Cloud APIs + billing export (read)
+        ^
+        |  reported cost reaches budget (hours after use)
+  budget --&gt; throttle: stop VMs, turn off Vertex AI / Gemini API, keep data</code></pre>
+            <figcaption>
+              Figure 1. Reading and acting are separate paths. Skywalker only
+              reads, as the person asking; the throttle is the only automatic
+              actor, it stops services without deleting anything, and it acts on
+              reported cost, which trails real use.
+            </figcaption>
+          </figure>
+
+          <h2 id="fleet">What the Fleet Looks Like</h2>
+          <p>Table 2 summarizes the fleet from those scans.</p>
+          <p class="table-caption">
+            Table 2. Shape of the fleet from read-only scans in late October
+            2026. Counts other than the first cover lab projects only, with
+            Research Computing's infrastructure projects excluded; counts are
+            rounded and no lab is named.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Measure</th>
+                  <th class="num">Count</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    Google Cloud projects in the knowledge graph, all owners (5
+                    October)
+                  </td>
+                  <td class="num">176</td>
+                </tr>
+                <tr>
+                  <td>Lab projects with any use in October</td>
+                  <td class="num">about 90</td>
+                </tr>
+                <tr>
+                  <td>Budgets on the billing account</td>
+                  <td class="num">149</td>
+                </tr>
+                <tr>
+                  <td>Lab projects with VMs running at scan time</td>
+                  <td class="num">about 30</td>
+                </tr>
+                <tr>
+                  <td>Lab projects holding compute resources</td>
+                  <td class="num">about 45</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            The counts come from different tools and do not reconcile into one
+            ledger. The knowledge graph includes Research Computing's own
+            projects and some records for projects that no longer run; budgets
+            can sit on idle or older projects, so 149 budgets and about 90
+            active projects do not contradict each other.
+          </p>
+          <p>
+            Spending is concentrated. The top 10 projects made up 53% of
+            October's gross use, the top 20 made up 76% and the top 30 made up
+            89%. About 20 to 30 labs matter for any decision about money; the
+            rest is a long tail of small or idle projects.
+          </p>
+          <p>
+            Of the projects holding compute, a handful run their own cluster, a
+            similar number use GPUs or TPUs without one, and most run only
+            central processing unit (CPU) VMs. Most own-cluster labs run older
+            per-lab Slurm deployments with an always-on controller and login
+            node. They are the natural first movers onto the shared cluster,
+            where that always-on pair goes away. Some GPU work may fit
+            elsewhere, such as the free National Research Platform (NRP)
+            Nautilus cluster<sup class="cite"><a href="#ref-19">[19]</a></sup>
+            or the campus AI gateway for model calls.
+          </p>
+
+          <h2 id="allocations">Budgets as Allocations</h2>
+          <p>
+            The control researchers actually see is the budget meter, and it
+            changed in October 2026. Atrium is the researcher portal Research
+            Computing is building over its MCP servers. In late October a
+            read-only review found that it put cost at the centre of almost
+            every page: on the home page, three of the five headline numbers
+            were money. That is the wrong message for a lab whose budget UCR ITS
+            pays. On 27 October I recorded four decisions in the Atrium
+            specification:
+          </p>
+          <ul>
+            <li>
+              <strong>Work first, money second</strong> (D17). Researcher views
+              lead with jobs, keys and what is running. Money is shown against
+              an allocation, in dollars.
+            </li>
+            <li>
+              <strong>Budgets are allocations</strong> (D18). The words are
+              "allocation", "used" and "left". Secure projects for sensitive
+              data and recharge services are real money and stay in plain
+              dollars.
+            </li>
+            <li>
+              <strong>Most projects move</strong> (D19). AI work moves to the AI
+              gateway and general compute elsewhere; only the
+              specialized-hardware cases stay, through the shared cluster.
+            </li>
+            <li>
+              <strong>Never invent an allocation</strong> (D20). Allocations on
+              the shared cluster are per lab and per person, warn-only for now,
+              while the job caps still refuse. Projects without a budget show
+              usage with no meter until one is set.
+            </li>
+          </ul>
+          <p>
+            Interrupts still happen, at thresholds: Atrium's "Needs you" list
+            fires at 80% of a budget. Research Computing's own costs, such as
+            the cluster's hourly rate and fleet totals, are visible only in the
+            staff view, and every dollar figure stays one click away.
+          </p>
+
+          <h2 id="comparison">Other Ways to Do This</h2>
+          <p>Table 3 lists the alternatives I weighed.</p>
+          <p class="table-caption">
+            Table 3. Approaches I compared against, and where each would change
+            what we do.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Approach</th>
+                  <th>What it gives</th>
+                  <th>Where it fits here</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Budget created with every project</td>
+                  <td>No project exists without a cap</td>
+                  <td>
+                    The structural fix for the unbudgeted projects; budgets are
+                    a separate step today
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    Organization policy constraints<sup class="cite"
+                      ><a href="#ref-10">[10]</a></sup
+                    >
+                  </td>
+                  <td>
+                    Preventive limits on regions, resource types and service
+                    account keys, with no billing delay
+                  </td>
+                  <td>
+                    Not used for cost yet; the best candidate to replace the
+                    quota prototype
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    Google spend cap budgets<sup class="cite"
+                      ><a href="#ref-8">[8]</a></sup
+                    >
+                  </td>
+                  <td>
+                    Native pause of eligible services at the cap, on gross
+                    estimated cost
+                  </td>
+                  <td>
+                    Worth testing against our own throttle for the services it
+                    covers
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    Google cost anomaly detection<sup class="cite"
+                      ><a href="#ref-9">[9]</a></sup
+                    >
+                  </td>
+                  <td>Flags unusual spend without a fixed threshold</td>
+                  <td>
+                    Matches the burn-rate rule; complements Skywalker's 7-day
+                    trend
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    Cloud Custodian<sup class="cite"
+                      ><a href="#ref-11">[11]</a></sup
+                    >
+                  </td>
+                  <td>
+                    Open-source policy as code: find, stop or tag resources by
+                    rule
+                  </td>
+                  <td>
+                    Could run the throttle and the audit rules as reviewed
+                    policy files
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    CloudBank<sup class="cite"><a href="#ref-3">[3]</a></sup>
+                  </td>
+                  <td>
+                    National Science Foundation (NSF)-funded cloud access with
+                    monitored spending and balance alerts
+                  </td>
+                  <td>
+                    The closest research peer; its alerts model is close to ours
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            The biggest lesson from the comparison is that most of what we do is
+            reactive.
+            <a
+              href="https://cloud.google.com/resource-manager/docs/organization-policy/overview"
+              target="_blank"
+              rel="noopener"
+              >Organization policies</a
+            >
+            and budgets created with the project stop problems before any cost
+            is reported, which matters given the billing delay. Google now
+            offers
+            <a
+              href="https://cloud.google.com/billing/docs/how-to/budgets-spend-caps"
+              target="_blank"
+              rel="noopener"
+              >spend cap budgets</a
+            >
+            that pause eligible services natively, and
+            <a
+              href="https://cloud.google.com/billing/docs/how-to/manage-anomalies"
+              target="_blank"
+              rel="noopener"
+              >cost anomaly detection</a
+            >
+            that watches rate rather than total.
+            <a href="https://cloudcustodian.io/" target="_blank" rel="noopener"
+              >Cloud Custodian</a
+            >
+            would put the throttle's logic in policy files a reviewer can read.
+            <a href="https://www.cloudbank.org/" target="_blank" rel="noopener"
+              >CloudBank</a
+            >
+            monitors spending across clouds and sends automated balance alerts.
+            I built Skywalker because I wanted one read-only view, acting as the
+            person asking, that labs and staff could both use through an AI
+            assistant; Custodian, Recommender and Security Command Center each
+            cover part of that.
+          </p>
+
+          <h2 id="what-went-wrong">What Went Wrong</h2>
+          <ul>
+            <li>
+              <strong>Projects with no budget.</strong> The throttle only acts
+              where a budget exists. The late-October snapshot found roughly 45
+              projects with spend in October and no budget, a different set from
+              the about 45 holding compute. We are adding budgets, largest
+              spenders first. Until each has one, D20 shows its usage without a
+              meter, which keeps the screen honest and does not cap the
+              spending.
+            </li>
+            <li>
+              <strong>The cap trails the spending.</strong> Budgets act on
+              reported cost, which arrives hours after use<sup class="cite"
+                ><a href="#ref-6">[6]</a></sup
+              >. The cutoff acts hours after the spending, and I have no
+              measured overshoot figure or count of throttle events to publish.
+            </li>
+            <li>
+              <strong>Credits are a budget setting we chose.</strong> Google
+              budgets can count cost before or after credits. Ours count gross
+              cost, before credits, as the public article says, so a project can
+              reach its cap even when credits would cover most of the bill. That
+              keeps the cap tied to real usage; it also means the number on the
+              budget and the net bill differ, and we have to explain both.
+            </li>
+            <li>
+              <strong>The throttle does not stop storage.</strong> Because
+              nothing is deleted, persistent disks and stored data keep billing
+              after the cap, so the cap is not a ceiling. I accept that as the
+              price of never losing data.
+            </li>
+            <li>
+              <strong>Stopped machines can come back.</strong> Managed instance
+              groups, GKE autoscaling and Slurm power saving can restart what
+              the throttle stopped. I have not verified the throttle's handling
+              of each.
+            </li>
+            <li>
+              <strong>A quota tool that stayed a prototype.</strong>
+              <code>qm.py</code> was written over 2 days in May 2025 and nobody
+              has touched it since. About 12 of its 30 metric names still carry
+              comments like "needs verification" or "inferred". It runs one
+              project at a time, through <code>gcloud</code>, by hand, and it is
+              not part of how we govern projects today.
+            </li>
+            <li>
+              <strong>The shared cluster is not yet the default.</strong> Use
+              through bifrost in the 30 days before the scan was minimal, mostly
+              staff testing. The migration in D19 is a plan, not a result.
+            </li>
+          </ul>
+
+          <h2 id="lessons">Lessons</h2>
+          <ol>
+            <li>
+              <strong>Stop the service, keep the data.</strong> Labs accept an
+              automatic cutoff when it cannot lose data.
+            </li>
+            <li>
+              <strong>Use the narrowest control that stops the harm.</strong>
+              Unlinking billing stops everything, so it gets used late or never.
+            </li>
+            <li>
+              <strong>Create the budget with the project.</strong> These
+              projects slipped through because the budget was a separate step
+              from the project.
+            </li>
+            <li>
+              <strong>Check that every budget is wired to a throttle.</strong> A
+              budget with no throttle topic only sends email, and it looks the
+              same on a list.
+            </li>
+            <li>
+              <strong>Treat a budget cap as late.</strong> Billing data trails
+              use by hours, so set the cap below the money you have and add
+              preventive limits.
+            </li>
+            <li>
+              <strong>Enforce read-only in code as well as in IAM.</strong>
+              Cloud scopes are coarse, and a check before the request leaves the
+              process is one you can test.
+            </li>
+          </ol>
+
+          <h2 id="next">What's Next</h2>
+          <ul>
+            <li>
+              Put a budget with a throttle on each unbudgeted project, largest
+              first, and make budget creation part of project creation.
+            </li>
+            <li>
+              Measure the gap between crossing a cap and the throttle acting,
+              and start counting throttle events; a quarter's event count and
+              median overshoot past the cap would settle whether the throttle
+              works.
+            </li>
+            <li>
+              Check the throttle against instance groups, GKE and Slurm power
+              saving, and write down its service account's permissions and who
+              can use it.
+            </li>
+            <li>
+              Test organization policy constraints and Google's spend cap
+              budgets as preventive layers, in place of the quota prototype.
+            </li>
+            <li>
+              Move the older per-lab Slurm clusters onto the shared cluster,
+              where job caps and allocations already apply.
+            </li>
+          </ul>
+
+          <h2 id="references">References</h2>
+          <ol class="sources">
+            <li id="ref-1">
+              Peter M. Mell and Timothy Grance. 2011.
+              <em>The NIST Definition of Cloud Computing</em>. Special
+              Publication 800-145. National Institute of Standards and
+              Technology.
+              <a
+                href="https://doi.org/10.6028/NIST.SP.800-145"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.6028/NIST.SP.800-145</a
+              >
+            </li>
+            <li id="ref-2">
+              Michael Armbrust, Armando Fox, Rean Griffith, Anthony D. Joseph,
+              Randy Katz, Andy Konwinski, Gunho Lee, David Patterson, Ariel
+              Rabkin, Ion Stoica, and Matei Zaharia. 2010. A View of Cloud
+              Computing. <em>Communications of the ACM</em> 53, 4, 50&ndash;58.
+              <a
+                href="https://doi.org/10.1145/1721654.1721672"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1145/1721654.1721672</a
+              >
+            </li>
+            <li id="ref-3">
+              Michael Norman, Vince Kellen, Shava Smallen, Brian DeMeulle, Shawn
+              Strande, Ed Lazowska, Naomi Alterman, Rob Fatland, Sarah Stone,
+              Amanda Tan, Katherine Yelick, Eric Van Dusen, and James Mitchell.
+              2021. CloudBank: Managed Services to Simplify Cloud Access for
+              Computer Science Research and Education. In
+              <em
+                >Practice and Experience in Advanced Research Computing (PEARC
+                '21)</em
+              >. ACM, 1&ndash;4.
+              <a
+                href="https://doi.org/10.1145/3437359.3465586"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1145/3437359.3465586</a
+              >
+            </li>
+            <li id="ref-4">
+              CloudBank. 2026. CloudBank: Cloud Access for Research and
+              Education. Retrieved October 28, 2026.
+              <a
+                href="https://www.cloudbank.org/"
+                target="_blank"
+                rel="noopener"
+                >https://www.cloudbank.org/</a
+              >
+            </li>
+            <li id="ref-5">
+              FinOps Foundation. 2026. FinOps Framework. Retrieved October 28,
+              2026.
+              <a
+                href="https://www.finops.org/framework/"
+                target="_blank"
+                rel="noopener"
+                >https://www.finops.org/framework/</a
+              >
+            </li>
+            <li id="ref-6">
+              Google Cloud. 2026. Create, Edit, or Delete Budgets and Budget
+              Alerts. Cloud Billing documentation. Retrieved October 28, 2026.
+              <a
+                href="https://cloud.google.com/billing/docs/how-to/budgets"
+                target="_blank"
+                rel="noopener"
+                >https://cloud.google.com/billing/docs/how-to/budgets</a
+              >
+            </li>
+            <li id="ref-7">
+              Google Cloud. 2026. Disable Billing Usage with Notifications.
+              Cloud Billing documentation. Retrieved October 28, 2026.
+              <a
+                href="https://cloud.google.com/billing/docs/how-to/disable-billing-with-notifications"
+                target="_blank"
+                rel="noopener"
+                >https://cloud.google.com/billing/docs/how-to/disable-billing-with-notifications</a
+              >
+            </li>
+            <li id="ref-8">
+              Google Cloud. 2026. Spend Cap Budgets. Cloud Billing
+              documentation. Retrieved October 28, 2026.
+              <a
+                href="https://cloud.google.com/billing/docs/how-to/budgets-spend-caps"
+                target="_blank"
+                rel="noopener"
+                >https://cloud.google.com/billing/docs/how-to/budgets-spend-caps</a
+              >
+            </li>
+            <li id="ref-9">
+              Google Cloud. 2026. View and Manage Cost Anomalies. Cloud Billing
+              documentation. Retrieved October 28, 2026.
+              <a
+                href="https://cloud.google.com/billing/docs/how-to/manage-anomalies"
+                target="_blank"
+                rel="noopener"
+                >https://cloud.google.com/billing/docs/how-to/manage-anomalies</a
+              >
+            </li>
+            <li id="ref-10">
+              Google Cloud. 2026. Introduction to the Organization Policy
+              Service. Resource Manager documentation. Retrieved October 28,
+              2026.
+              <a
+                href="https://cloud.google.com/resource-manager/docs/organization-policy/overview"
+                target="_blank"
+                rel="noopener"
+                >https://cloud.google.com/resource-manager/docs/organization-policy/overview</a
+              >
+            </li>
+            <li id="ref-11">
+              Cloud Custodian Project. 2026. Cloud Custodian. Retrieved October
+              28, 2026.
+              <a
+                href="https://cloudcustodian.io/"
+                target="_blank"
+                rel="noopener"
+                >https://cloudcustodian.io/</a
+              >
+            </li>
+            <li id="ref-12">
+              J. H. Saltzer and M. D. Schroeder. 1975. The Protection of
+              Information in Computer Systems.
+              <em>Proceedings of the IEEE</em> 63, 9, 1278&ndash;1308.
+              <a
+                href="https://doi.org/10.1109/PROC.1975.9939"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1109/PROC.1975.9939</a
+              >
+            </li>
+            <li id="ref-13">
+              Joint Task Force Interagency Working Group. 2020.
+              <em
+                >Security and Privacy Controls for Information Systems and
+                Organizations</em
+              >. Special Publication 800-53 Rev. 5. National Institute of
+              Standards and Technology.
+              <a
+                href="https://doi.org/10.6028/NIST.SP.800-53r5"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.6028/NIST.SP.800-53r5</a
+              >
+            </li>
+            <li id="ref-14">
+              Google Cloud. 2026. Use IAM Securely. Identity and Access
+              Management documentation. Retrieved October 28, 2026.
+              <a
+                href="https://cloud.google.com/iam/docs/using-iam-securely"
+                target="_blank"
+                rel="noopener"
+                >https://cloud.google.com/iam/docs/using-iam-securely</a
+              >
+            </li>
+            <li id="ref-15">
+              Model Context Protocol. 2025. Model Context Protocol
+              Specification, Version 2025-06-18. Retrieved October 28, 2026.
+              <a
+                href="https://modelcontextprotocol.io/specification/2025-06-18"
+                target="_blank"
+                rel="noopener"
+                >https://modelcontextprotocol.io/specification/2025-06-18</a
+              >
+            </li>
+            <li id="ref-16">
+              Andy B. Yoo, Morris A. Jette, and Mark Grondona. 2003. SLURM:
+              Simple Linux Utility for Resource Management. In
+              <em>Job Scheduling Strategies for Parallel Processing</em>
+              (Lecture Notes in Computer Science). Springer, Berlin, Heidelberg,
+              44&ndash;60.
+              <a
+                href="https://doi.org/10.1007/10968987_3"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1007/10968987_3</a
+              >
+            </li>
+            <li id="ref-17">
+              Brendan Burns, Brian Grant, David Oppenheimer, Eric Brewer, and
+              John Wilkes. 2016. Borg, Omega, and Kubernetes. <em>Queue</em> 14,
+              1, 70&ndash;93.
+              <a
+                href="https://doi.org/10.1145/2898442.2898444"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1145/2898442.2898444</a
+              >
+            </li>
+            <li id="ref-18">
+              Larry Smarr, Camille Crittenden, Thomas DeFanti, John Graham,
+              Dmitry Mishin, Richard Moore, Philip Papadopoulos, and Frank
+              Würthwein. 2018. The Pacific Research Platform. In
+              <em
+                >Practice and Experience on Advanced Research Computing (PEARC
+                '18)</em
+              >. ACM, 1&ndash;8.
+              <a
+                href="https://doi.org/10.1145/3219104.3219108"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1145/3219104.3219108</a
+              >
+            </li>
+            <li id="ref-19">
+              National Research Platform. 2026. National Research Platform.
+              Retrieved October 28, 2026.
+              <a
+                href="https://nationalresearchplatform.org/"
+                target="_blank"
+                rel="noopener"
+                >https://nationalresearchplatform.org/</a
+              >
+            </li>
+            <li id="ref-20">
+              National Institutes of Health, Office of Data Science Strategy.
+              2026. STRIDES Initiative. Retrieved October 28, 2026.
+              <a
+                href="https://datascience.nih.gov/strides"
+                target="_blank"
+                rel="noopener"
+                >https://datascience.nih.gov/strides</a
+              >
+            </li>
+            <li id="ref-21">
+              Google Cloud. 2026. Instance Groups. Compute Engine documentation.
+              Retrieved October 28, 2026.
+              <a
+                href="https://cloud.google.com/compute/docs/instance-groups"
+                target="_blank"
+                rel="noopener"
+                >https://cloud.google.com/compute/docs/instance-groups</a
+              >
+            </li>
+            <li id="ref-22">
+              Google Cloud. 2026. About GKE Cluster Autoscaling. Google
+              Kubernetes Engine documentation. Retrieved October 28, 2026.
+              <a
+                href="https://cloud.google.com/kubernetes-engine/docs/concepts/cluster-autoscaler"
+                target="_blank"
+                rel="noopener"
+                >https://cloud.google.com/kubernetes-engine/docs/concepts/cluster-autoscaler</a
+              >
+            </li>
+            <li id="ref-23">
+              SchedMD. 2026. Slurm Power Saving Guide. Retrieved October 28,
+              2026.
+              <a
+                href="https://slurm.schedmd.com/power_save.html"
+                target="_blank"
+                rel="noopener"
+                >https://slurm.schedmd.com/power_save.html</a
+              >
+            </li>
+            <li id="ref-24">
+              Google Cloud. 2026. BigQuery Pricing. Retrieved October 28, 2026.
+              <a
+                href="https://cloud.google.com/bigquery/pricing"
+                target="_blank"
+                rel="noopener"
+                >https://cloud.google.com/bigquery/pricing</a
+              >
+            </li>
+            <li id="ref-25">
+              Charles E. Forsyth III. 2026. Directing a Fleet of AI Builders.
+              Field Note. Retrieved October 28, 2026.
+              <a
+                href="https://charles-forsyth.github.io/papers/2026-10-27-directing-a-fleet-of-ai-builders.html"
+                target="_blank"
+                rel="noopener"
+                >https://charles-forsyth.github.io/papers/2026-10-27-directing-a-fleet-of-ai-builders.html</a
+              >
+            </li>
+          </ol>
+
+          <h2 id="sources">Sources</h2>
+          <p>Public repositories and pages:</p>
+          <ul>
+            <li>
+              <a
+                href="https://github.com/charles-forsyth/Skywalker"
+                target="_blank"
+                rel="noopener"
+                >charles-forsyth/Skywalker</a
+              >, the audit engine and MCP server: README, git history, tags,
+              tests and the mutation check script
+            </li>
+            <li>
+              <a
+                href="https://charles-forsyth.github.io/Skywalker/"
+                target="_blank"
+                rel="noopener"
+                >Skywalker showcase page</a
+              >, a public overview of the tool
+            </li>
+            <li>
+              <a
+                href="https://github.com/UCR-Research-Computing/ursa-bifrost"
+                target="_blank"
+                rel="noopener"
+                >UCR-Research-Computing/ursa-bifrost</a
+              >, the shared-cluster job tool and its per-job and per-day caps
+            </li>
+            <li>
+              <a
+                href="https://ucr-research-computing.github.io/services/ursa-major/"
+                target="_blank"
+                rel="noopener"
+                >Ursa Major service page</a
+              >, the public description of the program and its tiers
+            </li>
+            <li>
+              <a
+                href="https://ucr-research-computing.github.io/kb/kb005-ursa-major-service-tiers/"
+                target="_blank"
+                rel="noopener"
+                >KB005: Ursa Major service tiers</a
+              >, what each tier covers and who pays
+            </li>
+            <li>
+              <a
+                href="https://ucr-research-computing.github.io/kb/ursa-major-project-budget/"
+                target="_blank"
+                rel="noopener"
+                >Ursa Major project budgets and spending alerts</a
+              >, the budget and throttle policy, including gross-cost counting
+            </li>
+            <li>
+              <a
+                href="https://cloud.google.com/billing/docs/how-to/budgets"
+                target="_blank"
+                rel="noopener"
+                >Google Cloud: budgets and budget alerts</a
+              >, reporting delay and credit settings
+            </li>
+            <li>
+              <a
+                href="https://cloud.google.com/billing/docs/how-to/disable-billing-with-notifications"
+                target="_blank"
+                rel="noopener"
+                >Google Cloud: disable billing with notifications</a
+              >, Google's sample for unlinking billing at a budget
+            </li>
+            <li>
+              <a
+                href="https://cloud.google.com/billing/docs/how-to/budgets-spend-caps"
+                target="_blank"
+                rel="noopener"
+                >Google Cloud: spend cap budgets</a
+              >, native pause of eligible services
+            </li>
+            <li>
+              <a
+                href="https://cloud.google.com/billing/docs/how-to/manage-anomalies"
+                target="_blank"
+                rel="noopener"
+                >Google Cloud: cost anomalies</a
+              >, anomaly detection
+            </li>
+            <li>
+              <a
+                href="https://cloud.google.com/resource-manager/docs/organization-policy/overview"
+                target="_blank"
+                rel="noopener"
+                >Google Cloud: organization policy</a
+              >, preventive constraints
+            </li>
+            <li>
+              <a
+                href="https://cloudcustodian.io/"
+                target="_blank"
+                rel="noopener"
+                >Cloud Custodian</a
+              >, open-source cloud policy as code
+            </li>
+            <li>
+              <a
+                href="https://www.cloudbank.org/"
+                target="_blank"
+                rel="noopener"
+                >CloudBank</a
+              >, NSF-sponsored commercial cloud access for research
+            </li>
+            <li>
+              <a href="2026-10-27-directing-a-fleet-of-ai-builders.html"
+                >Directing a Fleet of AI Builders</a
+              >, the earlier Field Note on how I direct AI agents<sup
+                class="cite"
+                ><a href="#ref-25">[25]</a></sup
+              >
+            </li>
+          </ul>
+          <p>Private records, by name:</p>
+          <ul>
+            <li>
+              The Ursa-Major-Quota-Management repository (<code>qm.py</code> and
+              its README)
+            </li>
+            <li>
+              The ucr-slurm-production repository, the shared cluster's
+              configuration of record, and its Tier 1 Arm and TPU plan
+            </li>
+            <li>
+              The Atrium specification (decisions D17 to D20), its allocation
+              framing plan and its 27 October 2026 compute scan
+            </li>
+            <li>The knowledge graph specification's live-state counts</li>
+          </ul>
+          <nav class="doc-pager" aria-label="Field notes navigation">
+            <a class="pager-prev" href="index.html"
+              ><span>Back</span>All Field Notes</a
+            ><span></span>
+          </nav>
+        </article>
+      </div>
+    </main>
+
+    <footer class="section-dark">
+      <div class="container text-center">
+        <p class="footer-note">
+          Field Notes |
+          <a href="index.html" class="subtle-link">All notes</a> |
+          <a href="../index.html" class="subtle-link"
+            >charles-forsyth.github.io</a
+          >
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

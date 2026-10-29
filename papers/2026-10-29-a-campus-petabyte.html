@@ -1,0 +1,1235 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>A Campus Petabyte | Field Notes</title>
+    <meta
+      name="description"
+      content="How UC Riverside built CephRDS, a 3.2 PB NSF-funded Ceph object store, split it between campus research and the NRP, and what is still unproven for researchers."
+    />
+    <link
+      rel="canonical"
+      href="https://charles-forsyth.github.io/papers/2026-10-29-a-campus-petabyte.html"
+    />
+    <meta property="og:type" content="article" />
+    <meta
+      property="og:url"
+      content="https://charles-forsyth.github.io/papers/2026-10-29-a-campus-petabyte.html"
+    />
+    <meta property="og:title" content="A Campus Petabyte | Field Notes" />
+    <meta
+      property="og:description"
+      content="A 3.2 PB raw Ceph object store with 2,090.88 TB usable, 422.40 TB of it pledged to the National Research Platform. What was built, the decisions behind it, and what has not been measured yet."
+    />
+    <meta
+      property="og:image"
+      content="https://charles-forsyth.github.io/assets/og-share.jpg"
+    />
+    <meta property="twitter:card" content="summary_large_image" />
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="../handbook/handbook.css" />
+    <link rel="stylesheet" href="papers.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+  </head>
+  <body>
+    <header class="hero doc-hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="doc-kicker">
+            <i class="fas fa-flask"></i> Field Notes | 29 October 2026
+          </p>
+          <h1>
+            A Campus Petabyte: Building CephRDS for Researchers and the NRP
+          </h1>
+          <h2>
+            How an NSF-funded 3.2 PB object store was built, split between
+            campus research and the National Research Platform, and what is
+            still unproven
+          </h2>
+          <div class="cta-buttons">
+            <a
+              href="pdf/2026-10-29-a-campus-petabyte.pdf"
+              class="btn btn-primary"
+              ><i class="fas fa-file-pdf"></i> Download PDF</a
+            >
+            <a href="index.html" class="btn btn-secondary"
+              ><i class="fas fa-file-alt"></i> All Field Notes</a
+            >
+            <a href="../index.html" class="btn btn-secondary"
+              ><i class="fas fa-arrow-left"></i> Main Site</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+    <main class="section-light">
+      <div class="container doc-layout">
+        <aside class="doc-toc">
+          <h4><i class="fas fa-list"></i> On this page</h4>
+          <ul>
+            <li><a href="#abstract">Abstract</a></li>
+            <li><a href="#author-note">Author note</a></li>
+            <li><a href="#context">Context</a></li>
+            <li><a href="#related-work">Related Work</a></li>
+            <li><a href="#design">The Design</a></li>
+            <li><a href="#capacity">Splitting the Capacity</a></li>
+            <li><a href="#access">How Researchers Get In</a></li>
+            <li><a href="#results">What Has Been Measured</a></li>
+            <li><a href="#cost">Paying for It After the Grant</a></li>
+            <li><a href="#comparisons">Other Ways to Do This</a></li>
+            <li><a href="#what-went-wrong">What Went Wrong</a></li>
+            <li><a href="#lessons">Lessons</a></li>
+            <li><a href="#next">What's Next</a></li>
+            <li><a href="#references">References</a></li>
+            <li><a href="#sources">Sources</a></li>
+          </ul>
+        </aside>
+        <article class="doc-content">
+          <h2 id="abstract">Abstract</h2>
+          <p>
+            CephRDS is the research object store UC Riverside (UCR) built with
+            National Science Foundation (NSF) Campus Cyberinfrastructure award
+            OAC-2346636. The award PI (principal investigator) is Michael
+            Kennedy; I am a co-PI, and the build was team work. Its 3.2 PB of
+            raw disk yields 2,090.88 TB usable under 6+3 erasure coding. It is
+            split two ways: 422.40 TB pledged to the National Research Platform
+            (NRP), a national research computing federation, and 1,668.48 TB
+            kept as a UCR pool. Researchers reach it over the Amazon Simple
+            Storage Service (S3) protocol from the campus network or the campus
+            virtual private network (VPN). Pilot labs hold about 560 TB of
+            allocations.
+          </p>
+          <p>
+            The hardware was delivered as planned; the operational questions
+            took longer: who manages which part of the capacity, how researchers
+            get in, and how the campus pays for it after the grant. The team
+            dropped a proposed self-service portal for split management with a
+            fixed boundary around the NRP pledge. The recharge rates are still
+            being finalized, and I have no on-campus performance baseline yet.
+          </p>
+          <h2 id="author-note">Author note</h2>
+          <p>
+            The work was directed by me and carried out with AI agents under
+            written briefs, independent checks and explicit approval steps.
+            Figures come from the NSF award record and its project outcomes
+            report, the <code>rds-cli</code> repository and its test run, the
+            CephRDS technical report, the Research Computing knowledge base, and
+            my capacity and allocation records. This note was drafted with AI
+            assistance from those records and reviewed by me. No representative
+            values are used: system figures are real, and lab names and
+            lab-level figures are omitted. A PDF edition is linked above.
+          </p>
+
+          <h2 id="context">Context</h2>
+          <p>
+            Before CephRDS, much UCR research data lived wherever researchers
+            could find room: aging network drives, USB disks and personal cloud
+            accounts. The project outcomes report in the NSF award record
+            describes the same picture<sup class="cite"
+              ><a href="#ref-1">[1]</a></sup
+            >. None of those places is easy to share across a lab, and none is
+            fast from a cluster. Labs producing imaging, sequencing or sensor
+            data hit the problem first, because their datasets outgrow a laptop
+            in weeks.
+          </p>
+          <p>
+            The Campus Cyberinfrastructure program buys equipment<sup
+              class="cite"
+              ><a href="#ref-2">[2]</a></sup
+            >. It does not pay to run it afterwards, and it asks campuses to
+            connect to national resources. The team wrote both into the design
+            from the start. The storage had to be cheap enough to run on
+            recharge. A postdoc had to be able to use it from a script. And part
+            of it had to be shared with researchers outside UCR through NRP. It
+            serves UCR faculty, postdocs and students with active project data,
+            and, through the NRP slice, researchers elsewhere.
+          </p>
+          <p>
+            It follows two earlier Field Notes about NRP:
+            <a href="2026-10-06-a-road-to-nautilus-in-one-day.html"
+              >A Road to Nautilus in One Day</a
+            ><sup class="cite"><a href="#ref-3">[3]</a></sup
+            >, on the <code>nrp-mcp</code> tool, and
+            <a href="2026-10-03-one-day-on-the-research-stack.html"
+              >One Day on the Research Stack</a
+            ><sup class="cite"><a href="#ref-4">[4]</a></sup
+            >.
+          </p>
+
+          <h2 id="related-work">Related Work</h2>
+          <p>
+            Ceph began as a research file system at UC Santa Cruz<sup
+              class="cite"
+              ><a href="#ref-5">[5]</a></sup
+            >. Two ideas from that work matter here. CRUSH computes where data
+            lives from a cluster map instead of looking it up in a central
+            table<sup class="cite"><a href="#ref-6">[6]</a></sup
+            >, and RADOS lets the storage daemons replicate, detect failures and
+            recover among themselves<sup class="cite"
+              ><a href="#ref-7">[7]</a></sup
+            >. Together they are why a small team can run 20 commodity servers
+            as one store. A decade of production experience later moved Ceph off
+            general-purpose local file systems onto its own BlueStore
+            backend<sup class="cite"><a href="#ref-8">[8]</a></sup
+            >, the default storage backend in current Ceph releases.
+          </p>
+          <p>
+            Erasure coding rests on Reed&ndash;Solomon codes<sup class="cite"
+              ><a href="#ref-9">[9]</a></sup
+            >. Weatherspoon and Kubiatowicz showed early that, for the same
+            durability, erasure codes need far less storage and bandwidth than
+            replication<sup class="cite"><a href="#ref-10">[10]</a></sup
+            >. Large operators then made the trade-off concrete. Windows Azure
+            Storage adopted erasure coding and designed new codes to cut the
+            reads needed for reconstruction<sup class="cite"
+              ><a href="#ref-11">[11]</a></sup
+            >, and work at Facebook on Hadoop clusters quantified how repair
+            traffic grows under Reed&ndash;Solomon codes and proposed locally
+            repairable codes to reduce it<sup class="cite"
+              ><a href="#ref-12">[12]</a></sup
+            >. The Hadoop Distributed File System itself was designed around
+            three-way replication<sup class="cite"
+              ><a href="#ref-13">[13]</a></sup
+            >, the baseline CephRDS chose against. The repair cost those papers
+            measure is the cost I describe under
+            <a href="#design">The Design</a>.
+          </p>
+          <p>
+            On the network side, the Science DMZ pattern separates research data
+            transfer from the general-purpose campus network so large flows are
+            not throttled by enterprise security appliances<sup class="cite"
+              ><a href="#ref-14">[14]</a></sup
+            >. The Pacific Research Platform built on that pattern to link
+            campus Science DMZs into a regional high-speed fabric<sup
+              class="cite"
+              ><a href="#ref-15">[15]</a></sup
+            >, and it grew into the National Research Platform that receives the
+            pledged slice<sup class="cite"><a href="#ref-16">[16]</a></sup
+            >. For moving data in and out of such stores, Globus is the usual
+            research tool: a hosted service for transfer, synchronization and
+            sharing between endpoints<sup class="cite"
+              ><a href="#ref-17">[17]</a></sup
+            >. CephRDS does not yet offer a Globus endpoint; access is S3 only
+            (see <a href="#access">How Researchers Get In</a>). Federation of
+            campus resources has a longer history in the Open Science Grid<sup
+              class="cite"
+              ><a href="#ref-18">[18]</a></sup
+            >, whose StashCache work built a caching federation for data across
+            sites<sup class="cite"><a href="#ref-19">[19]</a></sup
+            >. That line continues today as the Open Science Data Federation
+            (OSDF)<sup class="cite"><a href="#ref-20">[20]</a></sup
+            >. The Open Storage Network takes a different approach, with
+            NSF-funded storage pods at sites across the country<sup class="cite"
+              ><a href="#ref-21">[21]</a></sup
+            >.
+          </p>
+          <p>
+            The governance questions are older than any of this hardware. The
+            NIST definition of cloud computing names on-demand self-service,
+            resource pooling and measured service as essential
+            characteristics<sup class="cite"><a href="#ref-22">[22]</a></sup
+            >, and Armbrust and colleagues argued that elasticity and
+            pay-as-you-go pricing are what make cloud economics work<sup
+              class="cite"
+              ><a href="#ref-23">[23]</a></sup
+            >. A campus store with fixed capacity and a fixed budget gets some
+            of those benefits and not others, which is part of why the
+            self-service portal was dropped. Finally, S3 is defined by
+            Amazon&rsquo;s API reference<sup class="cite"
+              ><a href="#ref-24">[24]</a></sup
+            >; Ceph&rsquo;s object gateway implements a RESTful API compatible
+            with the basic data access model of that API<sup class="cite"
+              ><a href="#ref-25">[25]</a></sup
+            >, and that compatibility is what lets existing S3 tools work
+            against CephRDS.
+          </p>
+          <p>
+            I found no peer-reviewed account of a CC* storage award run past its
+            grant period on recharge, though I did not search exhaustively. This
+            note is an operator&rsquo;s report, not a controlled study.
+          </p>
+
+          <h2 id="design">The Design</h2>
+          <p>
+            The
+            <a
+              href="https://www.nsf.gov/awardsearch/showAward?AWD_ID=2346636"
+              target="_blank"
+              rel="noopener"
+              >award abstract</a
+            >
+            fixes the hardware<sup class="cite"><a href="#ref-1">[1]</a></sup
+            >: 20 nodes, each with 160 TB of physical storage on 8 hard disk
+            drives (HDDs), plus 3 Non-Volatile Memory Express (NVMe) solid-state
+            drives (SSDs) giving 23 TB of fast storage per node, or 460 TB of
+            flash across the cluster. The 3.2 PB raw figure is 20 times 160 TB.
+            The outcomes report places the servers in the university's core data
+            centers, connected to UCR's 100 Gbps Science DMZ (demilitarized
+            zone), the campus network segment built for large research
+            transfers.
+          </p>
+          <p>
+            The storage software is Ceph, the open-source distributed storage
+            system. It runs on commodity servers, so the campus is not tied to
+            one vendor's price for the next expansion. It can serve object,
+            block and file interfaces from one cluster, which let us wait and
+            see what researchers used. And NRP's own Nautilus cluster runs Ceph,
+            so the people we would share capacity with already knew it.
+          </p>
+          <p>
+            The biggest design choice was erasure coding instead of three-way
+            replication. A 6+3 code splits each object into 6 data chunks and 3
+            parity chunks on different servers. The overhead is 1.5 times
+            instead of 3, so the same disks hold about twice as much. For a
+            campus that has to recover cost per terabyte, that ratio decides
+            whether the service is affordable at all.
+          </p>
+          <p>
+            Any 6 of the 9 chunks rebuild the object, so data survives the loss
+            of 3. Availability is different. Ceph's documentation recommends a
+            <code>min_size</code> of k+1 for an erasure-coded pool, which is 7
+            here<sup class="cite"><a href="#ref-26">[26]</a></sup
+            >. Lose more than 2 chunks of a placement group and that group stops
+            serving reads and writes until recovery restores a seventh chunk,
+            even though no data is lost. I describe the recommended setting
+            here. Each object also needs 9 failure domains to place its chunks.
+            With 20 servers there is room, but not a lot of it. Rebuilds cost
+            more than copying a replica: restoring a lost chunk means reading 6
+            surviving chunks from other servers.
+          </p>
+          <p>
+            The flash and the disks became two classes of bucket. Standard
+            buckets sit on hard disks and are the default. Fast buckets sit on
+            the SSDs and are meant for small-file and metadata-heavy work. A lab
+            can keep a sequencing archive and an active analysis directory side
+            by side without paying flash prices for both.
+          </p>
+
+          <h2 id="capacity">Splitting the Capacity</h2>
+          <p>
+            About 20 percent of usable space is pledged to the NRP. Table 1
+            gives the figures from my capacity records. Raw capacity is what the
+            vendor quote says; usable capacity is what a researcher can fill,
+            and it is the number I plan against.
+          </p>
+          <p class="table-caption">
+            Table 1. CephRDS capacity by pool, from my capacity and allocation
+            records. Percentages are of usable capacity, rounded to the nearest
+            whole percent. The pilot figure is the sum of allocated quotas, not
+            bytes stored.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Item</th>
+                  <th class="num" scope="col">Capacity</th>
+                  <th scope="col">Share of usable</th>
+                  <th scope="col">Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Raw capacity</td>
+                  <td class="num">3.2 PB</td>
+                  <td>n/a</td>
+                  <td>20 servers at 160 TB each</td>
+                </tr>
+                <tr>
+                  <td>Usable after 6+3 erasure coding</td>
+                  <td class="num">2,090.88 TB</td>
+                  <td class="num">100%</td>
+                  <td>Reported publicly as 2.09 PB</td>
+                </tr>
+                <tr>
+                  <td>NRP slice</td>
+                  <td class="num">422.40 TB</td>
+                  <td class="num">20%</td>
+                  <td>Pledged to the National Research Platform</td>
+                </tr>
+                <tr>
+                  <td>UCR pool</td>
+                  <td class="num">1,668.48 TB</td>
+                  <td class="num">80%</td>
+                  <td>Allocated by Research Computing to UCR projects</td>
+                </tr>
+                <tr>
+                  <td>Allocated to pilot labs</td>
+                  <td class="num">about 560 TB</td>
+                  <td class="num">about 27%</td>
+                  <td>About a third of the UCR pool</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            The two pools add up exactly: 422.40 TB plus 1,668.48 TB is 2,090.88
+            TB. The NRP slice matches the 20 percent stated in the NSF outcomes
+            report<sup class="cite"><a href="#ref-1">[1]</a></sup
+            >.
+          </p>
+          <p>
+            A sharp reader will divide 3,200 TB by 1.5 and get about 2,133 TB,
+            not 2,090.88 TB. The gap is about 42 TB, or 2 percent. Likely causes
+            include decimal versus binary units, disk formatting and Ceph's own
+            overhead, but the records I drew on do not say which. I leave it
+            unexplained rather than guess.
+          </p>
+          <p>
+            Table 1 also allocates every usable terabyte on paper, and Ceph does
+            not let you fill every terabyte. By default a cluster warns at 85
+            percent full (<code>nearfull</code>) and stops accepting writes at
+            95 percent (<code>full</code>)<sup class="cite"
+              ><a href="#ref-27">[27]</a></sup
+            >. It also needs free space to re-protect data after a server fails.
+            One server is 5 percent of raw capacity, so at least that much has
+            to stay empty. The space that can actually be sold is well below
+            2,090.88 TB. My records do not yet set a sellable ceiling, and at
+            560 TB allocated the question is not urgent, but the plan has to
+            answer it before the UCR pool fills.
+          </p>
+          <p>
+            The original proposal imagined a single web portal where every user,
+            campus or national, would sign in and claim storage. The team
+            dropped it, and the outcomes report records why. High-volume
+            research work runs on scripts, pipelines and cluster jobs that need
+            keys and an endpoint, not a browser login. A fully self-service
+            portal would also let storage run out without oversight. What
+            replaced it is what the report calls split management. UCR manages
+            the campus pool directly, sets a quota on each bucket and reviews
+            each request. The NRP slice is a fixed pledge, so national use
+            cannot spill into the campus pool, and campus growth cannot quietly
+            eat the national commitment.
+          </p>
+          <p>
+            A fixed boundary is less flexible than a shared pool, and it wastes
+            space when one side is full and the other is not. I accepted that
+            cost to make the promises to both sides checkable. When a dean asks
+            how much UCR storage is in use, the answer does not depend on what a
+            researcher in another state did last week.
+          </p>
+          <p>
+            This note does not describe how NRP users reach the pledged slice.
+            The outcomes report states the pledge and its size. The records I
+            used for this note do not document the data path, credentials or
+            operations split for that slice, so I do not describe them. A later
+            note will, once I can write it from records.
+          </p>
+          <p>
+            The two sides carry different data rules. The campus pool accepts
+            data at UCR protection levels P1 and P2. NRP states that its systems
+            are not suitable for protected data, and the Research Computing
+            guide to NRP storage applies that as a rule: only P1 (public) data
+            may go on NRP resources. Lab requests are classified before storage
+            is created for that reason.
+          </p>
+
+          <h2 id="access">How Researchers Get In</h2>
+          <p>
+            Access is S3 only. A lab gets a bucket, a quota and an access key
+            pair, and connects to <code>https://rds.ucr.edu</code> with
+            path-style addressing, where the bucket name goes in the path
+            instead of the hostname. The service offers no Network File System
+            (NFS) or Server Message Block (SMB) mount and no lifecycle
+            (automatic deletion) rules. The endpoint is reachable only from the
+            campus network or the campus VPN.
+          </p>
+          <p>
+            These limits were chosen deliberately. S3 alone means one protocol
+            to secure, monitor and support, and it is the protocol analysis
+            languages, cloud tools and pipeline frameworks already speak.
+            Keeping the endpoint off the public internet removes a large class
+            of attacks on a new service run by a small team, at the cost of
+            making off-campus collaborators use the VPN. Leaving out lifecycle
+            rules means no lab loses data to a rule someone set and forgot.
+          </p>
+          <p>
+            For researchers who do not want to learn S3, I directed the build of
+            <a
+              href="https://github.com/UCR-Research-Computing/rds-cli"
+              target="_blank"
+              rel="noopener"
+              >rds-cli</a
+            >, a small open-source command-line tool that already knows the
+            endpoint and the path-style setting. It started on 13 March 2026,
+            reached v0.1.13 on 28 May 2026, and moved to the UCR Research
+            Computing GitHub organization on 28 October 2026. It uploads 10
+            files at a time, sends large files in 5 MB multipart chunks, logs a
+            failed file and carries on with the rest, and stores keys with
+            owner-only permissions. Its 20 unit tests all passed when I ran them
+            on 28 October 2026. Those tests mock the storage and were not run
+            against the cluster.
+          </p>
+          <p>
+            The Research Computing knowledge base (KB) carries the client
+            guides: onboarding and keys (<a
+              href="https://ucr-research-computing.github.io/kb/kb013-cephrds-onboarding/"
+              target="_blank"
+              rel="noopener"
+              >KB013</a
+            >), Python, desktop clients, mounting buckets with rclone,
+            <code>rds-cli</code> (<a
+              href="https://ucr-research-computing.github.io/kb/kb032-cephrds-rds-cli/"
+              target="_blank"
+              rel="noopener"
+              >KB032</a
+            >) and other languages and tools (<a
+              href="https://ucr-research-computing.github.io/kb/kb033-cephrds-other-languages-and-tools/"
+              target="_blank"
+              rel="noopener"
+              >KB033</a
+            >). KB032 and KB033 went live on 28 October 2026, the day the tool
+            moved, without being run against <code>rds.ucr.edu</code>; I had no
+            VPN access that day. Both pages say so in their review notes, with a
+            list of checks to run.
+          </p>
+
+          <h2 id="results">What Has Been Measured</h2>
+          <p>
+            The cluster is in pilot production. Pilot labs hold about 560 TB of
+            allocations between them, about a third of the UCR pool. I give the
+            total only.
+          </p>
+          <p>
+            The public outcomes report, written by the award PI, describes what
+            pilot labs saw after moving onto CephRDS<sup class="cite"
+              ><a href="#ref-1">[1]</a></sup
+            >. A neuroscience lab nearly doubled its transfer speed for large
+            magnetic resonance imaging (MRI) datasets. A computer vision lab cut
+            the time to load one large video dataset from 8&ndash;12 h to about
+            20 min. A geospatial lab moved 4 TB of satellite imagery without a
+            failure after previously being unable to transfer it reliably. These
+            are before-and-after observations by the labs, not controlled
+            benchmarks, and the &ldquo;before&rdquo; in each case was a
+            different and often much slower storage system.
+          </p>
+          <p>
+            My own measurements are not a cluster benchmark. On 13 March 2026 I
+            ran the benchmark suite in the
+            <code>cephrds-connect</code> repository from one remote client over
+            a satellite internet link and the campus VPN, with single runs and a
+            20 MB test file. Table 2 lists the results. Uploads ran at about 0.6
+            MB/s and downloads at 1.4&ndash;2.5 MB/s, figures that mostly
+            reflect the satellite link. The one operation that never left the
+            data center, a server-side copy from the fast tier to the standard
+            tier, ran at 36.73 MB/s. Multipart upload was slower than a single
+            stream on the fast tier (0.32 against 0.58 MB/s). With 5 MB parts, a
+            20 MB file is only 4 parts, so per-request latency over a satellite
+            link likely dominates; it tells me little about multipart on campus.
+            The technical report's own summary says multipart overcomes
+            satellite latency, which its data do not show.
+          </p>
+          <p class="table-caption">
+            Table 2. Remote-client measurements of 13 March 2026: one client
+            over a satellite link and the campus VPN, single runs, 20 MB file.
+            Not a cluster benchmark.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Operation</th>
+                  <th scope="col">Tier</th>
+                  <th class="num" scope="col">MB/s</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Upload, single stream</td>
+                  <td>SSD</td>
+                  <td class="num">0.58</td>
+                </tr>
+                <tr>
+                  <td>Upload, single stream</td>
+                  <td>HDD</td>
+                  <td class="num">0.60</td>
+                </tr>
+                <tr>
+                  <td>Upload, multipart</td>
+                  <td>SSD</td>
+                  <td class="num">0.32</td>
+                </tr>
+                <tr>
+                  <td>Upload, multipart</td>
+                  <td>HDD</td>
+                  <td class="num">0.66</td>
+                </tr>
+                <tr>
+                  <td>Download</td>
+                  <td>SSD</td>
+                  <td class="num">2.48</td>
+                </tr>
+                <tr>
+                  <td>Download</td>
+                  <td>HDD</td>
+                  <td class="num">1.44</td>
+                </tr>
+                <tr>
+                  <td>Server-side copy</td>
+                  <td>SSD to HDD</td>
+                  <td class="num">36.73</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            I do not have a benchmark from a machine on the Science DMZ in my
+            records. Until there is one, all I can say is that the cluster sits
+            on a 100 Gbps network and that I have not measured what a campus
+            client gets from it.
+          </p>
+
+          <h2 id="cost">Paying for It After the Grant</h2>
+          <p>
+            An equipment award buys disks once. It does not buy replacement
+            drives, support contracts, power, staff time or the next expansion.
+            A campus storage service that cannot cover those costs ends up as an
+            unsupported cluster with a lot of data on it. I designed a recharge
+            model for CephRDS while the award was running so that the pilot
+            would test the model and not just the hardware.
+          </p>
+          <p>
+            Its structure follows the design. Rates are per usable terabyte,
+            because that is what a lab fills, and erasure coding is what makes
+            usable capacity cheap enough to sell. Standard and fast buckets
+            carry different rates because flash costs more per terabyte than
+            disk. The NRP slice sits outside the recharge model: it was
+            committed to NRP under the award and is not sold to campus users.
+          </p>
+          <p>
+            The rates are being finalized through campus review. The service
+            page says the same: under review, not yet approved. Pilot labs were
+            told that terms would be set when their storage was allocated, and
+            that joining the pilot does not lock in a price. That costs us some
+            users. A lab that cannot put a storage price in a grant budget will
+            not move irreplaceable data onto it, and I would not either.
+          </p>
+
+          <h2 id="comparisons">Other Ways to Do This</h2>
+          <p>
+            Two national efforts solve parts of the same problem, and a peer
+            will ask why UCR did not simply use them.
+          </p>
+          <p>
+            The
+            <a
+              href="https://www.openstoragenetwork.org/"
+              target="_blank"
+              rel="noopener"
+              >Open Storage Network (OSN)</a
+            >
+            is an NSF-funded network of petabyte storage pods at sites across
+            the country, with allocations open to researchers<sup class="cite"
+              ><a href="#ref-21">[21]</a></sup
+            >. OSN is built for sharing data between institutions. CephRDS is
+            built first for active campus data under campus data rules, with a
+            slice set aside for national use.
+          </p>
+          <p>
+            The
+            <a
+              href="https://osg-htc.org/services/osdf"
+              target="_blank"
+              rel="noopener"
+              >Open Science Data Federation (OSDF)</a
+            >, run by the OSG Consortium (formerly Open Science Grid) with
+            software from the Pelican Platform, is the standard way to put
+            campus storage into a national data network<sup class="cite"
+              ><a href="#ref-20">[20]</a></sup
+            >. An &ldquo;origin&rdquo; service connects an object store,
+            including an S3 endpoint, to the federation, and OSG offers a hosted
+            origin for sites that want one. The OSDF page notes that Campus
+            Cyberinfrastructure storage projects have committed to having their
+            storage managed by OSG. Whether the NRP slice should be exposed this
+            way is part of the federation write-up I have not done yet.
+          </p>
+
+          <h2 id="what-went-wrong">What Went Wrong</h2>
+          <p>
+            Failures, gaps and open risks as of 28 October 2026, most serious
+            first.
+          </p>
+          <ul>
+            <li>
+              <strong>There is no on-campus performance baseline.</strong> The
+              only throughput figures I have were taken over a satellite link.
+              The lab outcomes are encouraging, but they are not measurements I
+              can reproduce.
+            </li>
+            <li>
+              <strong>The NRP slice is pledged but not documented here.</strong>
+              I cannot yet describe from records how researchers outside UCR
+              reach it, so a fifth of the system is outside this note.
+            </li>
+            <li>
+              <strong>The rates are not final.</strong> The grant closed on 28
+              February 2026, and the recharge rates are still in campus review.
+              Pilot labs carry uncertainty I wanted settled before they arrived.
+            </li>
+            <li>
+              <strong>Usable is not sellable.</strong> Table 1 allocates all
+              2,090.88 TB, while Ceph's full ratios and failure headroom mean
+              much less can be sold. The ceiling is not yet set.
+            </li>
+            <li>
+              <strong>The client documentation is untested.</strong> KB032 and
+              KB033 went live without a command run against the real endpoint.
+              They say so, but they may still be wrong, and the checksum advice
+              in KB033 is not yet verified for our gateway.
+            </li>
+            <li>
+              <strong>The VPN is a single dependency.</strong> The restriction
+              that protects the endpoint kept me from testing my own service for
+              a day. Off-campus collaborators carry that dependency every time.
+            </li>
+            <li>
+              <strong>The bucket quota display is unconfirmed.</strong>
+              <code>rds-cli bucket-info</code> reads the quota from a response
+              header Ceph's gateway can send. Whether ours sends it is not
+              confirmed, and the tool silently skips the quota line when it is
+              missing. A researcher could read that as &ldquo;no quota&rdquo;.
+            </li>
+            <li>
+              <strong>The portal failed as a design.</strong> The replacement
+              works, but every bucket and key now goes through Research
+              Computing by hand. That does not scale past a modest number of
+              labs without better tooling.
+            </li>
+            <li>
+              <strong>Backup is not a feature of the service.</strong> Erasure
+              coding protects against hardware failure, not against a lab
+              deleting its own data. Whether an allocation is backed up is part
+              of its terms, and the service page tells researchers to ask before
+              treating CephRDS as the only copy, and a lab that skips that step
+              may hold its only copy here.
+            </li>
+          </ul>
+
+          <h2 id="lessons">Lessons</h2>
+          <ol>
+            <li>
+              <strong>Plan in sellable terabytes, not raw or usable.</strong>
+              Every promise is made in space that can be filled while the
+              cluster can still heal itself.
+            </li>
+            <li>
+              <strong
+                >Draw a hard line around anything you share with a
+                federation.</strong
+              >
+              A fixed pledge keeps both the national commitment and the campus
+              pool checkable.
+            </li>
+            <li>
+              <strong
+                >Give researchers keys and an endpoint before a portal.</strong
+              >
+              Most research data moves through scripts and pipelines.
+            </li>
+            <li>
+              <strong
+                >Design cost recovery while the grant is still paying.</strong
+              >
+              The pilot is the cheapest chance to test whether labs will pay.
+            </li>
+            <li>
+              <strong
+                >Benchmark from where the data is before you publish numbers
+                from anywhere else.</strong
+              >
+              My only numbers are from a satellite link, and that is not where
+              most users are.
+            </li>
+          </ol>
+
+          <h2 id="next">What's Next</h2>
+          <ul>
+            <li>
+              Take a throughput and small-file baseline from a client on the
+              Science DMZ, on both tiers.
+            </li>
+            <li>
+              Run every command in KB032 and KB033 against a real bucket, then
+              clear the review notes or fix the pages.
+            </li>
+            <li>
+              Set a sellable ceiling for the UCR pool that leaves room for
+              Ceph's full ratios and a server failure.
+            </li>
+            <li>
+              Confirm whether the gateway returns the bucket quota header, and
+              make <code>rds-cli</code> say &ldquo;quota unknown&rdquo; instead
+              of nothing.
+            </li>
+            <li>
+              Publish the recharge rates on the service page once campus review
+              approves them.
+            </li>
+            <li>
+              Write up how the NRP slice is exposed and used, from records, and
+              compare it with an OSDF origin.
+            </li>
+          </ul>
+
+          <h2 id="references">References</h2>
+          <ol class="sources">
+            <li id="ref-1">
+              U.S. National Science Foundation. 2024. Award #2346636: Research
+              Infrastructure: CC* Data Storage: Foundational Campus Research
+              Storage for Digital Transformation. NSF Award Search, award
+              abstract and Project Outcomes Report.
+              <a
+                href="https://www.nsf.gov/awardsearch/showAward?AWD_ID=2346636"
+                target="_blank"
+                rel="noopener"
+                >https://www.nsf.gov/awardsearch/showAward?AWD_ID=2346636</a
+              >
+              Accessed 28 October 2026.
+            </li>
+            <li id="ref-2">
+              U.S. National Science Foundation. 2024. Campus Cyberinfrastructure
+              (CC*). Funding opportunity, program guidelines NSF 24-530.
+              <a
+                href="https://new.nsf.gov/funding/opportunities/cc-campus-cyberinfrastructure"
+                target="_blank"
+                rel="noopener"
+                >https://new.nsf.gov/funding/opportunities/cc-campus-cyberinfrastructure</a
+              >
+              Accessed 28 October 2026.
+            </li>
+            <li id="ref-3">
+              Charles E. Forsyth III. 2026. A Road to Nautilus in One Day. Field
+              Notes.
+              <a
+                href="https://charles-forsyth.github.io/papers/2026-10-06-a-road-to-nautilus-in-one-day.html"
+                target="_blank"
+                rel="noopener"
+                >https://charles-forsyth.github.io/papers/2026-10-06-a-road-to-nautilus-in-one-day.html</a
+              >
+            </li>
+            <li id="ref-4">
+              Charles E. Forsyth III. 2026. One Day on the Research Stack. Field
+              Notes.
+              <a
+                href="https://charles-forsyth.github.io/papers/2026-10-03-one-day-on-the-research-stack.html"
+                target="_blank"
+                rel="noopener"
+                >https://charles-forsyth.github.io/papers/2026-10-03-one-day-on-the-research-stack.html</a
+              >
+            </li>
+            <li id="ref-5">
+              Sage A. Weil, Scott A. Brandt, Ethan L. Miller, Darrell D. E.
+              Long, and Carlos Maltzahn. 2006. Ceph: A Scalable,
+              High-Performance Distributed File System. In Proceedings of the
+              7th USENIX Symposium on Operating Systems Design and
+              Implementation (OSDI ’06). USENIX Association, Berkeley, CA, USA.
+              <a
+                href="https://www.usenix.org/conference/osdi-06/ceph-scalable-high-performance-distributed-file-system"
+                target="_blank"
+                rel="noopener"
+                >https://www.usenix.org/conference/osdi-06/ceph-scalable-high-performance-distributed-file-system</a
+              >
+            </li>
+            <li id="ref-6">
+              Sage Weil, Scott Brandt, Ethan Miller, and Carlos Maltzahn. 2006.
+              CRUSH: Controlled, Scalable, Decentralized Placement of Replicated
+              Data. In ACM/IEEE SC 2006 Conference (SC’06). IEEE, Piscataway,
+              NJ, USA, 31.
+              <a
+                href="https://doi.org/10.1109/SC.2006.19"
+                target="_blank"
+                rel="noopener"
+                >doi:10.1109/SC.2006.19</a
+              >
+            </li>
+            <li id="ref-7">
+              Sage A. Weil, Andrew W. Leung, Scott A. Brandt, and Carlos
+              Maltzahn. 2007. RADOS: A Scalable, Reliable Storage Service for
+              Petabyte-Scale Storage Clusters. In Proceedings of the 2nd
+              International Workshop on Petascale Data Storage, held in
+              conjunction with Supercomputing ’07. ACM, New York, NY, USA,
+              35–44.
+              <a
+                href="https://doi.org/10.1145/1374596.1374606"
+                target="_blank"
+                rel="noopener"
+                >doi:10.1145/1374596.1374606</a
+              >
+            </li>
+            <li id="ref-8">
+              Abutalib Aghayev, Sage Weil, Michael Kuchnik, Mark Nelson, Gregory
+              R. Ganger, and George Amvrosiadis. 2019. File Systems Unfit as
+              Distributed Storage Backends: Lessons from 10 Years of Ceph
+              Evolution. In Proceedings of the 27th ACM Symposium on Operating
+              Systems Principles (SOSP ’19). ACM, New York, NY, USA, 353–369.
+              <a
+                href="https://doi.org/10.1145/3341301.3359656"
+                target="_blank"
+                rel="noopener"
+                >doi:10.1145/3341301.3359656</a
+              >
+            </li>
+            <li id="ref-9">
+              I. S. Reed and G. Solomon. 1960. Polynomial Codes Over Certain
+              Finite Fields. J. Soc. Indust. Appl. Math. 8, 2 (1960), 300–304.
+              <a
+                href="https://doi.org/10.1137/0108018"
+                target="_blank"
+                rel="noopener"
+                >doi:10.1137/0108018</a
+              >
+            </li>
+            <li id="ref-10">
+              Hakim Weatherspoon and John D. Kubiatowicz. 2002. Erasure Coding
+              Vs. Replication: A Quantitative Comparison. In Peer-to-Peer
+              Systems (IPTPS 2002) (Lecture Notes in Computer Science, Vol.
+              2429). Springer, Berlin, Heidelberg, 328–337.
+              <a
+                href="https://doi.org/10.1007/3-540-45748-8_31"
+                target="_blank"
+                rel="noopener"
+                >doi:10.1007/3-540-45748-8_31</a
+              >
+            </li>
+            <li id="ref-11">
+              Cheng Huang, Huseyin Simitci, Yikang Xu, Aaron Ogus, Brad Calder,
+              Parikshit Gopalan, Jin Li, and Sergey Yekhanin. 2012. Erasure
+              Coding in Windows Azure Storage. In Proceedings of the 2012 USENIX
+              Annual Technical Conference (USENIX ATC ’12). USENIX Association,
+              Berkeley, CA, USA, 15–26.
+              <a
+                href="https://www.usenix.org/conference/atc12/technical-sessions/presentation/huang"
+                target="_blank"
+                rel="noopener"
+                >https://www.usenix.org/conference/atc12/technical-sessions/presentation/huang</a
+              >
+            </li>
+            <li id="ref-12">
+              Maheswaran Sathiamoorthy, Megasthenis Asteris, Dimitris
+              Papailiopoulos, Alexandros G. Dimakis, Ramkumar Vadali, Scott
+              Chen, and Dhruba Borthakur. 2013. XORing Elephants: Novel Erasure
+              Codes for Big Data. Proceedings of the VLDB Endowment 6, 5 (2013),
+              325–336.
+              <a
+                href="https://doi.org/10.14778/2535573.2488339"
+                target="_blank"
+                rel="noopener"
+                >doi:10.14778/2535573.2488339</a
+              >
+            </li>
+            <li id="ref-13">
+              Konstantin Shvachko, Hairong Kuang, Sanjay Radia, and Robert
+              Chansler. 2010. The Hadoop Distributed File System. In 2010 IEEE
+              26th Symposium on Mass Storage Systems and Technologies (MSST).
+              IEEE, Piscataway, NJ, USA, 1–10.
+              <a
+                href="https://doi.org/10.1109/MSST.2010.5496972"
+                target="_blank"
+                rel="noopener"
+                >doi:10.1109/MSST.2010.5496972</a
+              >
+            </li>
+            <li id="ref-14">
+              Eli Dart, Lauren Rotman, Brian Tierney, Mary Hester, and Jason
+              Zurawski. 2013. The Science DMZ: A Network Design Pattern for
+              Data-Intensive Science. In Proceedings of the International
+              Conference on High Performance Computing, Networking, Storage and
+              Analysis (SC ’13). ACM, New York, NY, USA, 1–10.
+              <a
+                href="https://doi.org/10.1145/2503210.2503245"
+                target="_blank"
+                rel="noopener"
+                >doi:10.1145/2503210.2503245</a
+              >
+            </li>
+            <li id="ref-15">
+              Larry Smarr, Camille Crittenden, Thomas DeFanti, John Graham,
+              Dmitry Mishin, Richard Moore, Philip Papadopoulos, and Frank
+              Würthwein. 2018. The Pacific Research Platform: Making High-Speed
+              Networking a Reality for the Scientist. In Proceedings of the
+              Practice and Experience on Advanced Research Computing (PEARC
+              ’18). ACM, New York, NY, USA, 1–8.
+              <a
+                href="https://doi.org/10.1145/3219104.3219108"
+                target="_blank"
+                rel="noopener"
+                >doi:10.1145/3219104.3219108</a
+              >
+            </li>
+            <li id="ref-16">
+              National Research Platform. 2026. National Research Platform.
+              Project website.
+              <a
+                href="https://nationalresearchplatform.org/"
+                target="_blank"
+                rel="noopener"
+                >https://nationalresearchplatform.org/</a
+              >
+              Accessed 28 October 2026.
+            </li>
+            <li id="ref-17">
+              Kyle Chard, Steven Tuecke, and Ian Foster. 2014. Efficient and
+              Secure Transfer, Synchronization, and Sharing of Big Data. IEEE
+              Cloud Computing 1, 3 (2014), 46–55.
+              <a
+                href="https://doi.org/10.1109/MCC.2014.52"
+                target="_blank"
+                rel="noopener"
+                >doi:10.1109/MCC.2014.52</a
+              >
+            </li>
+            <li id="ref-18">
+              Ruth Pordes, Don Petravick, Bill Kramer, Doug Olson, Miron Livny,
+              Alain Roy, Paul Avery, Kent Blackburn, Torre Wenaus, Frank
+              Würthwein, Ian Foster, Rob Gardner, Mike Wilde, Alan Blatecky,
+              John McGee, and Rob Quick. 2007. The Open Science Grid. Journal of
+              Physics: Conference Series 78 (2007), 012057.
+              <a
+                href="https://doi.org/10.1088/1742-6596/78/1/012057"
+                target="_blank"
+                rel="noopener"
+                >doi:10.1088/1742-6596/78/1/012057</a
+              >
+            </li>
+            <li id="ref-19">
+              Derek Weitzel, Marian Zvada, Ilija Vukotic, Rob Gardner, Brian
+              Bockelman, Mats Rynge, Edgar Fajardo Hernandez, Brian Lin, and
+              Mátyás Selmeci. 2019. StashCache: A Distributed Caching Federation
+              for the Open Science Grid. In Proceedings of the Practice and
+              Experience in Advanced Research Computing (PEARC ’19). ACM, New
+              York, NY, USA, 1–7.
+              <a
+                href="https://doi.org/10.1145/3332186.3332212"
+                target="_blank"
+                rel="noopener"
+                >doi:10.1145/3332186.3332212</a
+              >
+            </li>
+            <li id="ref-20">
+              OSG Consortium. 2026. Open Science Data Federation (OSDF). OSG
+              services documentation.
+              <a
+                href="https://osg-htc.org/services/osdf/"
+                target="_blank"
+                rel="noopener"
+                >https://osg-htc.org/services/osdf/</a
+              >
+              Accessed 28 October 2026.
+            </li>
+            <li id="ref-21">
+              Open Storage Network. 2026. Open Storage Network. Project website.
+              <a
+                href="https://www.openstoragenetwork.org/"
+                target="_blank"
+                rel="noopener"
+                >https://www.openstoragenetwork.org/</a
+              >
+              Accessed 28 October 2026.
+            </li>
+            <li id="ref-22">
+              Peter Mell and Timothy Grance. 2011. The NIST Definition of Cloud
+              Computing. Special Publication 800-145. National Institute of
+              Standards and Technology.
+              <a
+                href="https://doi.org/10.6028/NIST.SP.800-145"
+                target="_blank"
+                rel="noopener"
+                >doi:10.6028/NIST.SP.800-145</a
+              >
+            </li>
+            <li id="ref-23">
+              Michael Armbrust, Armando Fox, Rean Griffith, Anthony D. Joseph,
+              Randy Katz, Andy Konwinski, Gunho Lee, David Patterson, Ariel
+              Rabkin, Ion Stoica, and Matei Zaharia. 2010. A View of Cloud
+              Computing. Commun. ACM 53, 4 (2010), 50–58.
+              <a
+                href="https://doi.org/10.1145/1721654.1721672"
+                target="_blank"
+                rel="noopener"
+                >doi:10.1145/1721654.1721672</a
+              >
+            </li>
+            <li id="ref-24">
+              Amazon Web Services. 2026. Amazon Simple Storage Service API
+              Reference. AWS Documentation.
+              <a
+                href="https://docs.aws.amazon.com/AmazonS3/latest/API/Welcome.html"
+                target="_blank"
+                rel="noopener"
+                >https://docs.aws.amazon.com/AmazonS3/latest/API/Welcome.html</a
+              >
+              Accessed 28 October 2026.
+            </li>
+            <li id="ref-25">
+              Ceph Project. 2026. Ceph Object Gateway S3 API. Ceph
+              Documentation.
+              <a
+                href="https://docs.ceph.com/en/latest/radosgw/s3/"
+                target="_blank"
+                rel="noopener"
+                >https://docs.ceph.com/en/latest/radosgw/s3/</a
+              >
+              Accessed 28 October 2026.
+            </li>
+            <li id="ref-26">
+              Ceph Project. 2026. Erasure Code. Ceph Documentation.
+              <a
+                href="https://docs.ceph.com/en/latest/rados/operations/erasure-code/"
+                target="_blank"
+                rel="noopener"
+                >https://docs.ceph.com/en/latest/rados/operations/erasure-code/</a
+              >
+              Accessed 28 October 2026.
+            </li>
+            <li id="ref-27">
+              Ceph Project. 2026. Monitor Config Reference. Ceph Documentation.
+              <a
+                href="https://docs.ceph.com/en/latest/rados/configuration/mon-config-ref/"
+                target="_blank"
+                rel="noopener"
+                >https://docs.ceph.com/en/latest/rados/configuration/mon-config-ref/</a
+              >
+              Accessed 28 October 2026.
+            </li>
+          </ol>
+
+          <h2 id="sources">Sources</h2>
+          <p>Public sources:</p>
+          <ul>
+            <li>
+              <a
+                href="https://www.nsf.gov/awardsearch/showAward?AWD_ID=2346636"
+                target="_blank"
+                rel="noopener"
+                >NSF award OAC-2346636</a
+              >, the award record: PI, co-PIs, dates, abstract with the hardware
+              specification, and the project outcomes report
+            </li>
+            <li>
+              <a
+                href="https://github.com/UCR-Research-Computing/rds-cli"
+                target="_blank"
+                rel="noopener"
+                >UCR-Research-Computing/rds-cli</a
+              >, the command-line tool, its README, change log and tests
+            </li>
+            <li>
+              <a
+                href="https://ucr-research-computing.github.io/services/cephrds/"
+                target="_blank"
+                rel="noopener"
+                >CephRDS service page</a
+              >, pilot status, data levels, access, backup terms and rate status
+            </li>
+            <li>
+              <a
+                href="https://ucr-research-computing.github.io/kb/kb013-cephrds-onboarding/"
+                target="_blank"
+                rel="noopener"
+                >KB013: Connecting to CephRDS</a
+              >, requests, keys and network rules
+            </li>
+            <li>
+              <a
+                href="https://ucr-research-computing.github.io/kb/kb032-cephrds-rds-cli/"
+                target="_blank"
+                rel="noopener"
+                >KB032: rds-cli</a
+              >, the tool guide, with its untested status in the review notes
+            </li>
+            <li>
+              <a
+                href="https://ucr-research-computing.github.io/kb/kb033-cephrds-other-languages-and-tools/"
+                target="_blank"
+                rel="noopener"
+                >KB033: Other languages and tools</a
+              >, client settings and examples, also untested
+            </li>
+            <li>
+              <a
+                href="https://ucr-research-computing.github.io/kb/kb027-nautilus-storage-and-data/"
+                target="_blank"
+                rel="noopener"
+                >KB027: Storage and moving data on Nautilus</a
+              >, NRP data rules
+            </li>
+            <li>
+              <a
+                href="https://docs.ceph.com/en/latest/rados/operations/erasure-code/"
+                target="_blank"
+                rel="noopener"
+                >Ceph documentation: erasure code</a
+              >, profiles and pool behavior
+            </li>
+            <li>
+              <a
+                href="https://docs.ceph.com/en/latest/rados/configuration/mon-config-ref/"
+                target="_blank"
+                rel="noopener"
+                >Ceph documentation: monitor configuration</a
+              >, default <code>nearfull</code> and <code>full</code> ratios
+            </li>
+            <li>
+              <a
+                href="https://www.openstoragenetwork.org/"
+                target="_blank"
+                rel="noopener"
+                >Open Storage Network</a
+              >, the NSF-funded national storage pods
+            </li>
+            <li>
+              <a
+                href="https://osg-htc.org/services/osdf"
+                target="_blank"
+                rel="noopener"
+                >Open Science Data Federation</a
+              >, origins, Pelican and Campus Cyberinfrastructure storage
+            </li>
+            <li>
+              <a
+                href="https://nationalresearchplatform.org/"
+                target="_blank"
+                rel="noopener"
+                >National Research Platform</a
+              >, the federation that receives the pledged slice
+            </li>
+          </ul>
+          <p>
+            Private records used: my CephRDS capacity and allocation records
+            (pool sizes, pilot total); the CephRDS technical report of 13 March
+            2026 in the <code>cephrds-connect</code> repository; the
+            <code>rds-cli</code> git history and the test run of 28 October
+            2026; the review notes in the Research Computing knowledge base
+            source for KB013, KB018 to KB020, KB027, KB032 and KB033; and the
+            <code>nrp-nautilus</code> working specification.
+          </p>
+          <nav class="doc-pager" aria-label="Field notes navigation">
+            <a
+              class="pager-prev"
+              href="2026-10-27-directing-a-fleet-of-ai-builders.html"
+              ><span>Previous</span>Directing a Fleet of AI Builders</a
+            ><a class="pager-next" href="index.html"
+              ><span>Back</span>All Field Notes</a
+            >
+          </nav>
+        </article>
+      </div>
+    </main>
+
+    <footer class="section-dark">
+      <div class="container text-center">
+        <p class="footer-note">
+          Field Notes |
+          <a href="index.html" class="subtle-link">All notes</a> |
+          <a href="../index.html" class="subtle-link"
+            >charles-forsyth.github.io</a
+          >
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

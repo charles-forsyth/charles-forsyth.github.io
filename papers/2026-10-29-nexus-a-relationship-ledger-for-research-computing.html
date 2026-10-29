@@ -1,0 +1,1108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nexus: A Research Computing Relationship Ledger | Field Notes</title>
+    <meta
+      name="description"
+      content="How Nexus, a PostgreSQL knowledge graph and interaction ledger, grew over 10 months into the record UC Riverside Research Computing and its AI agents work from."
+    />
+    <link
+      rel="canonical"
+      href="https://charles-forsyth.github.io/papers/2026-10-29-nexus-a-relationship-ledger-for-research-computing.html"
+    />
+    <meta property="og:type" content="article" />
+    <meta
+      property="og:url"
+      content="https://charles-forsyth.github.io/papers/2026-10-29-nexus-a-relationship-ledger-for-research-computing.html"
+    />
+    <meta
+      property="og:title"
+      content="Nexus: A Research Computing Relationship Ledger | Field Notes"
+    />
+    <meta
+      property="og:description"
+      content="A knowledge graph of about 970 people, 400 units and 176 cloud projects, with nearly 4,000 logged interactions, run through one CLI and a read-mostly MCP server. What it holds, how it grew, and what went wrong."
+    />
+    <meta
+      property="og:image"
+      content="https://charles-forsyth.github.io/assets/og-share.jpg"
+    />
+    <meta property="twitter:card" content="summary_large_image" />
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="../handbook/handbook.css" />
+    <link rel="stylesheet" href="papers.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+  </head>
+  <body>
+    <header class="hero doc-hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="doc-kicker">
+            <i class="fas fa-flask"></i> Field Notes | 29 October 2026
+          </p>
+          <h1>Nexus: A Relationship Ledger for Research Computing</h1>
+          <h2>
+            A knowledge graph and interaction ledger that started as a database
+            script in September 2025 and is now the record my staff and our AI
+            agents work from
+          </h2>
+          <div class="cta-buttons">
+            <a
+              href="pdf/2026-10-29-nexus-a-relationship-ledger-for-research-computing.pdf"
+              class="btn btn-primary"
+              ><i class="fas fa-file-pdf"></i> Download PDF</a
+            >
+            <a href="index.html" class="btn btn-secondary"
+              ><i class="fas fa-file-alt"></i> All Field Notes</a
+            >
+            <a href="../index.html" class="btn btn-secondary"
+              ><i class="fas fa-arrow-left"></i> Main Site</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+    <main class="section-light">
+      <div class="container doc-layout">
+        <aside class="doc-toc">
+          <h4><i class="fas fa-list"></i> On this page</h4>
+          <ul>
+            <li><a href="#abstract">Abstract</a></li>
+            <li><a href="#author-note">Author Note</a></li>
+            <li><a href="#context">Context</a></li>
+            <li><a href="#related-work">Related Work</a></li>
+            <li><a href="#lineage">Lineage</a></li>
+            <li><a href="#graph">The Graph and the Ledger</a></li>
+            <li><a href="#architecture">Architecture</a></li>
+            <li><a href="#growth">Growth in Numbers</a></li>
+            <li><a href="#daily-use">How It Gets Used</a></li>
+            <li><a href="#what-went-wrong">What Went Wrong</a></li>
+            <li><a href="#lessons">Lessons</a></li>
+            <li><a href="#next">What's Next</a></li>
+            <li><a href="#references">References</a></li>
+            <li><a href="#sources">Sources</a></li>
+          </ul>
+        </aside>
+        <article class="doc-content">
+          <h2 id="abstract">Abstract</h2>
+          <p>
+            Nexus is the system of record for the relationships of Research
+            Computing at the University of California, Riverside (UCR): a
+            PostgreSQL knowledge graph of researchers, labs, departments, Google
+            Cloud projects, assets and engagements, plus a ledger of every
+            email, meeting and decision that touched them. I run it through the
+            <code>nexus</code> command-line interface (CLI) and a hosted Model
+            Context Protocol (MCP) server that lets AI assistants read it under
+            a campus sign-in. On 28 October 2026 it held 972 researcher records,
+            408 organizational units, 176 cloud projects, 911 assets and 3,983
+            interactions.
+          </p>
+          <p>
+            The code dates from 5 January 2026: 541 commits and 212 tags, the
+            latest v0.1.233, with the code itself at version 0.1.235. Its direct
+            ancestor, a database and helper script for people and interactions,
+            started on 5 September 2025, so the continuous line is about 14
+            months. The main lesson is that a ledger is worth what its write
+            rules are worth: the rules that every write goes through the CLI,
+            and that AI output is staged before it becomes a record, mattered
+            more than any feature.
+          </p>
+          <h2 id="author-note">Author Note</h2>
+          <p>
+            The work was directed by me and carried out with AI agents under
+            written briefs, independent checks and explicit approval steps.
+            Figures come from the Nexus specification (SPEC.md, version 1.6),
+            git history, read-only Nexus queries on 28 October 2026, and GitHub
+            metadata. People, labs and some identifiers are replaced with role
+            names; aggregate figures are real. This note was drafted with AI
+            assistance from those records and reviewed by me. All numbers are
+            real unless marked as representative.
+          </p>
+
+          <h2 id="context">Context</h2>
+          <p>
+            Research Computing supports roughly a thousand researchers across 22
+            colleges and schools, on the campus cluster, our CephRDS storage
+            (built on Ceph<sup class="cite"><a href="#ref-1">[1]</a></sup
+            >), 176 Google Cloud projects (knowledge graph, 5 October 2026),
+            secure enclaves and a growing AI stack. Requests arrive by email,
+            ServiceNow, Slack, meetings and hallway conversations. Before Nexus,
+            the answer to "what is our history with this principal investigator
+            (PI)?" lived in an inbox, a legacy CRM, Jira and my memory. The
+            questions I needed most were the hardest: who is this person and who
+            works with them, what did we promise, which cloud projects do they
+            use and who pays, and which faculty have we not spoken to in months.
+          </p>
+          <p>
+            The goal in the spec is to reduce "Time to Science": every feature
+            has to make it faster to understand a researcher's situation and act
+            on it. Nexus is a CRM in the literal sense, with the research
+            enterprise as the customer. It is not a ticket system, a scheduler,
+            a mail client or a cloud auditor. Other tools do those jobs and
+            Nexus records the result and the connections.
+          </p>
+
+          <p>
+            <strong>Governance and privacy.</strong> Nexus holds professional
+            service records only: who asked Research Computing for what, what we
+            did, and which labs, projects and services were involved. It holds
+            no student academic records, personnel records or health
+            information, and those are not to be logged. Access is limited to
+            Research Computing staff by role, re-checked on every call. UCR is a
+            public university, so I write each entry assuming it may one day be
+            read under a public-records request: facts and commitments, no
+            opinions about people. Retention, and whether a researcher can see
+            their own record, still need a written policy.
+          </p>
+          <h2 id="related-work">Related Work</h2>
+          <p>
+            The research computing and data (RCD) profession has a shared
+            vocabulary for what a support organization should do. The CaRCC RCD
+            Capabilities Model<sup class="cite"><a href="#ref-2">[2]</a></sup>
+            scores institutions on facets that include researcher engagement and
+            outreach, which is the work a relationship ledger records. A name
+            collision is worth stating up front: the NSF-funded RCD Nexus
+            project<sup class="cite"><a href="#ref-3">[3]</a></sup
+            >, run with CaRCC, built a portal and community resources for RCD
+            professionals. It is unrelated to the system described here, which
+            took its name before I knew of the overlap.
+          </p>
+          <p>
+            The closest open tools in the field model allocations and usage.
+            ColdFront<sup class="cite"><a href="#ref-4">[4]</a></sup> manages
+            PIs, projects, allocations, grants and publications for HPC centers,
+            and Open XDMoD<sup class="cite"><a href="#ref-5">[5]</a></sup>
+            reports job and resource usage. Both answer "who has what and how
+            much do they use it" better than Nexus does; neither is built to
+            hold the conversation history, commitments and people around a lab.
+            Commercial platforms do hold that history: ServiceNow Customer
+            Service Management<sup class="cite"><a href="#ref-6">[6]</a></sup
+            >, which UCR already runs for tickets, Salesforce Education
+            Cloud<sup class="cite"><a href="#ref-7">[7]</a></sup> and Microsoft
+            Dynamics 365 Sales<sup class="cite"><a href="#ref-8">[8]</a></sup
+            >. I did not adopt one because the record had to be scriptable by
+            agents from the first week, had to join to our own cloud audit data
+            by project ID, and had to cost nothing to change. The price of that
+            choice is that Nexus has one maintainer.
+          </p>
+          <p>
+            Nexus is a small knowledge graph in the survey sense of Hogan et
+            al.<sup class="cite"><a href="#ref-9">[9]</a></sup
+            >: typed entities and typed edges with a schema. It is stored
+            relationally rather than in a property graph database such as
+            Neo4j<sup class="cite"><a href="#ref-10">[10]</a></sup
+            >, and it differs from personal linked-note tools such as
+            Obsidian<sup class="cite"><a href="#ref-11">[11]</a></sup> by
+            enforcing types and identity at write time. Those tools descend from
+            personal information management, which Jones<sup class="cite"
+              ><a href="#ref-12">[12]</a></sup
+            >
+            surveys as the keeping and re-finding of one person's information;
+            Nexus applies the same habits to a shared, typed record for a team.
+            Search uses pgvector<sup class="cite"
+              ><a href="#ref-13">[13]</a></sup
+            >
+            for embeddings and <code>pg_trgm</code
+            ><sup class="cite"><a href="#ref-14">[14]</a></sup> for trigram
+            similarity inside the same database, so there is no second store to
+            keep in sync.
+          </p>
+          <p>
+            Linking the right person is a record-linkage problem. The resolver's
+            order (exact identifiers before names, a fixed alias list before any
+            fuzzy match) is the deterministic end of the spectrum that Fellegi
+            and Sunter<sup class="cite"><a href="#ref-15">[15]</a></sup>
+            formalized and Christen<sup class="cite"
+              ><a href="#ref-16">[16]</a></sup
+            >
+            surveys; it accepts lower recall for fewer false matches. Large
+            language models can match entities with little or no task-specific
+            training<sup class="cite"><a href="#ref-17">[17]</a></sup
+            >, but Nexus keeps the model out of the final match decision and
+            uses it only to propose candidates for a person to confirm.
+          </p>
+          <p>
+            On the AI side, language models that call tools<sup class="cite"
+              ><a href="#ref-18">[18]</a></sup
+            >
+            are now ordinary, and MCP<sup class="cite"
+              ><a href="#ref-19">[19]</a></sup
+            >
+            standardizes how a client discovers and calls a server's tools.
+            Keeping a person between model output and the record follows the
+            human-AI interaction guidance of Amershi et al.<sup class="cite"
+              ><a href="#ref-20">[20]</a></sup
+            >
+            and the oversight functions of the NIST AI Risk Management
+            Framework<sup class="cite"><a href="#ref-21">[21]</a></sup
+            >. Excessive agency and prompt injection, both in the OWASP Top 10
+            for LLM applications<sup class="cite"
+              ><a href="#ref-22">[22]</a></sup
+            >, are the reasons destructive verbs are kept off MCP. The guard
+            tests borrow the idea of mutation analysis<sup class="cite"
+              ><a href="#ref-23">[23]</a></sup
+            >.
+          </p>
+          <h2 id="lineage">Lineage</h2>
+          <p>
+            It feels to me like I have used Nexus for years. The repositories
+            say something more modest, shown in Table 1: about 14 months of
+            continuous lineage, of which Nexus proper is 10.
+          </p>
+          <p class="table-caption">
+            Table 1. The lineage of Nexus, from repository metadata and commit
+            history.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Dates</th>
+                  <th>System</th>
+                  <th>What it was</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Before September 2025</td>
+                  <td>Legacy Research CRM</td>
+                  <td>
+                    A PostgreSQL database the team used for people and contacts.
+                    Nexus imported it once (<code>nexus sync legacy</code>,
+                    written 6 January 2026).
+                  </td>
+                </tr>
+                <tr>
+                  <td>5 September to 23 December 2025</td>
+                  <td>The Research Data Hub workspace</td>
+                  <td>
+                    A workspace with a unified PostgreSQL database for people
+                    and interaction events, a Python helper as the required
+                    interface, and a separate SQLite inventory of cloud projects
+                    joined by project ID. 107 commits. Its rule "verify the
+                    NetID before logging an interaction" survives in Nexus.
+                  </td>
+                </tr>
+                <tr>
+                  <td>19 November 2025</td>
+                  <td>A CRM prototype</td>
+                  <td>A one-commit prototype made in Google AI Studio.</td>
+                </tr>
+                <tr>
+                  <td>5 January 2026 to now</td>
+                  <td>Nexus</td>
+                  <td>
+                    The CLI, the graph and the ledger; 541 commits, 212 tags.
+                  </td>
+                </tr>
+                <tr>
+                  <td>February 2026</td>
+                  <td>nexus-web, an enterprise agent</td>
+                  <td>
+                    Offshoots: a web front end, and a multi-agent experiment
+                    built on Google's Agent Development Kit. Neither became the
+                    main path.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            The ledger reaches further back than the code. Its oldest
+            interaction is dated 2003 and several are from 2022, because imports
+            kept the original event dates. Those are history brought in, and I
+            don't count them as years of use.
+          </p>
+          <p>
+            The pace was uneven. Of the 541 commits, 246 landed in January 2026,
+            when the core went in: the scaffold, the dossier, identity
+            resolution and AI ingest on day one, Cloud SQL and hybrid search on
+            day two. March, April and July saw 9 commits between them. Then 58
+            in September and 137 in October, when agents became the main users
+            and the CLI had to grow a machine contract.
+          </p>
+
+          <h2 id="graph">The Graph and the Ledger</h2>
+          <p>
+            The schema has 8 entity tables, one edge table and two support
+            tables. Researchers, labs (which hold every unit from a lab up to a
+            college), cloud projects, research projects, grants, assets, tasks
+            and interactions each get a strictly typed table with a JSONB
+            <code>details</code> column for loose facts and a 768-dimension
+            embedding for semantic search. One polymorphic
+            <code>connections</code> table links any two entities with a typed
+            edge: <code>PI_OF</code>, <code>MEMBER_OF</code>,
+            <code>OPERATES</code>, <code>PARTICIPATED_IN</code>,
+            <code>REFERENCED_IN</code> and 14 others in use. There are no
+            per-pair join tables. The trade is that the database cannot cascade
+            deletes, so the delete function removes a node's edges itself.
+          </p>
+          <p>
+            Interactions are the ledger. Each one keeps its date, a one-line
+            summary, the full original text, and edges to every person, unit and
+            project involved. On 5 October 2026, 6,944 of 12,681 edges were
+            <code>PARTICIPATED_IN</code>: more than half the graph is "who was
+            in this conversation". That is the part I query most.
+          </p>
+          <p>Writes follow a few rules from the spec:</p>
+          <ul>
+            <li>
+              <strong>One transaction per command.</strong> A decorator commits
+              on success and rolls back on any error; command bodies never
+              commit.
+            </li>
+            <li>
+              <strong>Identity before linking.</strong> A resolver tries UUID,
+              email, campus ID (NetID), exact name and a fixed list of nickname
+              pairs before any fuzzy match, and fuzzy matches need 0.8
+              similarity. A wrong link is worse than a missing one, so a failed
+              name gets an alias pair, never a looser threshold.
+            </li>
+            <li>
+              <strong>The "Glass Wall".</strong> Gemini may classify free text
+              and extract a summary and named entities, but a person confirms
+              each link before it is written. If the model fails, the
+              interaction still saves with the raw text.
+            </li>
+            <li>
+              <strong>Correct, don't erase.</strong>
+              <code>interactions edit</code> rewrites a summary in place and
+              keeps the prior one under <code>details.superseded</code>.
+            </li>
+            <li>
+              <strong>Provenance on every write.</strong> Since v0.1.213 one
+              database hook stamps who wrote each row, through which client, and
+              when.
+            </li>
+          </ul>
+          <p>
+            Tasks deserve a note. Nexus had them from the first week and logged
+            237. On 7 October 2026 tasks moved to a Jira project, with Hermes,
+            my agent assistant, as the single Jira writer. Nexus tasks are now a
+            read-and-update archive, and the MCP tool to add one was removed in
+            v0.1.233.
+          </p>
+
+          <h2 id="architecture">Architecture</h2>
+          <p>
+            Figure 1 shows the parts. Everything goes through the real CLI code,
+            whether the caller is me at a terminal, an agent on my laptop, or a
+            colleague's assistant over MCP.
+          </p>
+          <figure class="doc-figure">
+            <pre><code>  staff at a terminal   agents on the laptop     MCP clients
+        |              (Claude Code, Hermes)    (assistants, programs)
+        v                      |                       |
+ +--------------------------------------+    +------------------------+
+ | nexus CLI (Python, Typer, Rich)      |    | Nexus MCP server       |
+ |  identity resolver, Glass Wall       |    | (Cloud Run)            |
+ |  ingest, dossiers, briefings         |    | campus Google sign-in, |
+ +--------------------------------------+    | staff roles, audit     |
+     |            |             |            | line per call; runs    |
+     | JSON       |             | extract,   | the CLI code           |
+     v            v             v embed      +------------------------+
+ Skywalker    astropost      Gemini                    |
+ (cloud audit) (mail)                                  |
+     \___ cached audit rows ___+______________________/
+                               v
+               Cloud SQL PostgreSQL 16 + pgvector + pg_trgm
+               (IAM login, no password, daily backups)
+
+ Designed, not built: Atrium and aigw reading Nexus as program clients</code></pre>
+            <figcaption>
+              Figure 1. Nexus architecture, drawn from SPEC.md section 3. Every
+              write path ends in the same CLI command code, so the transaction,
+              identity and provenance rules apply no matter who calls. The last
+              line is designed, not built.
+            </figcaption>
+          </figure>
+          <p>
+            The CLI is Python 3.12 with Typer and Rich, about 14,000 lines in
+            <code>src/nexus</code> today (12,518 when the spec was last
+            measured), packaged as a <code>uv</code> tool that installs pinned
+            to its lockfile. The database is PostgreSQL 16 on Cloud SQL with
+            <code>pgvector</code
+            ><sup class="cite"><a href="#ref-13">[13]</a></sup> and
+            <code>pg_trgm</code
+            ><sup class="cite"><a href="#ref-14">[14]</a></sup> for hybrid
+            exact, fuzzy and semantic search. Clients reach it only through the
+            Cloud SQL connector with their own Google identity and Identity and
+            Access Management (IAM) database login<sup class="cite"
+              ><a href="#ref-24">[24]</a></sup
+            >. Deletion protection and encrypted-only connections went on in
+            September 2026, with daily backups and 7 days of point-in-time
+            recovery.
+          </p>
+          <p>
+            Slow tools stay off the read path. Cloud audits from Skywalker, my
+            Google Cloud audit tool, are cached in a table (155 rows) and
+            refreshed on demand. Mail goes through astropost, my Gmail CLI. For
+            dashboards,
+            <code>nexus serve</code> keeps one warm engine open locally so a
+            call takes milliseconds instead of a 3 to 8 second cold start; its
+            policy refuses resets and bulk commands and makes every delete wait
+            for a confirmation.
+          </p>
+          <p>
+            The hosted MCP server is the part other people touch. It follows the
+            model of our cluster MCP server: sign-in with a campus Google
+            account checked against an allowlist of users with roles, the role
+            re-checked on every call, and one audit line per sign-in and tool
+            call. It exposes 40 tools: 23 reads, 16 staff writes that run the
+            real CLI command as the caller, and one admin action that needs a
+            preview and a confirmation. Every delete, merge, reset, bulk import
+            and email stays off MCP. A mutation check<sup class="cite"
+              ><a href="#ref-23">[23]</a></sup
+            >
+            disables each of the server's security guards in turn and requires a
+            test to fail. At v0.1.219 there were 38 guards, all 38 were caught,
+            and a 39th, no-op mutation, the control, correctly survived.
+          </p>
+          <p>
+            Around it sits a small family of servers. Atrium, the researcher
+            front door we are building, is designed to show researchers a narrow
+            projection of Nexus while staff keep the full tool set. The AI
+            gateway's admin server (aigw) is planned to read Nexus for lab and
+            member suggestions only, labelled as hints, because the campus
+            directory is the authority on people. people-mcp, a read-only
+            directory server, is what corrects Nexus when they disagree. The
+            daily agent work that ties them together, and the approval gates on
+            mail, are in
+            <a
+              href="2026-10-29-a-seneschal-for-the-research-computing-desk.html"
+              >A Seneschal for the Research Computing Desk</a
+            ><sup class="cite"><a href="#ref-25">[25]</a></sup
+            >.
+          </p>
+
+          <h2 id="growth">Growth in Numbers</h2>
+          <p>
+            Table 2 compares three read-only snapshots. The drop between 2 and 5
+            October is a cleanup, described under What Went Wrong; changes since
+            then are from use and continued cleanup.
+          </p>
+          <p class="table-caption">
+            Table 2. Graph size at three points, from SPEC.md section 12 (2 and
+            5 October 2026) and <code>nexus stats --json</code> (28 October
+            2026).
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Records</th>
+                  <th class="num">2 Oct 2026</th>
+                  <th class="num">5 Oct 2026</th>
+                  <th class="num">28 Oct 2026</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Researchers</td>
+                  <td class="num">992</td>
+                  <td class="num">943</td>
+                  <td class="num">972</td>
+                </tr>
+                <tr>
+                  <td>Units (labs to colleges)</td>
+                  <td class="num">494</td>
+                  <td class="num">431</td>
+                  <td class="num">408</td>
+                </tr>
+                <tr>
+                  <td>Cloud projects</td>
+                  <td class="num">171</td>
+                  <td class="num">176</td>
+                  <td class="num">176</td>
+                </tr>
+                <tr>
+                  <td>Research projects and services</td>
+                  <td class="num">38</td>
+                  <td class="num">28</td>
+                  <td class="num">47</td>
+                </tr>
+                <tr>
+                  <td>Assets</td>
+                  <td>not recorded</td>
+                  <td class="num">916</td>
+                  <td class="num">911</td>
+                </tr>
+                <tr>
+                  <td>Interactions</td>
+                  <td>not recorded</td>
+                  <td class="num">3,706</td>
+                  <td class="num">3,983</td>
+                </tr>
+                <tr>
+                  <td>Tasks (archive since 7 Oct)</td>
+                  <td>not recorded</td>
+                  <td class="num">225</td>
+                  <td class="num">237</td>
+                </tr>
+                <tr>
+                  <td>Edges</td>
+                  <td class="num">13,514</td>
+                  <td class="num">12,681</td>
+                  <td>not read</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            The ledger grew unevenly. By event date and calendar month, the
+            read-only query gave 228 interactions in January 2026, 263 in
+            February, 238 in March, 119 in April, 214 in May, 98 in June and 37
+            in July, then 398 in August, 402 in September and 358 in October
+            through the 28th. On 28 October there were 90 in the last 7 days,
+            390 in the last 30 and 1,158 in the last 90. The thin months match
+            the commit log: I was busy elsewhere and logging slipped.
+          </p>
+          <p>
+            The scoreboard shows what the ledger is for. Coverage of 48 tagged
+            senior contacts over 90 days rose from 22.9% (11 of 48) on 5 October
+            to 56.2% (27 of 48) on 28 October. Some of that is better logging,
+            not more contact, and I can't separate the two from these numbers.
+            Who writes is changing too: of the 447 rows stamped with provenance
+            from v0.1.213 through 5 October (cumulative), 280 came through MCP,
+            121 from Hermes and 46 from the CLI.
+          </p>
+          <p>
+            The repository has 46 test modules and 331 test functions run
+            against a real Postgres with pgvector in continuous integration,
+            with lint, format and type checks on every pull request.
+          </p>
+
+          <h2 id="daily-use">How It Gets Used</h2>
+          <p>
+            The operating loop in the spec is plain. Something happens. I look
+            before acting: <code>search</code>, <code>dossier</code>,
+            <code>tree</code> and <code>interactions list --contains</code> give
+            the history and the people around it. I act. Then I record it with
+            <code>nexus log</code>, linking each person, unit and project
+            explicitly, with <code>--strict-links</code> so a missing link fails
+            instead of passing quietly.
+          </p>
+          <p>
+            A typical case uses stand-ins. Researcher A, a PI in a biology lab,
+            writes about a cloud bill. Before anyone replies, the dossier shows
+            the lab's two cloud projects, the cached audit of each, three
+            earlier conversations about storage, and that a staff member already
+            promised a cost review. The reply cites the history instead of
+            rebuilding it, and the outcome goes back into the ledger linked to
+            the PI, the lab and the project. The next person to ask, human or
+            agent, starts there.
+          </p>
+          <p>
+            Nexus also writes. The daily briefing, meeting dossiers (terminal,
+            JSON or PDF), lists of researchers we have not followed up with, and
+            the dated work files in the repository root come from it: 35
+            briefings and 4 captain's logs among 201 dated Markdown files. Since
+            5 October 2026 it holds the Research Computing service catalog as
+            tagged research projects, mirrored from the public website.
+          </p>
+          <p>
+            Mostly it is driven by agents now. Claude Code works in the
+            repository, Hermes runs the same procedures for me through the MCP
+            tools, and a colleague reads through a chat assistant. Gemini-based
+            assistants may read and never write. That rule came from experience:
+            two writers on one system once produced duplicate tickets and a
+            wrongly closed issue.
+          </p>
+
+          <h2 id="what-went-wrong">What Went Wrong</h2>
+          <p>
+            <strong>The graph drifted.</strong> A read on 2 October 2026 found
+            1,024 dangling edges, 79 placeholder researchers named things like
+            "Auto-Resolved" plus an ID, duplicates nobody could prove, and
+            departments that existed twice, once filed as a lab. The cleanup's
+            own audit counted 994 people (the table count that day was 992; the
+            two reads differ by two records and I report each where its source
+            does); 272 had no department and 369 no email. Most dangling edges
+            (749) came from tasks deleted before the delete function cleaned up
+            edges. Fixing it took a cleanup on 4 and 5 October: a read-only
+            enrichment from the campus directory, then merges and renames, each
+            rehearsed on a restored copy of production, backed up and diffed
+            first. People went from 994 to 943 and units from 494 to 431;
+            dangling edges and placeholders went to zero.
+          </p>
+          <p>
+            <strong>Matching by email trusted the email.</strong> One stored
+            address belonged to a different person with a similar name, so
+            enrichment attached the wrong directory record. I caught it on a
+            re-read, and v0.1.225 now skips an email match whose given name
+            disagrees. A re-check found only that one case, but it is the
+            failure the identity rules exist to prevent.
+          </p>
+
+          <p>
+            <strong>A library broke every command.</strong> On 25 September 2026
+            a plain tool upgrade pulled a new <code>sqlmodel</code> and every
+            command failed on a datetime mapping. Installs now go through a
+            script that pins to the lockfile.
+          </p>
+          <p>
+            <strong>Gaps remain.</strong> Grants hold 3 records, so the "why"
+            third of the model is mostly empty. 520 interactions have no links.
+            "Project" still means three things across Nexus and Skywalker. The
+            senior-contact score mixes behavior and bookkeeping. Retention and
+            self-access policies are not yet written.
+          </p>
+          <p>
+            <strong>Tasks were the wrong fit.</strong> Nexus tasks and Jira
+            tickets drifted: a one-time crosswalk on 7 October found 41 open
+            Nexus tasks, 20 with no Jira ticket, and 11 open Jira tickets with
+            no Nexus task. Moving tasks to Jira was the answer, and it means 237
+            Nexus tasks are now history.
+          </p>
+          <p>
+            <strong>One maintainer.</strong> Nexus has one author, much of the
+            code was written by AI agents under my direction (git metadata
+            records this only for some commits), the main CLI file is 5,464
+            lines today, and there is no schema migration tool, so a column
+            change would need manual SQL the rules forbid. If I left, UCR would
+            have a well-documented database and a spec, not a supported product.
+            A runbook and a second staff maintainer are the honest fix.
+          </p>
+
+          <h2 id="lessons">Lessons</h2>
+          <ol>
+            <li>
+              Make every write go through one command path. Then transactions,
+              identity checks and provenance hold for humans, scripts and agents
+              alike.
+            </li>
+            <li>
+              Keep a person between the model and the record. Extraction errors
+              are cheap when staged and expensive once linked.
+            </li>
+            <li>
+              Prefer a missing link to a wrong one. A wrong link spreads into
+              every dossier and briefing that reads it.
+            </li>
+            <li>
+              Give agents JSON and refuse them the dangerous verbs. Scraped Rich
+              tables can wrap and truncate, so a grep returns false negatives.
+            </li>
+            <li>
+              Check the graph against an outside authority. Drift was invisible
+              until the campus directory was read against it.
+            </li>
+            <li>
+              Rehearse bulk changes on a restored copy and diff the result.
+              Every cleanup change in October went this way.
+            </li>
+          </ol>
+
+          <h2 id="next">What's Next</h2>
+          <ul>
+            <li>
+              A read-only reconcile between Nexus cloud project records and
+              Skywalker's live list.
+            </li>
+            <li>A schema migration tool, a runbook and a second maintainer.</li>
+            <li>
+              Written retention and self-access policies, reviewed with campus
+              records staff.
+            </li>
+            <li>
+              Importing active grants, so the "why" in the model has data.
+            </li>
+            <li>
+              Atrium's narrow researcher-facing view of Nexus, once staging is
+              reviewed.
+            </li>
+            <li>
+              An outcome measure: time to first reply on requests where the
+              dossier was used, against requests where it was not, which would
+              show whether the ledger saves time.
+            </li>
+          </ul>
+
+          <h2 id="references">References</h2>
+          <ol class="sources">
+            <li id="ref-1">
+              Sage A. Weil, Scott A. Brandt, Ethan L. Miller, Darrell D. E.
+              Long, and Carlos Maltzahn. 2006. Ceph: A Scalable,
+              High-Performance Distributed File System. In
+              <em
+                >Proceedings of the 7th Symposium on Operating Systems Design
+                and Implementation (OSDI '06)</em
+              >. USENIX Association, 307&ndash;320.
+              <a
+                href="https://www.usenix.org/conference/osdi-06/ceph-scalable-high-performance-distributed-file-system"
+                target="_blank"
+                rel="noopener"
+                >https://www.usenix.org/conference/osdi-06/ceph-scalable-high-performance-distributed-file-system</a
+              >
+            </li>
+            <li id="ref-2">
+              Patrick Schmitz, Claire Mizumoto, John Hicks, Dana Brunson, Gail
+              Krovitz, James Bottum, Joel Cutcher-Gershenfeld, Karen Wetzel, and
+              Thomas Cheatham. 2020. A Research Computing and Data Capabilities
+              Model for Strategic Decision-Making. In
+              <em
+                >Practice and Experience in Advanced Research Computing (PEARC
+                '20)</em
+              >. ACM, 77&ndash;84.
+              <a
+                href="https://doi.org/10.1145/3311790.3396643"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1145/3311790.3396643</a
+              >
+            </li>
+            <li id="ref-3">
+              U.S. National Science Foundation. 2021. Award 2100003: CI CoE:
+              Demo Pilot: Advancing Research Computing and Data: Strategic
+              Tools, Practices, and Professional Development (RCD Nexus). NSF
+              Award Search. Accessed 28 October 2026.
+              <a
+                href="https://www.nsf.gov/awardsearch/showAward?AWD_ID=2100003"
+                target="_blank"
+                rel="noopener"
+                >https://www.nsf.gov/awardsearch/showAward?AWD_ID=2100003</a
+              >
+            </li>
+            <li id="ref-4">
+              Andrew Bruno and Dori Sajdak. 2021. ColdFront: Resource Allocation
+              Management System. In
+              <em
+                >Practice and Experience in Advanced Research Computing (PEARC
+                '21)</em
+              >. ACM, 1&ndash;5.
+              <a
+                href="https://doi.org/10.1145/3437359.3465585"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1145/3437359.3465585</a
+              >
+            </li>
+            <li id="ref-5">
+              Jeffrey T. Palmer, Steven M. Gallo, Thomas R. Furlani, Matthew D.
+              Jones, Robert L. DeLeon, Joseph P. White, Nikolay Simakov, Abani
+              K. Patra, Jeanette Sperhac, Thomas Yearke, Ryan Rathsam, Martins
+              Innus, Cynthia D. Cornelius, James C. Browne, William L. Barth,
+              and Richard T. Evans. 2015. Open XDMoD: A Tool for the
+              Comprehensive Management of High-Performance Computing Resources.
+              <em>Computing in Science &amp; Engineering</em> 17, 4,
+              52&ndash;62.
+              <a
+                href="https://doi.org/10.1109/MCSE.2015.68"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1109/MCSE.2015.68</a
+              >
+            </li>
+            <li id="ref-6">
+              ServiceNow. 2026. Customer Service Management (CSM). Product
+              documentation. Accessed 28 October 2026.
+              <a
+                href="https://www.servicenow.com/docs/bundle/zurich-customer-service-management/page/product/customer-service-management/concept/c_CustomerServiceManagement.html"
+                target="_blank"
+                rel="noopener"
+                >https://www.servicenow.com/docs/bundle/zurich-customer-service-management/page/product/customer-service-management/concept/c_CustomerServiceManagement.html</a
+              >
+            </li>
+            <li id="ref-7">
+              Salesforce. 2026. Education Cloud: Education CRM Software. Product
+              documentation. Accessed 28 October 2026.
+              <a
+                href="https://www.salesforce.com/education/"
+                target="_blank"
+                rel="noopener"
+                >https://www.salesforce.com/education/</a
+              >
+            </li>
+            <li id="ref-8">
+              Microsoft. 2026. Welcome to Dynamics 365 Sales. Microsoft Learn.
+              Accessed 28 October 2026.
+              <a
+                href="https://learn.microsoft.com/en-us/dynamics365/sales/overview"
+                target="_blank"
+                rel="noopener"
+                >https://learn.microsoft.com/en-us/dynamics365/sales/overview</a
+              >
+            </li>
+            <li id="ref-9">
+              Aidan Hogan, Eva Blomqvist, Michael Cochez, Claudia d'Amato,
+              Gerard de Melo, Claudio Gutierrez, Sabrina Kirrane, Jos&eacute;
+              Emilio Labra Gayo, Roberto Navigli, Sebastian Neumaier,
+              Axel-Cyrille Ngonga Ngomo, Axel Polleres, Sabbir M. Rashid, Anisa
+              Rula, Lukas Schmelzeisen, Juan Sequeda, Steffen Staab, and Antoine
+              Zimmermann. 2021. Knowledge Graphs.
+              <em>ACM Computing Surveys</em> 54, 4, 1&ndash;37.
+              <a
+                href="https://doi.org/10.1145/3447772"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1145/3447772</a
+              >
+            </li>
+            <li id="ref-10">
+              Neo4j. 2026. What Is a Graph Database. Neo4j Getting Started
+              documentation. Accessed 28 October 2026.
+              <a
+                href="https://neo4j.com/docs/getting-started/graph-database/"
+                target="_blank"
+                rel="noopener"
+                >https://neo4j.com/docs/getting-started/graph-database/</a
+              >
+            </li>
+            <li id="ref-11">
+              Obsidian. 2026. Obsidian. Product website. Accessed 28 October
+              2026.
+              <a href="https://obsidian.md/" target="_blank" rel="noopener"
+                >https://obsidian.md/</a
+              >
+            </li>
+            <li id="ref-12">
+              William Jones. 2007. Personal Information Management.
+              <em>Annual Review of Information Science and Technology</em> 41,
+              1, 453&ndash;504.
+              <a
+                href="https://doi.org/10.1002/aris.2007.1440410117"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1002/aris.2007.1440410117</a
+              >
+            </li>
+            <li id="ref-13">
+              pgvector contributors. 2026. pgvector: Open-Source Vector
+              Similarity Search for Postgres. GitHub repository. Accessed 28
+              October 2026.
+              <a
+                href="https://github.com/pgvector/pgvector"
+                target="_blank"
+                rel="noopener"
+                >https://github.com/pgvector/pgvector</a
+              >
+            </li>
+            <li id="ref-14">
+              PostgreSQL Global Development Group. 2026. PostgreSQL 16
+              Documentation, F.35: pg_trgm, Support for Similarity of Text Using
+              Trigram Matching. Accessed 28 October 2026.
+              <a
+                href="https://www.postgresql.org/docs/16/pgtrgm.html"
+                target="_blank"
+                rel="noopener"
+                >https://www.postgresql.org/docs/16/pgtrgm.html</a
+              >
+            </li>
+            <li id="ref-15">
+              Ivan P. Fellegi and Alan B. Sunter. 1969. A Theory for Record
+              Linkage.
+              <em>Journal of the American Statistical Association</em> 64, 328,
+              1183&ndash;1210.
+              <a
+                href="https://doi.org/10.1080/01621459.1969.10501049"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1080/01621459.1969.10501049</a
+              >
+            </li>
+            <li id="ref-16">
+              Peter Christen. 2012.
+              <em
+                >Data Matching: Concepts and Techniques for Record Linkage,
+                Entity Resolution, and Duplicate Detection</em
+              >. Springer, Berlin, Heidelberg.
+              <a
+                href="https://doi.org/10.1007/978-3-642-31164-2"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1007/978-3-642-31164-2</a
+              >
+            </li>
+            <li id="ref-17">
+              Avanika Narayan, Ines Chami, Laurel Orr, and Christopher
+              R&eacute;. 2022. Can Foundation Models Wrangle Your Data?
+              <em>Proceedings of the VLDB Endowment</em> 16, 4, 738&ndash;746.
+              <a
+                href="https://doi.org/10.14778/3574245.3574258"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.14778/3574245.3574258</a
+              >
+            </li>
+            <li id="ref-18">
+              Timo Schick, Jane Dwivedi-Yu, Roberto Dessi, Roberta Raileanu,
+              Maria Lomeli, Eric Hambro, Luke Zettlemoyer, Nicola Cancedda, and
+              Thomas Scialom. 2023. Toolformer: Language Models Can Teach
+              Themselves to Use Tools. In
+              <em
+                >Advances in Neural Information Processing Systems 36 (NeurIPS
+                2023)</em
+              >. 68539&ndash;68551.
+              <a
+                href="https://doi.org/10.52202/075280-2997"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.52202/075280-2997</a
+              >
+            </li>
+            <li id="ref-19">
+              Model Context Protocol. 2025. Model Context Protocol
+              Specification, Version 2025-06-18. Accessed 28 October 2026.
+              <a
+                href="https://modelcontextprotocol.io/specification/2025-06-18"
+                target="_blank"
+                rel="noopener"
+                >https://modelcontextprotocol.io/specification/2025-06-18</a
+              >
+            </li>
+            <li id="ref-20">
+              Saleema Amershi, Dan Weld, Mihaela Vorvoreanu, Adam Fourney,
+              Besmira Nushi, Penny Collisson, Jina Suh, Shamsi Iqbal, Paul N.
+              Bennett, Kori Inkpen, Jaime Teevan, Ruth Kikin-Gil, and Eric
+              Horvitz. 2019. Guidelines for Human-AI Interaction. In
+              <em
+                >Proceedings of the 2019 CHI Conference on Human Factors in
+                Computing Systems (CHI '19)</em
+              >. ACM, 1&ndash;13.
+              <a
+                href="https://doi.org/10.1145/3290605.3300233"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1145/3290605.3300233</a
+              >
+            </li>
+            <li id="ref-21">
+              Elham Tabassi. 2023.
+              <em
+                >Artificial Intelligence Risk Management Framework (AI RMF
+                1.0)</em
+              >. Technical Report NIST AI 100-1. National Institute of Standards
+              and Technology, Gaithersburg, MD.
+              <a
+                href="https://doi.org/10.6028/NIST.AI.100-1"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.6028/NIST.AI.100-1</a
+              >
+            </li>
+            <li id="ref-22">
+              OWASP Gen AI Security Project. 2025. OWASP Top 10 for Large
+              Language Model Applications. Accessed 28 October 2026.
+              <a
+                href="https://genai.owasp.org/llm-top-10/"
+                target="_blank"
+                rel="noopener"
+                >https://genai.owasp.org/llm-top-10/</a
+              >
+            </li>
+            <li id="ref-23">
+              Yue Jia and Mark Harman. 2011. An Analysis and Survey of the
+              Development of Mutation Testing.
+              <em>IEEE Transactions on Software Engineering</em> 37, 5,
+              649&ndash;678.
+              <a
+                href="https://doi.org/10.1109/TSE.2010.62"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1109/TSE.2010.62</a
+              >
+            </li>
+            <li id="ref-24">
+              Google Cloud. 2026. IAM Authentication, Cloud SQL for PostgreSQL.
+              Google Cloud documentation. Accessed 28 October 2026.
+              <a
+                href="https://cloud.google.com/sql/docs/postgres/iam-authentication"
+                target="_blank"
+                rel="noopener"
+                >https://cloud.google.com/sql/docs/postgres/iam-authentication</a
+              >
+            </li>
+            <li id="ref-25">
+              Charles E. Forsyth III. 2026. A Seneschal for the Research
+              Computing Desk. Field Note.
+              <a
+                href="https://charles-forsyth.github.io/papers/2026-10-29-a-seneschal-for-the-research-computing-desk.html"
+                target="_blank"
+                rel="noopener"
+                >https://charles-forsyth.github.io/papers/2026-10-29-a-seneschal-for-the-research-computing-desk.html</a
+              >
+            </li>
+            <li id="ref-26">
+              Charles E. Forsyth III. 2026. One Day on the Research Stack. Field
+              Note.
+              <a
+                href="https://charles-forsyth.github.io/papers/2026-10-03-one-day-on-the-research-stack.html"
+                target="_blank"
+                rel="noopener"
+                >https://charles-forsyth.github.io/papers/2026-10-03-one-day-on-the-research-stack.html</a
+              >
+            </li>
+          </ol>
+          <h2 id="sources">Sources</h2>
+          <p>
+            Nexus and its precursors are private because they hold researcher
+            records and interaction history. Public pages used:
+          </p>
+          <ul>
+            <li>
+              <a
+                href="2026-10-29-a-seneschal-for-the-research-computing-desk.html"
+                >A Seneschal for the Research Computing Desk</a
+              >, the earlier note on the agent workday and approval gates around
+              Nexus
+            </li>
+            <li>
+              <a href="2026-10-03-one-day-on-the-research-stack.html"
+                >One Day on the Research Stack</a
+              ><sup class="cite"><a href="#ref-26">[26]</a></sup
+              >, an earlier day on the research stack that used Nexus
+            </li>
+            <li>
+              <a
+                href="https://modelcontextprotocol.io/"
+                target="_blank"
+                rel="noopener"
+                >Model Context Protocol</a
+              >, the Model Context Protocol specification
+            </li>
+            <li>
+              <a
+                href="https://github.com/pgvector/pgvector"
+                target="_blank"
+                rel="noopener"
+                >pgvector</a
+              >, the pgvector extension used for semantic search
+            </li>
+          </ul>
+          <p>
+            Private records: the Nexus repository (SPEC.md version 1.6, sections
+            1 to 14; README; git history from 5 January to 28 October 2026; 212
+            tags); read-only <code>nexus stats --json</code> and
+            <code>nexus interactions list</code> queries on 28 October 2026; the
+            Nexus vs Jira crosswalk of 7 October 2026; the Atrium tools document
+            of 20 October 2026; the Research Data Hub repository README and
+            commit history; GitHub metadata for the prototype and offshoot
+            repositories.
+          </p>
+          <nav class="doc-pager" aria-label="Field notes navigation">
+            <a class="pager-prev" href="index.html"
+              ><span>Back</span>All Field Notes</a
+            ><span></span>
+          </nav>
+        </article>
+      </div>
+    </main>
+
+    <footer class="section-dark">
+      <div class="container text-center">
+        <p class="footer-note">
+          Field Notes |
+          <a href="index.html" class="subtle-link">All notes</a> |
+          <a href="../index.html" class="subtle-link"
+            >charles-forsyth.github.io</a
+          >
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

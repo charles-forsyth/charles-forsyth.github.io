@@ -1,0 +1,1077 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>A Seneschal for the Research Computing Desk | Field Notes</title>
+    <meta
+      name="description"
+      content="How one AI agent drafts my Research Computing email and tickets, which approval gates are enforced in code, which are only written rules, and what the log says."
+    />
+    <link
+      rel="canonical"
+      href="https://charles-forsyth.github.io/papers/2026-10-29-a-seneschal-for-the-research-computing-desk.html"
+    />
+    <meta property="og:type" content="article" />
+    <meta
+      property="og:url"
+      content="https://charles-forsyth.github.io/papers/2026-10-29-a-seneschal-for-the-research-computing-desk.html"
+    />
+    <meta
+      property="og:title"
+      content="A Seneschal for the Research Computing Desk | Field Notes"
+    />
+    <meta
+      property="og:description"
+      content="One AI agent drafts my work email and ticket notes. I approve the exact text. Some of the gates are enforced in code, one is only a written rule, and the ledger shows the difference."
+    />
+    <meta
+      property="og:image"
+      content="https://charles-forsyth.github.io/assets/og-share.jpg"
+    />
+    <meta property="twitter:card" content="summary_large_image" />
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="../handbook/handbook.css" />
+    <link rel="stylesheet" href="papers.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+  </head>
+  <body>
+    <header class="hero doc-hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="doc-kicker">
+            <i class="fas fa-flask"></i> Field Notes | 29 October 2026
+          </p>
+          <h1>A Seneschal for the Research Computing Desk</h1>
+          <h2>
+            One AI agent drafts my work email and ticket notes, I approve the
+            exact text, and an append-only ledger records what went out
+          </h2>
+          <div class="cta-buttons">
+            <a
+              href="pdf/2026-10-29-a-seneschal-for-the-research-computing-desk.pdf"
+              class="btn btn-primary"
+              ><i class="fas fa-file-pdf"></i> Download PDF</a
+            >
+            <a href="index.html" class="btn btn-secondary"
+              ><i class="fas fa-file-alt"></i> All Field Notes</a
+            >
+            <a href="../index.html" class="btn btn-secondary"
+              ><i class="fas fa-arrow-left"></i> Main Site</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+    <main class="section-light">
+      <div class="container doc-layout">
+        <aside class="doc-toc">
+          <h4><i class="fas fa-list"></i> On this page</h4>
+          <ul>
+            <li><a href="#abstract">Abstract</a></li>
+            <li><a href="#author-note">Author note</a></li>
+            <li><a href="#context">Context</a></li>
+            <li><a href="#related-work">Related Work</a></li>
+            <li><a href="#shape">The Parts and Who Holds the Trigger</a></li>
+            <li><a href="#gates">Gates in Code and Gates in Writing</a></li>
+            <li><a href="#one-day">One Day in the Ledger</a></li>
+            <li>
+              <a href="#injection">Untrusted Mail In, Trusted Mail Out</a>
+            </li>
+            <li><a href="#what-went-wrong">What Went Wrong</a></li>
+            <li><a href="#lessons">Lessons</a></li>
+            <li><a href="#next">What's Next</a></li>
+            <li><a href="#references">References</a></li>
+            <li><a href="#sources">Sources</a></li>
+          </ul>
+        </aside>
+        <article class="doc-content">
+          <h2 id="abstract">Abstract</h2>
+          <p>
+            Since September 2026 one AI agent, Hermes, has done most of the
+            drafting behind my job as Director of Research Computing at UC
+            Riverside. I call it my seneschal, the old word for a steward who
+            ran a household in the owner's name and answered to the owner. It
+            drafts email, ticket notes and ledger entries. I approve the exact
+            text before anything leaves. Two of my tools enforce that approval
+            in code. On the path I use most, it is a written rule the agent
+            follows.
+          </p>
+          <p>
+            On 28 October 2026 the work ledger picked up 15 entries. Eleven
+            record an email that went out after I approved the text. In nine of
+            those the agent says it then found the message in my Sent folder,
+            which is the agent checking itself. None of the 11 mentions the
+            code-enforced composer. I trust the setup because of the approval
+            step and the log, and the log is less complete than I would like.
+          </p>
+          <p>
+            <strong>Keywords:</strong> AI agents, human-in-the-loop, approval
+            gates, prompt injection, audit logs, Model Context Protocol,
+            research computing.
+          </p>
+
+          <h2 id="author-note">Author note</h2>
+          <p>
+            This is a Field Note, a dated report on a system I built. The work
+            was directed by me and carried out with AI agents under written
+            briefs, independent checks and explicit approval steps. Figures come
+            from the Nexus interaction log, the Ultra and Atrium specifications,
+            and the people-mcp and vault-mcp documentation. All numbers are real
+            unless marked. People, labs and tickets are described in general
+            terms rather than named. This note was drafted with AI assistance
+            from those records and reviewed by me.
+          </p>
+
+          <h2 id="context">Context</h2>
+          <p>
+            Running a small research computing group is part technical work and
+            a lot of email, tickets and paperwork. The email and tickets are
+            where an AI agent can hurt me. One wrong message to a faculty
+            member, or one comment posted on a ticket that belongs to another
+            unit, costs more goodwill than the agent saves me in a month.
+          </p>
+          <p>
+            Researchers should get a fast, correct answer. Nobody should get a
+            message I did not mean to send. Those two goals pull against each
+            other once an agent is drafting, and the rest of this note is about
+            how I hold both.
+          </p>
+          <p>
+            Earlier Field Notes covered the
+            <a href="2026-10-03-one-day-on-the-research-stack.html"
+              >research stack</a
+            >,<sup class="cite"><a href="#ref-1">[1]</a></sup> a
+            <a href="2026-10-06-a-road-to-nautilus-in-one-day.html"
+              >one-day path to the Nautilus cluster</a
+            ><sup class="cite"><a href="#ref-2">[2]</a></sup>
+            and
+            <a href="2026-10-27-directing-a-fleet-of-ai-builders.html"
+              >directing a fleet of AI builders</a
+            >.<sup class="cite"><a href="#ref-3">[3]</a></sup> This one is about
+            operations. The same agent also helps run the network on my
+            homestead, under very
+            <a
+              href="2026-10-29-omnet-a-homestead-network-where-code-decides.html"
+              >different rules</a
+            >.<sup class="cite"><a href="#ref-4">[4]</a></sup> What this note
+            offers is a way to sort an agent's approval gates into those
+            enforced in code and those that are written rules, and one day's
+            audit of which kind real email went through. It is an operator's
+            report on a small sample, and its limitations are stated where they
+            arise.
+          </p>
+
+          <h2 id="related-work">Related Work</h2>
+          <p>
+            <strong>Agents and tools.</strong> The Model Context Protocol
+            (MCP)<sup class="cite"><a href="#ref-5">[5]</a></sup> standardizes
+            how an agent discovers and calls tools, and Toolformer showed that a
+            language model can learn when to call an external interface on its
+            own.<sup class="cite"><a href="#ref-6">[6]</a></sup> ReAct
+            interleaves the model's reasoning with tool calls in a single
+            loop,<sup class="cite"><a href="#ref-7">[7]</a></sup> the pattern
+            most agent harnesses, Hermes included, follow. Wang et al.&rsquo;s
+            survey of agents built on large language models describes them in
+            terms of profile, memory, planning and action modules.<sup
+              class="cite"
+              ><a href="#ref-8">[8]</a></sup
+            >
+            In those terms Hermes has a wide action module and no autonomy at
+            work: it plans and drafts, and acts when I ask.
+          </p>
+          <p>
+            <strong>Grounding in records.</strong> Nexus is a knowledge graph in
+            the ordinary sense of Hogan et al.:<sup class="cite"
+              ><a href="#ref-9">[9]</a></sup
+            >
+            entities and typed relations kept in a database. Pan et al. lay out
+            ways to pair language models with knowledge graphs so that answers
+            rest on stored facts rather than on what the model remembers,<sup
+              class="cite"
+              ><a href="#ref-10">[10]</a></sup
+            >
+            a line that runs back to retrieval-augmented generation.<sup
+              class="cite"
+              ><a href="#ref-11">[11]</a></sup
+            >
+            I make no claim that this reduces errors; the point is that a reply
+            about a lab&rsquo;s allocation can be checked against a record.
+          </p>
+          <p>
+            <strong>Injection and testing.</strong> Greshake et al. showed that
+            text an application retrieves, such as an email or a web page, can
+            carry instructions that steer the model reading it.<sup class="cite"
+              ><a href="#ref-12">[12]</a></sup
+            >
+            The OWASP list for LLM applications puts prompt injection first and
+            also names excessive agency.<sup class="cite"
+              ><a href="#ref-13">[13]</a></sup
+            >
+            InjecAgent<sup class="cite"><a href="#ref-14">[14]</a></sup> and
+            AgentDojo<sup class="cite"><a href="#ref-15">[15]</a></sup> turned
+            such attacks into benchmarks for tool-using agents, and both found
+            current agents vulnerable. CaMeL<sup class="cite"
+              ><a href="#ref-16">[16]</a></sup
+            >
+            takes a design approach: a privileged model plans from the user's
+            request alone, and code tracks which values came from untrusted data
+            and enforces policy before a tool runs. Perez et al. used one model
+            to generate test cases that find failures in another.<sup
+              class="cite"
+              ><a href="#ref-17">[17]</a></sup
+            >
+            I have run none of these against my setup.
+          </p>
+          <p>
+            <strong>Authority, approval and logs.</strong> Least privilege and
+            complete mediation,<sup class="cite"
+              ><a href="#ref-18">[18]</a></sup
+            >
+            role-based access<sup class="cite"><a href="#ref-19">[19]</a></sup>
+            and per-request decisions with no implicit trust<sup class="cite"
+              ><a href="#ref-20">[20]</a></sup
+            >
+            are the frame for the gates below. Atrium&rsquo;s approval code
+            borrows the shape of an OAuth authorization code, which is
+            short-lived and may be used once,<sup class="cite"
+              ><a href="#ref-21">[21]</a></sup
+            >
+            and the Ultra composer binds its approval to a SHA-256 digest.<sup
+              class="cite"
+              ><a href="#ref-22">[22]</a></sup
+            >
+            Schneier and Kelsey designed audit logs whose past entries an
+            attacker who later takes over the logging machine cannot alter
+            undetected;<sup class="cite"><a href="#ref-23">[23]</a></sup> my
+            ledger has no such property, and its entries are written by the
+            actor they describe.
+          </p>
+          <p>
+            <strong>The human in the loop.</strong> Parasuraman and Manzey
+            review how operators of reliable automation come to over-trust it
+            and check less.<sup class="cite"><a href="#ref-24">[24]</a></sup>
+            Green and Chen found that people reviewing an algorithm&rsquo;s
+            output did not reliably judge its accuracy,<sup class="cite"
+              ><a href="#ref-25">[25]</a></sup
+            >
+            and Huang et al. found that language models do not reliably correct
+            their own reasoning without outside feedback.<sup class="cite"
+              ><a href="#ref-26">[26]</a></sup
+            >
+            Agent frameworks such as LangGraph build in interrupts that pause
+            for a person&rsquo;s decision.<sup class="cite"
+              ><a href="#ref-27">[27]</a></sup
+            >
+            These results bear on the two weakest points below: a human who may
+            rubber-stamp and an agent that checks its own work.
+          </p>
+
+          <h2 id="shape">The Parts and Who Holds the Trigger</h2>
+          <p>
+            The agent holds authority to prepare, and I hold the trigger. It
+            never runs in a loop by itself: at work it acts when I ask it to.
+            Figure 1 shows the parts.
+          </p>
+          <figure class="doc-figure">
+            <pre><code>                 ME  (approve the exact text / the exact list)
+                                  |
+             +--------------------+--------------------+
+             |                                         |
+   Ultra desk (composer:                   Hermes, chat or terminal
+   lock + SHA-256, then send)              (drafts, sends after "yes",
+   ENFORCED IN CODE                         checks Sent, logs)
+             |                              WRITTEN RULE
+             +--------------------+--------------------+
+                                  |
+     +------------+---------------+--------------+--------------+
+     |            |               |              |              |
+   Nexus       Atrium         people-mcp     vault-mcp     mail, tickets,
+   ledger +    (model reads,  (directory,    (personal     documents
+   graph       core writes    read-only)     notes,        (the outside
+   (roles      after approve                 append-only)   world)
+   in code)    code)</code></pre>
+            <figcaption>
+              Figure 1. The work side. Two paths lead from me to outbound mail.
+              The Ultra composer enforces approval in code; the Hermes path
+              depends on a written rule. Every outcome is meant to end in the
+              Nexus ledger.
+            </figcaption>
+          </figure>
+          <p>
+            <strong>Nexus</strong> is Research Computing's knowledge graph of
+            researchers, grants, projects and assets, reached from a command
+            line or as an MCP server,<sup class="cite"
+              ><a href="#ref-5">[5]</a></sup
+            >
+            and its interaction log is our system of record for what we did. Its
+            internals, roles and provenance stamps are described in a
+            <a
+              href="2026-10-29-nexus-a-relationship-ledger-for-research-computing.html"
+              >companion note</a
+            >;<sup class="cite"><a href="#ref-28">[28]</a></sup> here it matters
+            only that every write from the agent passes the same role checks as
+            one I type.
+          </p>
+          <p>
+            <strong>Ultra</strong> is the operator desk I built for mail and
+            Slack. <strong>Atrium</strong> is the front door for researchers
+            that Research Computing is building: one place to see a lab's
+            people, funding and compute. It runs on staging for Research
+            Computing admins only.
+          </p>
+          <p>
+            <strong>people-mcp</strong> is a read-only window onto the campus
+            directory: one Go binary, two read-only Google scopes, no database.
+            It exists so the agent never guesses an address; it resolves an
+            alias to the real account before a draft is written.
+            <strong>vault-mcp</strong> does the same job as Nexus for my
+            personal Obsidian vault of about 950 notes.
+          </p>
+
+          <h2 id="gates">Gates in Code and Gates in Writing</h2>
+          <p>
+            Some of my gates are enforced by software. Others are a sentence in
+            the agent's standing instructions. Table 1 sorts them.
+          </p>
+          <p class="table-caption">
+            Table 1. Which approvals are enforced in code and which depend on
+            the agent following a written rule.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th>Gate</th>
+                  <th>Enforced by</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Mail or Slack sent from the Ultra desk</td>
+                  <td>
+                    Two approvals, the first bound to a hash of the message
+                  </td>
+                  <td>Code (Ultra server)</td>
+                </tr>
+                <tr>
+                  <td>Write actions in Atrium</td>
+                  <td>Human approves a plan with a single-use code</td>
+                  <td>Code (Atrium core)</td>
+                </tr>
+                <tr>
+                  <td>Writes to Nexus</td>
+                  <td>Role check per tool, real command-line code path</td>
+                  <td>Code (Nexus MCP server)</td>
+                </tr>
+                <tr>
+                  <td>Writes to my vault</td>
+                  <td>Append or create only, one git commit per write</td>
+                  <td>Code (vault-mcp)</td>
+                </tr>
+                <tr>
+                  <td>Email sent by Hermes directly</td>
+                  <td>I approve the exact text in chat</td>
+                  <td>Written rule</td>
+                </tr>
+                <tr>
+                  <td>Ticket comments, notes, assignments</td>
+                  <td>I approve the exact list of changes</td>
+                  <td>Written rule</td>
+                </tr>
+                <tr>
+                  <td>Document sharing, cluster namespaces</td>
+                  <td>I say yes in chat</td>
+                  <td>Written rule</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <strong>The Ultra composer.</strong> The public
+            <a
+              href="https://github.com/charles-forsyth/ultra-workstation"
+              target="_blank"
+              rel="noopener"
+              >Ultra workstation specification</a
+            >
+            defines a composer with two approvals that the server enforces. The
+            first locks a version and records a SHA-256 hash<sup class="cite"
+              ><a href="#ref-22">[22]</a></sup
+            >
+            over the canonical message: sender, recipients, subject, body,
+            thread and each attachment's hash. The second, in a full-screen
+            review that highlights any change in recipients, sends it. Any edit
+            voids the approval. Any change after approval blocks the send.
+          </p>
+          <p>
+            <strong>Atrium.</strong> Its specification puts the rule in four
+            words: the model reads; the core writes. Agents reach only
+            allow-listed read tools, and a check in continuous integration
+            proves no write tool is reachable. Write actions, 17 so far and all
+            admin-only, run only after a person approves the exact plan, by
+            button, by sending exactly <code>approve &lt;code&gt;</code>, or by
+            an MCP approval call. The code is single-use, expires in 30 minutes,
+            and is bound to the person, much as an OAuth authorization code is
+            short-lived and single-use.<sup class="cite"
+              ><a href="#ref-21">[21]</a></sup
+            >
+            The role is checked when the plan is proposed and again when it is
+            approved.
+          </p>
+          <p>
+            <strong>Nexus and the vault.</strong> Nexus checks each caller's
+            role per tool, and every write runs the real command-line code
+            path.<sup class="cite"><a href="#ref-28">[28]</a></sup> On the
+            personal side, vault-mcp refuses any write that removes an old line;
+            the one in-place change it allows is ticking a task done. Each write
+            is its own git commit, authored as me "via" the client that made it,
+            and a stale-write check refuses the write if the note changed since
+            it was read.
+          </p>
+          <p>
+            <strong>The Hermes path.</strong> Most days I work through Hermes in
+            a chat window or terminal, not at the desk. There the rule lives in
+            the agent's standing memory: Hermes drafts, I approve the exact
+            text, Hermes sends, looks for the message in the Sent folder, then
+            logs it in Nexus with the message identifier. For tickets the rule
+            is stricter: never assign, comment on or change the state of a
+            ticket without my approval of the exact list of changes. Nothing in
+            software stops Hermes from sending without my approval, so the rule
+            holds only as long as the agent follows it. What I have is a habit,
+            the agent's good behavior so far, and a log I can audit.
+          </p>
+          <p>
+            Human approval before an agent acts is a common pattern. Agent
+            frameworks such as
+            <a
+              href="https://docs.langchain.com/oss/python/langgraph/interrupts"
+              target="_blank"
+              rel="noopener"
+              >LangGraph's human-in-the-loop interrupts</a
+            >
+            build it in,<sup class="cite"><a href="#ref-27">[27]</a></sup> and
+            hashes, role checks and append-only files are old tools. What I
+            wanted was to put them in front of an agent that writes real email
+            in my name, so that when someone asks what was sent, I can show the
+            ledger entry and the message identifier.
+          </p>
+
+          <h2 id="one-day">One Day in the Ledger</h2>
+          <p>
+            On 28 October 2026 the Nexus interaction log gained 15 entries, all
+            written through the MCP server. I read them with a read-only query:
+          </p>
+          <pre><code>nexus interactions list \
+  --since 2026-10-28 --until 2026-10-29</code></pre>
+          <p>Table 2 groups them by kind, in general terms.</p>
+          <p class="table-caption">
+            Table 2. The 15 ledger entries for 28 October 2026, grouped.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Kind of request</th>
+                  <th class="num">Entries</th>
+                  <th>What the agent did</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Grant proposal coordination</td>
+                  <td class="num">2</td>
+                  <td>
+                    Drafted replies on a multi-institution proposal; shared a
+                    budget document with a collaborator after I said yes
+                  </td>
+                </tr>
+                <tr>
+                  <td>Research storage pilot</td>
+                  <td class="num">2</td>
+                  <td>
+                    Drafted a provisioning request for an early-tester lab and a
+                    follow-up with guide links
+                  </td>
+                </tr>
+                <tr>
+                  <td>Ticket follow-ups</td>
+                  <td class="num">3</td>
+                  <td>
+                    A reply to a researcher and a work note on one ticket; a
+                    question to a partner's operations staff and a comment on
+                    another; one entry records an assignment I made myself
+                  </td>
+                </tr>
+                <tr>
+                  <td>New compute request</td>
+                  <td class="num">1</td>
+                  <td>
+                    Confirmed both people in the directory and drafted a
+                    first-contact reply with options
+                  </td>
+                </tr>
+                <tr>
+                  <td>National cluster onboarding</td>
+                  <td class="num">1</td>
+                  <td>
+                    Created a lab namespace on the National Research Platform
+                    (NRP) Nautilus cluster once the lab and I agreed
+                  </td>
+                </tr>
+                <tr>
+                  <td>Other correspondence</td>
+                  <td class="num">3</td>
+                  <td>
+                    Access housekeeping with another unit, a data agreement
+                    thread and an event agenda sent to one colleague
+                  </td>
+                </tr>
+                <tr>
+                  <td>Check-ins</td>
+                  <td class="num">2</td>
+                  <td>
+                    Morning and afternoon scans of mail, calendar and open
+                    items, with a "needs Chuck" list
+                  </td>
+                </tr>
+                <tr>
+                  <td>Travel expense</td>
+                  <td class="num">1</td>
+                  <td>Added missing receipts to a report I then submitted</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            Eleven of the 15 entries record an email sent after my approval.
+            Nine say the agent then found the message in the Sent folder, and
+            most give the message identifier so the log points at the real
+            artifact. That check is the agent confirming its own work and
+            writing its own log entry. It proves the message exists. It does not
+            prove I read it carefully, and it is not an independent audit.
+          </p>
+          <p>
+            None of the 11 email entries mentions the Ultra composer. As far as
+            the entries show, all 11 went through the Hermes path, so on this
+            day the code-enforced gate was not the one in use. The log shows no
+            email sent without a recorded approval, but the log is written by
+            the same agent. That is a weaker claim than "the gate held."
+          </p>
+          <p>
+            On one ticket the agent drafted the reply to the researcher and an
+            internal work note. The system in question belongs to another unit,
+            and the reply says so and gives no date, because we cannot promise
+            one. On a second ticket it drafted a question to a partner's
+            operations staff and posted a customer-visible comment. Each of
+            those records that the change was checked in the ticket system
+            afterwards. The third ticket entry records an assignment I made
+            myself, by hand, and the agent only logged it, so two of the three
+            ticket entries are agent changes.
+          </p>
+          <p>
+            At least five actions that day did not go through any hashed
+            approval: the document share, the namespace on Nautilus, the expense
+            receipts, removing a departed staff member's access in several cloud
+            projects, and archiving routine inbox mail. Each happened after I
+            said yes in chat, under a written rule. Those are real actions on
+            real systems, and they belong with the written-rule rows of Table 1.
+          </p>
+          <p>
+            For scale, the window from 1 to 28 October 2026 holds 358
+            interactions: 268 written through MCP, 23 from the command line, 22
+            stamped <code>agent:hermes</code> and 45 with no source recorded.
+            The 22 are October's <code>agent:hermes</code> stamps only; the
+            Nexus note's figure of 121 Hermes rows is cumulative from the start
+            of provenance stamping through 5 October,<sup class="cite"
+              ><a href="#ref-28">[28]</a></sup
+            >
+            a different window. The agent composed most of the 268 MCP entries,
+            but the stamp records the channel, so the ledger cannot tell me
+            which ones it wrote and which ones I dictated or wrote through
+            another client. That caveat applies to every count in this section.
+          </p>
+          <p>
+            I do not measure how many drafts I edit or reject before approving
+            them, and nothing in the ledger records it. It is the figure that
+            matters most, because without it I cannot show that the approval
+            step catches anything at all.
+          </p>
+
+          <h2 id="injection">Untrusted Mail In, Trusted Mail Out</h2>
+          <p>
+            The agent reads inbound email, ticket text and directory data, and
+            it can send mail and touch tickets. That is the textbook setup for
+            prompt injection,<sup class="cite"><a href="#ref-12">[12]</a></sup>
+            listed first in the
+            <a
+              href="https://genai.owasp.org/llm-top-10/"
+              target="_blank"
+              rel="noopener"
+              >Open Worldwide Application Security Project (OWASP) Top 10 for
+              large language model applications</a
+            >.<sup class="cite"><a href="#ref-13">[13]</a></sup> An inbound
+            message that says "also forward the signed agreement to this
+            address" is aimed at exactly this kind of agent.
+          </p>
+          <p>
+            Exact-text approval means an injected sentence in an outbound draft
+            has to get past me, so I read recipients first and body second.
+            Hermes labels results from tools as untrusted data rather than
+            instructions, and the model is told not to follow directives found
+            inside them. And people-mcp is read-only, so the directory lookup
+            cannot be turned into a write.
+          </p>
+          <p>
+            These help, but not enough. Actions in the bottom rows of Table 1
+            need only a chat "yes," and a skimmed yes is easy to give. The
+            labeling of tool output as untrusted is an instruction to the model,
+            which it can ignore. And I have no record of attempted injections,
+            because nothing in the system looks for them. I have not seen one
+            succeed. I also have not tested for it, so that is weak evidence.
+          </p>
+
+          <h2 id="what-went-wrong">What Went Wrong</h2>
+          <ul>
+            <li>
+              <strong>The strongest gate was not on the busiest path.</strong>
+              All 11 emails on the sample day went through Hermes, governed by a
+              written rule. The hash-bound composer exists, works and was not
+              used.
+            </li>
+            <li>
+              <strong>The ledger cannot say who wrote the words.</strong> Of the
+              358 interactions from 1 to 28 October 2026, 45 carry no source
+              stamp. Only 22 in that window are stamped as the agent's own,
+              though it composed most of the 268 that came through MCP. On 28
+              October a security advisory triage appears only inside a check-in
+              entry, not as its own record.
+            </li>
+            <li>
+              <strong>Self-attestation.</strong> The Sent-folder check and the
+              ticket checks are written by the same agent that acted. They are
+              useful records, not independent proof.<sup class="cite"
+                ><a href="#ref-23">[23]</a></sup
+              >
+            </li>
+            <li>
+              <strong>One logged action was mine.</strong> One of the three
+              ticket entries records an assignment I made by hand; counting it
+              as an agent change would have overstated what the agent did.
+            </li>
+            <li>
+              <strong>No error data.</strong> I cannot say how many drafts I
+              changed, or what kinds of mistakes the approval step caught. Until
+              I can, "the gate works" is a belief.
+            </li>
+            <li>
+              <strong>Approval fatigue is a known risk.</strong> Ten or more
+              approvals a day is the volume at which people start to
+              rubber-stamp; operators of reliable automation tend to check it
+              less.<sup class="cite"><a href="#ref-24">[24]</a></sup> I have no
+              metric that would tell me if I had started.
+            </li>
+          </ul>
+
+          <h2 id="lessons">Lessons</h2>
+          <ol>
+            <li>
+              Approve the exact text, and bind the approval to a hash where you
+              can. The Ultra composer refuses to send anything I did not see.
+            </li>
+            <li>
+              Label every gate as code or as a written rule, and check which one
+              your real traffic passes. I called both "hard" before I counted.
+            </li>
+            <li>
+              Point the ledger at the artifact. A message identifier lets anyone
+              find the real email later.
+            </li>
+            <li>
+              Give the agent authority to prepare, never standing authority to
+              act on people. One wrong email to a faculty member costs more than
+              the agent saves me in a month.
+            </li>
+            <li>
+              Count your edits and rejections. Without that number you cannot
+              tell an approval step from a habit of clicking yes.
+            </li>
+          </ol>
+
+          <h2 id="next">What's Next</h2>
+          <ul>
+            <li>
+              Route Hermes-sent email through the Ultra composer, or give the
+              Hermes path its own hash-bound approval, so the written rule
+              becomes code.
+            </li>
+            <li>
+              Stamp agent-composed Nexus entries consistently, so the ledger
+              records who wrote the words as well as the channel.
+            </li>
+            <li>
+              Log each draft's fate (sent as is, edited, rejected) and report
+              the rate after a month. That measurement, together with the share
+              of outbound email that passes the hash-bound gate rather than the
+              written rule, would settle the main claim of this note, that the
+              approval step catches errors. Until it exists, the claim rests on
+              one day's ledger.
+            </li>
+            <li>
+              Open Atrium beyond Research Computing admins once its write
+              actions have run cleanly on staging.
+            </li>
+          </ul>
+
+          <h2 id="references">References</h2>
+          <ol class="sources">
+            <li id="ref-1">
+              Charles E. Forsyth III. 2026. One Day on the Research Stack. Field
+              Notes.
+              <a
+                href="https://charles-forsyth.github.io/papers/2026-10-03-one-day-on-the-research-stack.html"
+                >https://charles-forsyth.github.io/papers/2026-10-03-one-day-on-the-research-stack.html</a
+              >
+            </li>
+            <li id="ref-2">
+              Charles E. Forsyth III. 2026. A Road to Nautilus in One Day. Field
+              Notes.
+              <a
+                href="https://charles-forsyth.github.io/papers/2026-10-06-a-road-to-nautilus-in-one-day.html"
+                >https://charles-forsyth.github.io/papers/2026-10-06-a-road-to-nautilus-in-one-day.html</a
+              >
+            </li>
+            <li id="ref-3">
+              Charles E. Forsyth III. 2026. Directing a Fleet of AI Builders.
+              Field Notes.
+              <a
+                href="https://charles-forsyth.github.io/papers/2026-10-27-directing-a-fleet-of-ai-builders.html"
+                >https://charles-forsyth.github.io/papers/2026-10-27-directing-a-fleet-of-ai-builders.html</a
+              >
+            </li>
+            <li id="ref-4">
+              Charles E. Forsyth III. 2026. OmNet: A Homestead Network Where
+              Code Decides. Field Notes.
+              <a
+                href="https://charles-forsyth.github.io/papers/2026-10-29-omnet-a-homestead-network-where-code-decides.html"
+                >https://charles-forsyth.github.io/papers/2026-10-29-omnet-a-homestead-network-where-code-decides.html</a
+              >
+            </li>
+            <li id="ref-5">
+              Model Context Protocol. 2025. Model Context Protocol
+              Specification, Version 2025-06-18.
+              <a href="https://modelcontextprotocol.io/specification/2025-06-18"
+                >https://modelcontextprotocol.io/specification/2025-06-18</a
+              >
+              Accessed 28 October 2026.
+            </li>
+            <li id="ref-6">
+              Timo Schick, Jane Dwivedi-Yu, Roberto Dessì, Roberta Raileanu,
+              Maria Lomeli, Eric Hambro, Luke Zettlemoyer, Nicola Cancedda, and
+              Thomas Scialom. 2023. Toolformer: Language Models Can Teach
+              Themselves to Use Tools. In
+              <em
+                >Advances in Neural Information Processing Systems 36 (NeurIPS
+                2023)</em
+              >. 68539&ndash;68551.
+              <a href="https://doi.org/10.52202/075280-2997"
+                >doi:10.52202/075280-2997</a
+              >
+            </li>
+            <li id="ref-7">
+              Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik
+              Narasimhan, and Yuan Cao. 2023. ReAct: Synergizing Reasoning and
+              Acting in Language Models. In
+              <em
+                >The Eleventh International Conference on Learning
+                Representations (ICLR 2023)</em
+              >.
+              <a href="https://iclr.cc/virtual/2023/poster/11003"
+                >https://iclr.cc/virtual/2023/poster/11003</a
+              >
+            </li>
+            <li id="ref-8">
+              Lei Wang, Chen Ma, Xueyang Feng, Zeyu Zhang, Hao Yang, Jingsen
+              Zhang, Zhiyuan Chen, Jiakai Tang, Xu Chen, Yankai Lin, Wayne Xin
+              Zhao, Zhewei Wei, and Jirong Wen. 2024. A Survey on Large Language
+              Model Based Autonomous Agents.
+              <em>Frontiers of Computer Science</em> 18, 6 (2024), 186345.
+              <a href="https://doi.org/10.1007/s11704-024-40231-1"
+                >doi:10.1007/s11704-024-40231-1</a
+              >
+            </li>
+            <li id="ref-9">
+              Aidan Hogan, Eva Blomqvist, Michael Cochez, Claudia d&rsquo;Amato,
+              Gerard de Melo, Claudio Gutierrez, Sabrina Kirrane, José Emilio
+              Labra Gayo, Roberto Navigli, Sebastian Neumaier, Axel-Cyrille
+              Ngonga Ngomo, Axel Polleres, Sabbir M. Rashid, Anisa Rula, Lukas
+              Schmelzeisen, Juan Sequeda, Steffen Staab, and Antoine Zimmermann.
+              2021. Knowledge Graphs. <em>Comput. Surveys</em> 54, 4 (2021),
+              1&ndash;37.
+              <a href="https://doi.org/10.1145/3447772">doi:10.1145/3447772</a>
+            </li>
+            <li id="ref-10">
+              Shirui Pan, Linhao Luo, Yufei Wang, Chen Chen, Jiapu Wang, and
+              Xindong Wu. 2024. Unifying Large Language Models and Knowledge
+              Graphs: A Roadmap.
+              <em>IEEE Transactions on Knowledge and Data Engineering</em> 36, 7
+              (2024), 3580&ndash;3599.
+              <a href="https://doi.org/10.1109/TKDE.2024.3352100"
+                >doi:10.1109/TKDE.2024.3352100</a
+              >
+            </li>
+            <li id="ref-11">
+              Patrick Lewis, Ethan Perez, Aleksandra Piktus, Fabio Petroni,
+              Vladimir Karpukhin, Naman Goyal, Heinrich Küttler, Mike Lewis,
+              Wen-tau Yih, Tim Rocktäschel, Sebastian Riedel, and Douwe Kiela.
+              2020. Retrieval-Augmented Generation for Knowledge-Intensive NLP
+              Tasks. In
+              <em>Advances in Neural Information Processing Systems</em>, Vol.
+              33. 9459&ndash;9474.
+              <a
+                href="https://proceedings.neurips.cc/paper/2020/hash/6b493230205f780e1bc26945df7481e5-Abstract.html"
+                >https://proceedings.neurips.cc/paper/2020/hash/6b493230205f780e1bc26945df7481e5-Abstract.html</a
+              >
+            </li>
+            <li id="ref-12">
+              Kai Greshake, Sahar Abdelnabi, Shailesh Mishra, Christoph Endres,
+              Thorsten Holz, and Mario Fritz. 2023. Not What You&rsquo;ve Signed
+              Up For: Compromising Real-World LLM-Integrated Applications with
+              Indirect Prompt Injection. In
+              <em
+                >Proceedings of the 16th ACM Workshop on Artificial Intelligence
+                and Security</em
+              >
+              (AISec &rsquo;23). ACM, 79&ndash;90.
+              <a href="https://doi.org/10.1145/3605764.3623985"
+                >doi:10.1145/3605764.3623985</a
+              >
+            </li>
+            <li id="ref-13">
+              OWASP Foundation. 2025. OWASP Top 10 for Large Language Model
+              Applications, 2025 Edition.
+              <a href="https://genai.owasp.org/llm-top-10/"
+                >https://genai.owasp.org/llm-top-10/</a
+              >
+              Accessed 28 October 2026.
+            </li>
+            <li id="ref-14">
+              Qiusi Zhan, Zhixiang Liang, Zifan Ying, and Daniel Kang. 2024.
+              InjecAgent: Benchmarking Indirect Prompt Injections in
+              Tool-Integrated Large Language Model Agents. In
+              <em
+                >Findings of the Association for Computational Linguistics: ACL
+                2024</em
+              >. Association for Computational Linguistics, 10471&ndash;10506.
+              <a href="https://doi.org/10.18653/v1/2024.findings-acl.624"
+                >doi:10.18653/v1/2024.findings-acl.624</a
+              >
+            </li>
+            <li id="ref-15">
+              Edoardo Debenedetti, Jie Zhang, Mislav Balunović, Luca
+              Beurer-Kellner, Marc Fischer, and Florian Tramèr. 2024. AgentDojo:
+              A Dynamic Environment to Evaluate Prompt Injection Attacks and
+              Defenses for LLM Agents. In
+              <em
+                >Advances in Neural Information Processing Systems 37 (NeurIPS
+                2024), Datasets and Benchmarks Track</em
+              >. 82895&ndash;82920.
+              <a
+                href="https://proceedings.neurips.cc/paper_files/paper/2024/hash/97091a5177d8dc64b1da8bf3e1f6fb54-Abstract-Datasets_and_Benchmarks_Track.html"
+                >https://proceedings.neurips.cc/paper_files/paper/2024/hash/97091a5177d8dc64b1da8bf3e1f6fb54-Abstract-Datasets_and_Benchmarks_Track.html</a
+              >
+            </li>
+            <li id="ref-16">
+              Edoardo Debenedetti, Ilia Shumailov, Tianqi Fan, Jamie Hayes,
+              Nicholas Carlini, Daniel Fabian, Christoph Kern, Chongyang Shi,
+              Andreas Terzis, and Florian Tramèr. 2025. Defeating Prompt
+              Injections by Design. arXiv preprint 2503.18813.
+              <a href="https://arxiv.org/abs/2503.18813"
+                >https://arxiv.org/abs/2503.18813</a
+              >
+            </li>
+            <li id="ref-17">
+              Ethan Perez, Saffron Huang, Francis Song, Trevor Cai, Roman Ring,
+              John Aslanides, Amelia Glaese, Nat McAleese, and Geoffrey Irving.
+              2022. Red Teaming Language Models with Language Models. In
+              <em
+                >Proceedings of the 2022 Conference on Empirical Methods in
+                Natural Language Processing</em
+              >. Association for Computational Linguistics, 3419&ndash;3448.
+              <a href="https://doi.org/10.18653/v1/2022.emnlp-main.225"
+                >doi:10.18653/v1/2022.emnlp-main.225</a
+              >
+            </li>
+            <li id="ref-18">
+              J. H. Saltzer and M. D. Schroeder. 1975. The Protection of
+              Information in Computer Systems. <em>Proc. IEEE</em> 63, 9 (1975),
+              1278&ndash;1308.
+              <a href="https://doi.org/10.1109/PROC.1975.9939"
+                >doi:10.1109/PROC.1975.9939</a
+              >
+            </li>
+            <li id="ref-19">
+              R. S. Sandhu, E. J. Coyne, H. L. Feinstein, and C. E. Youman.
+              1996. Role-Based Access Control Models. <em>Computer</em> 29, 2
+              (1996), 38&ndash;47.
+              <a href="https://doi.org/10.1109/2.485845"
+                >doi:10.1109/2.485845</a
+              >
+            </li>
+            <li id="ref-20">
+              Scott Rose, Oliver Borchert, Stu Mitchell, and Sean Connelly.
+              2020. <em>Zero Trust Architecture</em>. NIST Special Publication
+              800-207. National Institute of Standards and Technology.
+              <a href="https://doi.org/10.6028/NIST.SP.800-207"
+                >doi:10.6028/NIST.SP.800-207</a
+              >
+            </li>
+            <li id="ref-21">
+              Dick Hardt. 2012. <em>The OAuth 2.0 Authorization Framework</em>.
+              RFC 6749. Internet Engineering Task Force.
+              <a href="https://doi.org/10.17487/RFC6749"
+                >doi:10.17487/RFC6749</a
+              >
+            </li>
+            <li id="ref-22">
+              National Institute of Standards and Technology. 2015.
+              <em>Secure Hash Standard (SHS)</em>. FIPS PUB 180-4. National
+              Institute of Standards and Technology.
+              <a href="https://doi.org/10.6028/NIST.FIPS.180-4"
+                >doi:10.6028/NIST.FIPS.180-4</a
+              >
+            </li>
+            <li id="ref-23">
+              Bruce Schneier and John Kelsey. 1999. Secure Audit Logs to Support
+              Computer Forensics.
+              <em>ACM Transactions on Information and System Security</em> 2, 2
+              (1999), 159&ndash;176.
+              <a href="https://doi.org/10.1145/317087.317089"
+                >doi:10.1145/317087.317089</a
+              >
+            </li>
+            <li id="ref-24">
+              Raja Parasuraman and Dietrich H. Manzey. 2010. Complacency and
+              Bias in Human Use of Automation: An Attentional Integration.
+              <em>Human Factors</em> 52, 3 (2010), 381&ndash;410.
+              <a href="https://doi.org/10.1177/0018720810376055"
+                >doi:10.1177/0018720810376055</a
+              >
+            </li>
+            <li id="ref-25">
+              Ben Green and Yiling Chen. 2019. The Principles and Limits of
+              Algorithm-in-the-Loop Decision Making.
+              <em>Proceedings of the ACM on Human-Computer Interaction</em> 3,
+              CSCW (2019), 1&ndash;24.
+              <a href="https://doi.org/10.1145/3359152">doi:10.1145/3359152</a>
+            </li>
+            <li id="ref-26">
+              Jie Huang, Xinyun Chen, Swaroop Mishra, Huaixiu Steven Zheng,
+              Adams Yu, Xinying Song, and Denny Zhou. 2024. Large Language
+              Models Cannot Self-Correct Reasoning Yet. In
+              <em
+                >The Twelfth International Conference on Learning
+                Representations (ICLR 2024)</em
+              >. 32808&ndash;32824.
+              <a
+                href="https://proceedings.iclr.cc/paper_files/paper/2024/hash/8b4add8b0aa8749d80a34ca5d941c355-Abstract-Conference.html"
+                >https://proceedings.iclr.cc/paper_files/paper/2024/hash/8b4add8b0aa8749d80a34ca5d941c355-Abstract-Conference.html</a
+              >
+            </li>
+            <li id="ref-27">
+              LangChain. 2026. LangGraph Interrupts (Human-in-the-Loop).
+              <a
+                href="https://docs.langchain.com/oss/python/langgraph/interrupts"
+                >https://docs.langchain.com/oss/python/langgraph/interrupts</a
+              >
+              Accessed 28 October 2026.
+            </li>
+            <li id="ref-28">
+              Charles E. Forsyth III. 2026. Nexus: A Relationship Ledger for
+              Research Computing. Field Notes.
+              <a
+                href="https://charles-forsyth.github.io/papers/2026-10-29-nexus-a-relationship-ledger-for-research-computing.html"
+                >https://charles-forsyth.github.io/papers/2026-10-29-nexus-a-relationship-ledger-for-research-computing.html</a
+              >
+            </li>
+          </ol>
+
+          <h2 id="sources">Sources</h2>
+          <p>
+            Nexus, Atrium, people-mcp and vault-mcp are private because they
+            touch campus or personal records. Public pages:
+          </p>
+          <ul>
+            <li>
+              <a
+                href="https://github.com/charles-forsyth/ultra-workstation"
+                target="_blank"
+                rel="noopener"
+                >charles-forsyth/ultra-workstation</a
+              >, the operator desk, including the double-approval composer
+              specification
+            </li>
+            <li>
+              <a
+                href="https://charles-forsyth.github.io/ultra-workstation/"
+                target="_blank"
+                rel="noopener"
+                >Ultra AI Workstation</a
+              >, the project page for the desk
+            </li>
+            <li>
+              <a
+                href="https://docs.langchain.com/oss/python/langgraph/interrupts"
+                target="_blank"
+                rel="noopener"
+                >LangGraph human-in-the-loop</a
+              >, a comparable approval pattern in an agent framework
+            </li>
+            <li>
+              <a
+                href="https://genai.owasp.org/llm-top-10/"
+                target="_blank"
+                rel="noopener"
+                >OWASP Top 10 for LLM Applications</a
+              >, where prompt injection is the first listed risk
+            </li>
+          </ul>
+          <p>Private records used, by name:</p>
+          <ul>
+            <li>
+              The Nexus interaction log (read-only queries for 28 October 2026
+              and for 1 to 28 October 2026), the Nexus scoreboard, and the Nexus
+              <code>SPEC.md</code>
+            </li>
+            <li>
+              The Atrium <code>README.md</code> and <code>docs/SPEC.md</code>
+            </li>
+            <li>The people-mcp and vault-mcp READMEs</li>
+            <li>The Hermes standing memory (the ticket rule)</li>
+          </ul>
+          <nav class="doc-pager" aria-label="Field notes navigation">
+            <a class="pager-prev" href="index.html"
+              ><span>Back</span>All Field Notes</a
+            ><span></span>
+          </nav>
+        </article>
+      </div>
+    </main>
+
+    <footer class="section-dark">
+      <div class="container text-center">
+        <p class="footer-note">
+          Field Notes |
+          <a href="index.html" class="subtle-link">All notes</a> |
+          <a href="../index.html" class="subtle-link"
+            >charles-forsyth.github.io</a
+          >
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

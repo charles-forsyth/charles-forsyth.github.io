@@ -1,0 +1,1210 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Read-Mostly: AI Assistants and Real Slurm Jobs | Field Notes</title>
+    <meta
+      name="description"
+      content="How ursa-bifrost gives AI assistants typed, audited access to a Slurm cluster, why 219 mutation guards missed checks written wrong, and the fork ClusterWand."
+    />
+    <link
+      rel="canonical"
+      href="https://charles-forsyth.github.io/papers/2026-10-29-read-mostly-ai-on-slurm.html"
+    />
+    <meta property="og:type" content="article" />
+    <meta
+      property="og:url"
+      content="https://charles-forsyth.github.io/papers/2026-10-29-read-mostly-ai-on-slurm.html"
+    />
+    <meta
+      property="og:title"
+      content="Read-Mostly: AI Assistants and Real Slurm Jobs | Field Notes"
+    />
+    <meta
+      property="og:description"
+      content="An MCP server that lets AI assistants read a Slurm cluster freely and submit jobs only through a two-step, capped, audited path. Four weeks of building it for Ursa Major, what broke, and the public fork for any Slurm cluster."
+    />
+    <meta
+      property="og:image"
+      content="https://charles-forsyth.github.io/assets/og-share.jpg"
+    />
+    <meta property="twitter:card" content="summary_large_image" />
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="../handbook/handbook.css" />
+    <link rel="stylesheet" href="papers.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+  </head>
+  <body>
+    <header class="hero doc-hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="doc-kicker">
+            <i class="fas fa-flask"></i> Field Notes | 29 October 2026
+          </p>
+          <h1>Read-Mostly: Letting AI Assistants Run Real Slurm Jobs Safely</h1>
+          <h2>
+            How a small Go server lets an assistant see everything it needs on a
+            cluster and change almost nothing, and what that cost to get right
+          </h2>
+          <div class="cta-buttons">
+            <a
+              href="pdf/2026-10-29-read-mostly-ai-on-slurm.pdf"
+              class="btn btn-primary"
+              ><i class="fas fa-file-pdf"></i> Download PDF</a
+            >
+            <a href="index.html" class="btn btn-secondary"
+              ><i class="fas fa-file-alt"></i> All Field Notes</a
+            >
+            <a href="../index.html" class="btn btn-secondary"
+              ><i class="fas fa-arrow-left"></i> Main Site</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+    <main class="section-light">
+      <div class="container doc-layout">
+        <aside class="doc-toc">
+          <h4><i class="fas fa-list"></i> On this page</h4>
+          <ul>
+            <li><a href="#abstract">Abstract</a></li>
+            <li><a href="#author-note">Author note</a></li>
+            <li><a href="#context">Context</a></li>
+            <li><a href="#related-work">Related Work</a></li>
+            <li><a href="#design">The Design: Read Freely, Act Twice</a></li>
+            <li><a href="#threats">Threats, and What Stops Them</a></li>
+            <li><a href="#guards">Guards, and Proving They Work</a></li>
+            <li><a href="#files">Files Without a Shell</a></li>
+            <li>
+              <a href="#programs">When a Program Confirms Its Own Jobs</a>
+            </li>
+            <li><a href="#clusterwand">ClusterWand: the Public Fork</a></li>
+            <li><a href="#what-went-wrong">What Went Wrong</a></li>
+            <li><a href="#lessons">Lessons</a></li>
+            <li><a href="#next">What's Next</a></li>
+            <li><a href="#references">References</a></li>
+            <li><a href="#sources">Sources</a></li>
+          </ul>
+        </aside>
+        <article class="doc-content">
+          <h2 id="abstract">Abstract</h2>
+          <p>
+            Between 1 October 2026, when the specification and first release
+            were written, and 27 October I built ursa-bifrost, a Model Context
+            Protocol (MCP) server and command-line tool (CLI) that lets AI
+            assistants work on Ursa Major, UC Riverside Research Computing's
+            Slurm cluster on Google Cloud. It reached v0.10.1 in 42 tagged
+            releases. Assistants can read what a researcher could read about
+            their own jobs. They can change state only through a two-step submit
+            that is capped, bound to the exact plan, and logged. By design there
+            is no shell tool.
+          </p>
+          <p>
+            The main lesson is about testing. A mutation script switches off
+            each of 219 safety guards in turn and requires some test to fail, so
+            each guard is known to be needed. An outside review found three
+            approval checks that existed, passed every test and were wrong. Live
+            tests found a worse bug: a confirm token five processes could redeem
+            at once. Real use so far is one person, me, plus programs running as
+            me. On 28 October I forked the code as ClusterWand, a public tool
+            that runs over a person's own SSH login.
+          </p>
+
+          <h2 id="author-note">Author note</h2>
+          <p>
+            The work was directed by me and carried out with AI agents under
+            written briefs, independent checks and explicit approval steps.
+            Figures come from the two repositories' git history, tags,
+            changelogs and specifications, the mutation script, my audit log,
+            the deep-research specification, the cluster change log and two
+            review records. This note was drafted with AI assistance from those
+            records and reviewed by me. Example job numbers are representative
+            values, not records of specific researchers' work.
+          </p>
+
+          <h2 id="context">Context</h2>
+          <p>
+            Most of what an AI assistant could usefully do on a cluster is read:
+            why job 236 failed, which partition is idle, whether a batch script
+            asks for more memory than the node has, which module has LAMMPS (a
+            molecular dynamics code) with graphics processor (GPU) support.
+            Those are the bulk of "my job failed" support tickets, and the
+            digging behind each one is the same every time: the accounting
+            record, the end of the log, the partition state. The
+            <a
+              href="https://github.com/UCR-Research-Computing/ursa-bifrost/blob/main/docs/SPEC.md"
+              target="_blank"
+              rel="noopener"
+              >ursa-bifrost specification</a
+            >
+            started from that, and from two bugs in the deep-research engine's
+            own Secure Shell (SSH) layer, one of which kept an idle node running
+            for nobody.
+          </p>
+          <p>
+            The easy way is to give the assistant an SSH session. I ruled that
+            out in the specification before any code was written. With a shell I
+            can no longer say which commands run, with what arguments, at what
+            cost, or what record is left. And a job log is text written by
+            programs and people, so someone can plant a line in it aimed at the
+            model that reads it.<sup class="cite"><a href="#ref-1">[1]</a></sup>
+          </p>
+          <p>
+            Who uses it so far: very few. Ursa Major is a young cluster. Its
+            Tier 1 partitions (Arm and Tensor Processing Unit (TPU) nodes for
+            projects approved after a consultation) and its regular partitions
+            have few users, and the first allocation, on 27 October, was for
+            Research Computing's own pilot lab. A 27 October survey of lab cloud
+            projects found that only one person had used the cluster through
+            bifrost in the previous 30 days, and that was me. The deep-research
+            Lab, a program that plans and runs experiments on the cluster, is
+            designed to be the main caller, but it runs under my identity, so
+            the log cannot separate it from me. As of 28 October 2026, my
+            laptop's audit log for 27 and 28 October held 152 calls, all mine,
+            through the CLI: 97 job lookups, 24 plans and 10 confirmed submits.
+            I would rather get the safety design right while the user list is
+            this short.
+          </p>
+
+          <h2 id="related-work">Related Work</h2>
+          <p>
+            <strong>Assistants, tools and injection.</strong> MCP<sup
+              class="cite"
+              ><a href="#ref-2">[2]</a></sup
+            >
+            standardizes how an assistant discovers and calls tools over
+            JSON-RPC; its tools section says there should always be a human in
+            the loop able to deny a tool call, but leaves enforcement to each
+            client. Greshake et al. showed that text an application retrieves
+            can carry instructions that steer the model reading it<sup
+              class="cite"
+              ><a href="#ref-1">[1]</a></sup
+            >, and the OWASP list for LLM applications names both prompt
+            injection and &ldquo;excessive agency&rdquo; as top risks<sup
+              class="cite"
+              ><a href="#ref-3">[3]</a></sup
+            >. Bifrost takes the second risk as the one it can control: it
+            cannot stop a model from being misled, so it limits what a misled
+            model can do. HPC-GPT fine-tunes a language model for HPC questions
+            and code<sup class="cite"><a href="#ref-4">[4]</a></sup
+            >, and Li sets out the threat of an agent acting under a
+            user&rsquo;s own HPC credentials being steered by text in job logs,
+            proposing a benchmark rather than a tool<sup class="cite"
+              ><a href="#ref-5">[5]</a></sup
+            >; bifrost is one deployed answer to that threat.
+          </p>
+          <p>
+            <strong>Protection principles.</strong> The design leans on old
+            ideas. Saltzer and Schroeder&rsquo;s least privilege and complete
+            mediation<sup class="cite"><a href="#ref-6">[6]</a></sup> map to a
+            closed command list and a check on every call. Hardy&rsquo;s
+            confused deputy<sup class="cite"><a href="#ref-7">[7]</a></sup>
+            describes an agent misusing authority it holds for someone else,
+            which is the risk when an assistant acting for a person reads text
+            written by others. The tiers are a small role-based scheme in the
+            sense of Sandhu et al.<sup class="cite"
+              ><a href="#ref-8">[8]</a></sup
+            >
+          </p>
+          <p>
+            <strong>Cluster access without a shell.</strong> Slurm<sup
+              class="cite"
+              ><a href="#ref-9">[9]</a></sup
+            >
+            offers a REST daemon, <code>slurmrestd</code>, which authenticates
+            with JSON Web Tokens<sup class="cite"
+              ><a href="#ref-10">[10]</a></sup
+            ><sup class="cite"><a href="#ref-11">[11]</a></sup
+            ><sup class="cite"><a href="#ref-12">[12]</a></sup
+            >, and its JWT guide describes authenticating proxies placed in
+            front of it<sup class="cite"><a href="#ref-11">[11]</a></sup
+            >. Slurm&rsquo;s own association and quality-of-service limits apply
+            to every submission path<sup class="cite"
+              ><a href="#ref-13">[13]</a></sup
+            >. Open OnDemand gives people web access to clusters with no command
+            line<sup class="cite"><a href="#ref-14">[14]</a></sup
+            >. For job efficiency, Open XDMoD<sup class="cite"
+              ><a href="#ref-15">[15]</a></sup
+            >
+            and Princeton&rsquo;s <code>jobstats</code
+            ><sup class="cite"><a href="#ref-16">[16]</a></sup> report usage
+            after the fact for people and administrators.
+          </p>
+          <p>
+            <strong>Testing the tests.</strong> Mutation testing, proposed by
+            DeMillo, Lipton and Sayward<sup class="cite"
+              ><a href="#ref-17">[17]</a></sup
+            >
+            and surveyed by Jia and Harman<sup class="cite"
+              ><a href="#ref-18">[18]</a></sup
+            >, judges a test suite by whether it detects deliberately injected
+            faults. Bifrost applies it narrowly: one hand-written mutation per
+            safety guard rather than generated mutants across the code.
+          </p>
+          <p>
+            <strong>Identity and data movement.</strong> SSH<sup class="cite"
+              ><a href="#ref-19">[19]</a></sup
+            >
+            carries a single command string in its <code>exec</code> request,
+            which shapes the quoting rules below. Google Cloud&rsquo;s
+            Identity-Aware Proxy forwards SSH through an authenticated
+            tunnel<sup class="cite"><a href="#ref-20">[20]</a></sup
+            >, OS Login ties SSH access to each person&rsquo;s cloud
+            identity<sup class="cite"><a href="#ref-21">[21]</a></sup
+            >, and Cloud Storage signed URLs grant time-limited access to one
+            object<sup class="cite"><a href="#ref-22">[22]</a></sup
+            >.
+          </p>
+          <h2 id="design">The Design: Read Freely, Act Twice</h2>
+          <p>
+            Bifrost is one Go binary with three faces: an MCP server over
+            standard input and output for a laptop, the same server over HTTP
+            with Google sign-in for a hosted copy on Cloud Run, and a CLI where
+            every tool is also a command with <code>--json</code>. It holds no
+            language model. It runs scheduler queries and fixed diagnosis rules,
+            and the calling assistant does the reasoning. That keeps it cheap
+            and testable. Figure 1 shows the layers.
+          </p>
+          <figure class="doc-figure">
+            <pre><code>  Assistant (Claude Code, Hermes, Gemini CLI, Copilot, a program)
+        |  MCP: typed tool call, JSON arguments
+        v
+ +------------------------- bifrost ---------------------------+
+ | Tiers     R1 own jobs + cluster facts | R2 staff | A1 act    |
+ | Policy    validation, caps, rate limits, redaction, audit   |
+ | Core      typed operations + fixed diagnosis rules          |
+ | Commands  closed allow-list, fixed templates, quoted values |
+ +-------------------------------------------------------------+
+        |  SSH as the person (own key and identity)
+        v
+   Slurm login node: squeue, sacct, sinfo, scontrol show,
+   sbatch --test-only; sbatch/scancel only after a confirm</code></pre>
+            <figcaption>
+              Figure 1. The layers of ursa-bifrost. Every request passes the
+              tier check and policy before the core builds a command from the
+              allow-list. A model can supply only validated values; it never
+              supplies command text.
+            </figcaption>
+          </figure>
+          <p>
+            <strong>Rule one: a closed list of commands.</strong> A command can
+            only be made by a constructor in one file, and a test,
+            <code>TestAllowListIsClosed</code>, pins the set of remote programs
+            to 17 names. <code>scontrol</code> may only show, hold or release. A
+            bare <code>sbatch</code> must be <code>--test-only</code>. Arguments
+            are validated first (a job id must be digits). SSH has no argument
+            vector: it carries one command string to the remote login shell.<sup
+              class="cite"
+              ><a href="#ref-19">[19]</a></sup
+            >
+            So the remote line is a fixed template, and each value is either
+            checked against a strict pattern or single-quoted by one function,
+            <code>Quote</code>. Some templates pass values as positional
+            parameters to a fixed <code>bash -c</code> string. Safety rests on
+            validation and quoting. Anyone who adds a command has to edit the
+            test on purpose.
+          </p>
+          <p>
+            <strong>Rule two: tiers decide which tools exist.</strong> R1 is any
+            signed-in person: their own jobs and public cluster facts. R2 is
+            staff: every user's jobs, usage and waste, node health, and draft
+            ticket replies that are never sent. A1 is opt-in per person: submit,
+            cancel, hold and release their own jobs. A caller does not see a
+            tool for a tier they lack, so a read-only assistant cannot even try
+            to submit. On 2 October the hosted server listed 36 tools with all
+            tiers: 19 R1, 7 R2 and 10 A1. Admin work, such as node states,
+            reservations and accounts, is not exposed.
+          </p>
+          <p>
+            <strong>Rule three: acting takes two calls.</strong>
+            <code>job_submit</code> does four things:
+          </p>
+          <ul>
+            <li>runs the static script check;</li>
+            <li>
+              enforces caps on nodes per job, hours per job, worst-case dollars
+              per job and per day, and submits per day;
+            </li>
+            <li>asks Slurm for a <code>--test-only</code> estimate;</li>
+            <li>
+              returns a plan with a single-use <code>confirm_token</code>, bound
+              to a hash of the exact plan and valid for 10 minutes.
+            </li>
+          </ul>
+          <p>
+            Nothing is submitted. Only <code>job_submit_confirm</code> with that
+            token submits, after it re-checks the hash and the caps. So the
+            bytes confirmed are the bytes planned. The token does not prove that
+            a person read the plan, because the assistant decides how to
+            summarize it. The specification also counts on the client's own
+            approval prompt, but bifrost cannot enforce that prompt and some
+            clients approve tools automatically, so I count only the token and
+            the caps as guarantees. The example config ships caps of 4 nodes, 24
+            h, $25 per job, $50 per day and 20 submits per day; a site sets its
+            own.
+          </p>
+          <p>
+            Every result carries the commands that produced it, so an answer can
+            be checked against the cluster.
+          </p>
+          <p>
+            <code>job_explain</code> is the main diagnosis tool. It runs 11
+            state rules over the accounting record (out of memory, timeout, node
+            failure, a signal exit and so on) and about 20 log rules over the
+            redacted log tail (a missing Python package, a module that does not
+            exist, a binary built for a newer processor, a full disk). Each
+            finding carries the evidence that fired it and a suggested fix. The
+            rules were seeded from the failure classes the deep-research engine
+            had already met, and each log rule has a sample in a test.
+          </p>
+
+          <h2 id="threats">Threats, and What Stops Them</h2>
+          <p>
+            Job names, log lines and script bodies come back inside a field
+            named <code>untrusted</code>, and tool descriptions tell the client
+            that field is data. That label is a hint to the model. It does not
+            stop prompt injection.<sup class="cite"
+              ><a href="#ref-1">[1]</a></sup
+            >
+            Containment comes from capability: no tool acts on content it read,
+            writes need a token, and caps apply to every write. Table 1 maps
+            each threat I planned for to the control that stops it, and to what
+            is left.
+          </p>
+          <p class="table-caption">
+            Table 1. Threats to the AI path and the controls in bifrost.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Threat</th>
+                  <th>Control</th>
+                  <th>What is left</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Model error: wrong job, wrong script</td>
+                  <td>Two-step token bound to the plan hash; caps</td>
+                  <td>A capped job that is still the wrong job</td>
+                </tr>
+                <tr>
+                  <td>Injected text in a log or job name</td>
+                  <td>
+                    No tool acts on what it read; read-only tiers hide write
+                    tools
+                  </td>
+                  <td>
+                    The model may propose a harmful plan that a tired person
+                    approves
+                  </td>
+                </tr>
+                <tr>
+                  <td>Injection across tools in one session</td>
+                  <td>None in bifrost</td>
+                  <td>
+                    A staff assistant that reads another user's log and also has
+                    mail or chat tools loaded could be steered into those tools
+                  </td>
+                </tr>
+                <tr>
+                  <td>Buggy or auto-approving client</td>
+                  <td>
+                    Token and server caps; the client prompt is not relied on
+                  </td>
+                  <td>Submits up to the caps</td>
+                </tr>
+                <tr>
+                  <td>Program that confirms its own jobs</td>
+                  <td>
+                    Program client with its own ceiling, budget and day cap
+                  </td>
+                  <td>Spend up to that ceiling</td>
+                </tr>
+                <tr>
+                  <td>Person bypassing bifrost</td>
+                  <td>None; this is the cluster's job</td>
+                  <td>Normal <code>sbatch</code> over their own login</td>
+                </tr>
+                <tr>
+                  <td>Compromised hosted server</td>
+                  <td>
+                    Sessions, login keys and approval state sealed with
+                    AES-256-GCM; pinned host keys
+                  </td>
+                  <td>
+                    Each user's sealed Google refresh token carries that user's
+                    cloud rights
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            Two of those rows need a word. The hosted server asks each user for
+            Google's broad <code>cloud-platform</code> scope, because the
+            Identity-Aware Proxy (IAP) tunnel<sup class="cite"
+              ><a href="#ref-20">[20]</a></sup
+            >
+            and OS Login key calls need it<sup class="cite"
+              ><a href="#ref-21">[21]</a></sup
+            >; the repository's security notes record this as known and
+            accepted, and admins can use the CLI instead. And staff-tier tools
+            send other users' job metadata to whatever model the staff member's
+            assistant uses. Whether staff tools may read other users' logs at
+            all is still an open question in the specification, as is how long
+            the audit log is kept and who reviews it. I have not run an
+            injection test against a staff assistant with other tools loaded.
+          </p>
+          <p>
+            Other approaches exist, and I chose against them for stated reasons.
+            Open OnDemand already gives web access to Slurm without a shell<sup
+              class="cite"
+              ><a href="#ref-14">[14]</a></sup
+            >, and runs on Ursa Major; the specification puts a job portal out
+            of scope for that reason, and an MCP server serves a different
+            client, the assistant. The Slurm REST daemon
+            (<code>slurmrestd</code>) with per-user JSON Web Tokens (JWT)<sup
+              class="cite"
+              ><a href="#ref-10">[10]</a></sup
+            ><sup class="cite"><a href="#ref-11">[11]</a></sup> was the planned
+            backend; I dropped it once IAP and OS Login gave each person their
+            own identity over SSH, which needed no new service. Slurm
+            quality-of-service (QOS) limits<sup class="cite"
+              ><a href="#ref-13">[13]</a></sup
+            >
+            would enforce caps for every path, not just this one; Ursa Major has
+            none beyond <code>normal</code> today, and long term the caps belong
+            there. For diagnosis, <code>seff</code>, Princeton's
+            <code>jobstats</code
+            ><sup class="cite"><a href="#ref-16">[16]</a></sup> and Open
+            XDMoD<sup class="cite"><a href="#ref-15">[15]</a></sup> (which Ursa
+            Major runs) report job efficiency; <code>job_explain</code> adds log
+            rules and a fix aimed at an assistant. The specification lists
+            several open-source Slurm MCP servers on GitHub; when I looked, none
+            advertised tiers, approval or audit, and I have not evaluated them
+            further.
+          </p>
+
+          <h2 id="guards">Guards, and Proving They Work</h2>
+          <p>
+            A green test suite does not tell me whether any test depends on a
+            given guard. If I delete the owner check and every test still
+            passes, the owner check is unguarded, whatever the coverage report
+            says. So bifrost has
+            <a
+              href="https://github.com/UCR-Research-Computing/ursa-bifrost/blob/main/scripts/mutation_check.sh"
+              target="_blank"
+              rel="noopener"
+              ><code>scripts/mutation_check.sh</code></a
+            >, a narrow form of mutation testing<sup class="cite"
+              ><a href="#ref-17">[17]</a></sup
+            ><sup class="cite"><a href="#ref-18">[18]</a></sup
+            >. Each line names a guard, the file it lives in, the exact code,
+            and a replacement that disables it: the tier check becomes
+            <code>if true</code>, the token's single-use delete becomes a no-op,
+            redaction stops replacing anything. The script applies one mutation,
+            runs the full test suite, and expects it to fail. A mutation the
+            tests survive fails the run. A pattern that no longer matches the
+            code is reported as BROKEN and also fails the run. It runs by hand,
+            not in continuous integration. Table 2 shows the guard count by
+            release.
+          </p>
+          <p class="table-caption">
+            Table 2. Mutation guard counts by release. Each new safety check
+            shipped with a guard in the same release; v0.8.0 jumped because
+            shared-partition support added share pricing and core rules across
+            many files, with 12 releases between it and v0.3.1.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Release</th>
+                  <th>Date</th>
+                  <th class="num">Guards</th>
+                  <th>What was added</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>v0.3.1</td>
+                  <td>1 October</td>
+                  <td class="num">26</td>
+                  <td>Two-step submit, caps, live test fixes</td>
+                </tr>
+                <tr>
+                  <td>v0.8.0</td>
+                  <td>2 October</td>
+                  <td class="num">113</td>
+                  <td>Shared partitions: core rules, share pricing</td>
+                </tr>
+                <tr>
+                  <td>v0.9.0</td>
+                  <td>2 October</td>
+                  <td class="num">128</td>
+                  <td>Program clients with tier ceilings</td>
+                </tr>
+                <tr>
+                  <td>v0.9.14</td>
+                  <td>5 October</td>
+                  <td class="num">208</td>
+                  <td>Fast accounting reads; older gaps closed</td>
+                </tr>
+                <tr>
+                  <td>v0.10.1</td>
+                  <td>27 October</td>
+                  <td class="num">219</td>
+                  <td>Allocation framing (warn-only)</td>
+                </tr>
+                <tr>
+                  <td>ClusterWand v0.1.0</td>
+                  <td>28 October</td>
+                  <td class="num">148</td>
+                  <td>Fork: 71 guards removed with the hosted code</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            On 5 October the full run found one guard that had been BROKEN since
+            v0.9.6 (a function signature changed, so the pattern no longer
+            applied) and five guards no test killed. One of those mattered: the
+            background renewal of a person's cluster login key wrote the renewed
+            key back to its store, and no test noticed if it did not, because
+            the in-memory store used in tests hands back the same object it was
+            given. Each of the five got a test.
+          </p>
+          <p>
+            Mutation testing only covers what I thought to guard. Two other
+            kinds of check found what I had not thought of.
+          </p>
+          <p>
+            <strong>Live campaigns.</strong> On 1 October, after the act tier
+            shipped, I ran 13 real jobs, 16 negative CLI cases and 22 MCP checks
+            against the cluster. The worst find: five parallel
+            <code>bifrost confirm</code> calls with one token all reached the
+            cluster. The lock was per process, and only a folder-exists check
+            stopped four of the five jobs. The fix is an exclusive file lock
+            around every read and write of the approval state, with a race test
+            that runs the built binary. The same campaign found a rule-ordering
+            bug in redaction, fixed by changing which rule runs first. A day
+            later, a 30-call parallel burst failed 9 calls: the login node
+            allows 10 sessions per connection, and bifrost now uses at most 8
+            per person.
+          </p>
+          <p>
+            <strong>An adversarial review.</strong> On 20 October five models
+            each reviewed bifrost v0.9.15 and the cluster configuration through
+            five lenses (security, code, operations, cost governance, and drift
+            between spec and code): 25 reviews, 374 findings, 337 after
+            clustering. I checked by hand every finding I acted on. 17 were
+            confirmed and ranked, and 5 "critical" claims were checked and
+            rejected; one model said the audit log wrote signed URLs in clear,
+            but every command line passes through the redactor first. The report
+            does not classify the remainder one by one. About 5% of distinct
+            findings held up. v0.9.16 fixed the confirmed bifrost findings the
+            same day. Three were gaps in the approval path:
+          </p>
+          <ul>
+            <li>
+              A plan with a partition override dropped every check error that
+              mentioned the word "partition", so a 20-core script moved onto a
+              16-core partition planned cleanly. The override now gets the full
+              static check.
+            </li>
+            <li>
+              The submits-per-day cap was checked when a plan was prepared, not
+              when it was confirmed. Preparing several plans and then confirming
+              them all went past the count. The dollar cap had held.
+            </li>
+            <li>
+              A time limit that is not a Slurm time, such as <code>1hour</code>,
+              parsed as 0 minutes. That hid the "no time limit" warning and
+              priced the job at $0. It is now refused.
+            </li>
+          </ul>
+          <p>
+            The mutation guards missed all three, because each check existed but
+            was written wrong.
+          </p>
+
+          <h2 id="files">Files Without a Shell</h2>
+          <p>
+            Section 18 of the specification covers files, and the design choices
+            are mine from 1 October. Inputs are staged:
+            <code>upload_prepare</code> returns a signed upload link<sup
+              class="cite"
+              ><a href="#ref-22">[22]</a></sup
+            >, valid for 15 minutes, for one object in a private bucket, signed
+            for a maximum size so the storage service itself rejects a larger
+            file. The bytes go straight from the person to storage and never
+            pass through bifrost, the model or the login node. When the job is
+            submitted with that upload id, the plan hash covers the object's
+            generation and size, so the confirm token approves exactly those
+            bytes. On confirm, bifrost inserts a fixed block after the
+            <code>#SBATCH</code> lines that fetches each file with a read-only
+            link into <code>inputs/</code>, and fails the job with exit code 66
+            if a fetch fails. Compute nodes hold no credentials, and the links
+            expire. Outputs go the other way through signed download links that
+            last 60 minutes, and the bucket deletes everything after 7 days.
+          </p>
+          <p>
+            The read-only reasons people reach for a shell got their own tools:
+            <code>storage_usage</code>, <code>files_list</code> and
+            <code>files_read</code> under the person's own home and scratch,
+            refusing hidden and credential-like files; and
+            <code>env_check</code>, which loads modules inside a one-core job on
+            a small always-on partition, never on the login node.
+            <code>interactive_help</code> writes the exact command for a real
+            interactive session, because people who need a shell already have
+            one under their own identity. Logs come back in windows of up to
+            1,000 lines with line numbers and a <code>grep</code>.
+          </p>
+          <p>
+            Paging also forced a useful measurement. A routine status check on 5
+            October took about 145 s of bifrost time, and
+            <code>sacct --json</code> for one person over 7 days took 19.6 s.
+            Plain text for every user over the same 7 days took 0.2 s. A
+            field-by-field comparison of 745 live jobs found no difference that
+            matters, and list reads moved to plain text in v0.9.14. That change
+            also makes the fork possible, since older Slurm versions have plain
+            text but not the same JSON.
+          </p>
+
+          <h2 id="programs">When a Program Confirms Its Own Jobs</h2>
+          <p>
+            The two-step rule assumes a person reads the plan. The deep-research
+            Lab breaks that assumption on purpose. Its workflow is plan, pilot,
+            full run, then judgment against criteria written down in advance,
+            and asking a person to approve each step would defeat it. I covered
+            the Lab's move from SSH to bifrost in the field note
+            <a href="2026-10-03-one-day-on-the-research-stack.html"
+              ><em>One Day on the Research Stack</em></a
+            ><sup class="cite"><a href="#ref-23">[23]</a></sup
+            >; here I only want the safety argument.
+          </p>
+          <p>
+            Pressing Submit on a reviewed plan in the Lab counts as the person's
+            approval. The Lab then calls <code>job_submit</code> and confirms
+            the token itself only when every guard holds:
+          </p>
+          <ul>
+            <li>
+              <strong>Lineage.</strong> The job comes from the Lab's own Submit
+              path or the one automatic partition switch of a run submitted that
+              way. Re-plans, "Fix with AI" and reruns go back to draft.
+            </li>
+            <li>
+              <strong>Same script.</strong> Bifrost's hash of the script must
+              equal the hash of the script the Lab just built. Otherwise the
+              token is never used.
+            </li>
+            <li>
+              <strong>Per-run budget.</strong> Bifrost's worst case must be at
+              most three times the reviewed estimate (with a $1 floor) and never
+              over a configured per-run limit, $10 by default.
+            </li>
+            <li>
+              <strong>Per-run count.</strong> At most 6 bifrost submissions per
+              run.
+            </li>
+            <li>
+              <strong>Server caps on top.</strong> The Lab signs in as a
+              pre-registered program client with its own tier ceiling, call
+              budget, day cap and spend ledger, separate from the person's.
+            </li>
+          </ul>
+          <p>
+            The client-side guards protect against the Lab's own bugs. The
+            server-side caps protect against everything else, including those
+            guards being wrong. A program's tools are the person's tiers
+            intersected with the program's ceiling, so a ceiling can take tiers
+            away and never add one. My desktop operator app, Ultra, signs in the
+            same way with read tiers only, even though I hold A1.
+          </p>
+
+          <h2 id="clusterwand">ClusterWand: the Public Fork</h2>
+          <p>
+            Bifrost is public, but it is shaped like Ursa Major: Google sign-in,
+            an IAP tunnel with OS Login keys, Cloud Storage staging, partition
+            names in code, and cloud list prices as the cost model. A plan
+            written on 28 October counted the Ursa assumptions in the v0.10.1
+            code; partition names alone were hard-coded in 22 places. Making
+            those pluggable inside bifrost would have put the live service at
+            risk with every step, and I had said not to touch it. So I forked
+            with full history, so that blame and the guards come along, and
+            fixes are cherry-picked by hand between the two.
+          </p>
+          <p>
+            <a
+              href="https://github.com/UCR-Research-Computing/clusterwand"
+              target="_blank"
+              rel="noopener"
+              >ClusterWand</a
+            >
+            was created on 28 October from bifrost v0.10.1, and v0.1.0 was
+            released the same day. It is SSH only. It runs on the person's own
+            machine and reaches the login node through their own OpenSSH config,
+            keys and agent, over one multiplexed connection. Everything hosted
+            is gone: the HTTP server, Google sign-in, the IAP backend, Cloud
+            Storage staging and the dashboard, with their tests and 71 of their
+            guards. That leaves 148. The first full mutation run on the fork had
+            4 survivors, because their only tests had lived in the removed
+            packages; after 4 new tests the rerun killed all 148.
+          </p>
+          <p>
+            Its README is plain about what v0.1.0 is not yet. The tools still
+            expect a cluster catalog file describing partitions, prices, modules
+            and recipes, and the defaults are Ursa Major's. On another cluster a
+            person writes that catalog by hand in their own home folder; nothing
+            is installed on the cluster. Both tools are designed to be adapted
+            to other Slurm clusters, but the only cluster either has run against
+            is Ursa Major.
+          </p>
+
+          <h2 id="what-went-wrong">What Went Wrong</h2>
+          <ul>
+            <li>
+              <strong
+                >The confirm token was not single-use across processes.</strong
+              >
+              Five parallel confirms reached the cluster. Only an unrelated
+              folder-exists check stopped four of the jobs. A file lock and a
+              race test fixed it, but the original design had been reviewed and
+              looked right.
+            </li>
+            <li>
+              <strong>Checks written wrongly.</strong> The partition-override
+              filter, the confirm-time submit count and the 0-minute time limit
+              all passed tests and mutation guards for about 18 days, from
+              v0.8.0 on 2 October to the review on 20 October.
+            </li>
+            <li>
+              <strong>The caps only govern bifrost.</strong> Anyone with a
+              normal login can still run <code>sbatch</code> directly. The
+              review also raised cluster configuration items. Most are fixed:
+              Spot nodes are now deleted on preemption, the Arm partition is
+              whole-node as decided, the rebuild is scripted, the node service
+              account lost its broad Editor role on 21 October, and partitions
+              got a default time of 24 h and a maximum time (now 30 days on
+              most). Job privacy settings and backups were on the follow-up
+              list, tracked in the cluster change log separately from bifrost.
+              Bifrost's "own jobs" limit applies only to its own tools.
+            </li>
+            <li>
+              <strong>Cost guards that understate.</strong> On a shared
+              partition the worst case is the share of the node a job holds.
+              That is the right display, but one small job can keep a whole node
+              awake, so the cap understates what the cloud bills. This is
+              recorded and not yet changed.
+            </li>
+            <li>
+              <strong>A mutation guard can rot.</strong> One sat BROKEN for
+              several releases before a full run caught it. The script now fails
+              on BROKEN, but only when someone runs the full set.
+            </li>
+            <li>
+              <strong
+                >The fork lost a safety limit it did not know it had.</strong
+              >
+              The 8-session cap per person lived in the IAP backend.
+              ClusterWand's plain SSH backend has no such cap yet, so a burst
+              can hit the server's session limit. The fork's SSH guide says so;
+              it is not fixed.
+            </li>
+            <li>
+              <strong>Little real use.</strong> 42 releases in 27 days, and one
+              human user. The evidence is test evidence and my own jobs, not
+              researcher traffic.
+            </li>
+            <li>
+              <strong>Unverified elsewhere.</strong> Neither tool has run on a
+              second cluster, an older Slurm version, or a cluster that asks for
+              a second factor on every login.
+            </li>
+          </ul>
+
+          <h2 id="lessons">Lessons</h2>
+          <ol>
+            <li>
+              <strong>Test races with the real binary.</strong> The worst bug
+              lived between processes, where unit tests could not see it.
+            </li>
+            <li>
+              <strong
+                >Review each check for correctness, not only presence.</strong
+              >
+              Mutation guards prove a check is needed; three wrong checks passed
+              200-odd of them.
+            </li>
+            <li>
+              <strong>Get outside reviewers, and check what they say.</strong>
+              They found checks written wrongly, and 5 claims labelled critical
+              were false.
+            </li>
+            <li>
+              <strong
+                >Put a server-side ceiling under every program that approves its
+                own work.</strong
+              >
+              Only the server catches the client's guards being wrong.
+            </li>
+            <li>
+              <strong>Do not give an assistant a shell.</strong> The other
+              guarantees depend on a closed set of commands.
+            </li>
+            <li>
+              <strong>Make acting take two calls bound to one plan.</strong> A
+              hash-bound, single-use token stops a model from planning one thing
+              and submitting another.
+            </li>
+            <li>
+              <strong>Fork instead of generalizing a live service.</strong>
+              It keeps refactoring away from the production service.
+            </li>
+          </ol>
+
+          <h2 id="next">What's Next</h2>
+          <ul>
+            <li>
+              ClusterWand: move every Ursa constant into a site profile, with
+              tests that Ursa outputs stay byte-identical to bifrost v0.10.1;
+              then text-format Slurm parsing for older versions, then a
+              read-only <code>discover</code> that drafts the catalog.
+            </li>
+            <li>
+              Run every read tool and one approved test job against a second
+              cluster through a normal researcher login.
+            </li>
+            <li>A session cap on ClusterWand's plain SSH backend.</li>
+            <li>
+              Bifrost: price the cap check at the whole node on shared
+              partitions, keeping share pricing for display.
+            </li>
+            <li>
+              An injection test against a staff assistant with other tools
+              loaded.
+            </li>
+            <li>
+              The measurement that would settle the safety claim: researchers
+              other than me using it for a term, counting the share of plans
+              rejected or edited before confirm and any submit that went beyond
+              what its plan showed.
+            </li>
+          </ul>
+
+          <h2 id="references">References</h2>
+          <ol class="sources">
+            <li id="ref-1">
+              Kai Greshake, Sahar Abdelnabi, Shailesh Mishra, Christoph Endres,
+              Thorsten Holz, and Mario Fritz. 2023. Not What You&rsquo;ve Signed
+              Up For: Compromising Real-World LLM-Integrated Applications with
+              Indirect Prompt Injection. In
+              <em
+                >Proceedings of the 16th ACM Workshop on Artificial Intelligence
+                and Security (AISec &rsquo;23)</em
+              >. ACM, 79&ndash;90.
+              <a href="https://doi.org/10.1145/3605764.3623985"
+                >doi:10.1145/3605764.3623985</a
+              >
+            </li>
+            <li id="ref-2">
+              Model Context Protocol. 2025.
+              <em>Model Context Protocol Specification, Version 2025-06-18</em>.
+              <a href="https://modelcontextprotocol.io/specification/2025-06-18"
+                >https://modelcontextprotocol.io/specification/2025-06-18</a
+              >. Accessed 28 October 2026.
+            </li>
+            <li id="ref-3">
+              OWASP Foundation. 2025.
+              <em>OWASP Top 10 for Large Language Model Applications</em>.
+              <a
+                href="https://owasp.org/www-project-top-10-for-large-language-model-applications/"
+                >https://owasp.org/www-project-top-10-for-large-language-model-applications/</a
+              >. Accessed 28 October 2026.
+            </li>
+            <li id="ref-4">
+              Xianzhong Ding, Le Chen, Murali Emani, Chunhua Liao, Pei-Hung Lin,
+              Tristan Vanderbruggen, Zhen Xie, Alberto Cerpa, and Wan Du. 2023.
+              HPC-GPT: Integrating Large Language Model for High-Performance
+              Computing. In
+              <em
+                >Proceedings of the SC &rsquo;23 Workshops of the International
+                Conference on High Performance Computing, Network, Storage, and
+                Analysis</em
+              >. 951&ndash;960.
+              <a href="https://doi.org/10.1145/3624062.3624172"
+                >doi:10.1145/3624062.3624172</a
+              >
+            </li>
+            <li id="ref-5">
+              Jie Li. 2026.
+              <em
+                >Trusted Credentials, Untrusted Behavior: Benchmarking LLM-Agent
+                Security in High-Performance Computing</em
+              >. arXiv:2607.18485.
+              <a href="https://arxiv.org/abs/2607.18485"
+                >https://arxiv.org/abs/2607.18485</a
+              >
+            </li>
+            <li id="ref-6">
+              J. H. Saltzer and M. D. Schroeder. 1975. The Protection of
+              Information in Computer Systems. <em>Proc. IEEE</em> 63, 9 (1975),
+              1278&ndash;1308.
+              <a href="https://doi.org/10.1109/PROC.1975.9939"
+                >doi:10.1109/PROC.1975.9939</a
+              >
+            </li>
+            <li id="ref-7">
+              Norm Hardy. 1988. The Confused Deputy.
+              <em>ACM SIGOPS Operating Systems Review</em> 22, 4 (1988),
+              36&ndash;38.
+              <a href="https://doi.org/10.1145/54289.871709"
+                >doi:10.1145/54289.871709</a
+              >
+            </li>
+            <li id="ref-8">
+              R. S. Sandhu, E. J. Coyne, H. L. Feinstein, and C. E. Youman.
+              1996. Role-Based Access Control Models. <em>Computer</em> 29, 2
+              (1996), 38&ndash;47.
+              <a href="https://doi.org/10.1109/2.485845"
+                >doi:10.1109/2.485845</a
+              >
+            </li>
+            <li id="ref-9">
+              Andy B. Yoo, Morris A. Jette, and Mark Grondona. 2003. SLURM:
+              Simple Linux Utility for Resource Management. In
+              <em>Job Scheduling Strategies for Parallel Processing</em>
+              (Lecture Notes in Computer Science, Vol. 2862). Springer,
+              44&ndash;60.
+              <a href="https://doi.org/10.1007/10968987_3"
+                >doi:10.1007/10968987_3</a
+              >
+            </li>
+            <li id="ref-10">
+              SchedMD. 2026. <em>Slurm Workload Manager: REST API Details</em>.
+              <a href="https://slurm.schedmd.com/rest.html"
+                >https://slurm.schedmd.com/rest.html</a
+              >. Accessed 28 October 2026.
+            </li>
+            <li id="ref-11">
+              SchedMD. 2026.
+              <em
+                >Slurm Workload Manager: JSON Web Tokens (JWT)
+                Authentication</em
+              >.
+              <a href="https://slurm.schedmd.com/jwt.html"
+                >https://slurm.schedmd.com/jwt.html</a
+              >. Accessed 28 October 2026.
+            </li>
+            <li id="ref-12">
+              M. Jones, J. Bradley, and N. Sakimura. 2015.
+              <em>JSON Web Token (JWT)</em>. RFC 7519. RFC Editor.
+              <a href="https://doi.org/10.17487/RFC7519"
+                >doi:10.17487/RFC7519</a
+              >
+            </li>
+            <li id="ref-13">
+              SchedMD. 2026. <em>Slurm Workload Manager: Resource Limits</em>.
+              <a href="https://slurm.schedmd.com/resource_limits.html"
+                >https://slurm.schedmd.com/resource_limits.html</a
+              >. Accessed 28 October 2026.
+            </li>
+            <li id="ref-14">
+              Dave Hudak, Doug Johnson, Alan Chalker, Jeremy Nicklas, Eric
+              Franz, Trey Dockendorf, and Brian McMichael. 2018. Open OnDemand:
+              A Web-Based Client Portal for HPC Centers.
+              <em>Journal of Open Source Software</em> 3, 25 (2018), 622.
+              <a href="https://doi.org/10.21105/joss.00622"
+                >doi:10.21105/joss.00622</a
+              >
+            </li>
+            <li id="ref-15">
+              Jeffrey T. Palmer, Steven M. Gallo, Thomas R. Furlani, Matthew D.
+              Jones, Robert L. DeLeon, Joseph P. White, Nikolay Simakov, Abani
+              K. Patra, Jeanette Sperhac, Thomas Yearke, Ryan Rathsam, Martins
+              Innus, Cynthia D. Cornelius, James C. Browne, William L. Barth,
+              and Richard T. Evans. 2015. Open XDMoD: A Tool for the
+              Comprehensive Management of High-Performance Computing Resources.
+              <em>Computing in Science &amp; Engineering</em> 17, 4 (2015),
+              52&ndash;62.
+              <a href="https://doi.org/10.1109/MCSE.2015.68"
+                >doi:10.1109/MCSE.2015.68</a
+              >
+            </li>
+            <li id="ref-16">
+              Princeton University Research Computing. 2026.
+              <em>jobstats: A Slurm-Compatible Job Monitoring Platform</em>.
+              <a href="https://github.com/PrincetonUniversity/jobstats"
+                >https://github.com/PrincetonUniversity/jobstats</a
+              >. Accessed 28 October 2026.
+            </li>
+            <li id="ref-17">
+              R. A. DeMillo, R. J. Lipton, and F. G. Sayward. 1978. Hints on
+              Test Data Selection: Help for the Practicing Programmer.
+              <em>Computer</em> 11, 4 (1978), 34&ndash;41.
+              <a href="https://doi.org/10.1109/C-M.1978.218136"
+                >doi:10.1109/C-M.1978.218136</a
+              >
+            </li>
+            <li id="ref-18">
+              Yue Jia and Mark Harman. 2011. An Analysis and Survey of the
+              Development of Mutation Testing.
+              <em>IEEE Transactions on Software Engineering</em> 37, 5 (2011),
+              649&ndash;678.
+              <a href="https://doi.org/10.1109/TSE.2010.62"
+                >doi:10.1109/TSE.2010.62</a
+              >
+            </li>
+            <li id="ref-19">
+              T. Ylonen and C. Lonvick. 2006.
+              <em>The Secure Shell (SSH) Connection Protocol</em>. RFC 4254. RFC
+              Editor.
+              <a href="https://doi.org/10.17487/RFC4254"
+                >doi:10.17487/RFC4254</a
+              >
+            </li>
+            <li id="ref-20">
+              Google Cloud. 2026. <em>Using IAP for TCP Forwarding</em>.
+              <a href="https://cloud.google.com/iap/docs/using-tcp-forwarding"
+                >https://cloud.google.com/iap/docs/using-tcp-forwarding</a
+              >. Accessed 28 October 2026.
+            </li>
+            <li id="ref-21">
+              Google Cloud. 2026. <em>About OS Login</em>.
+              <a href="https://cloud.google.com/compute/docs/oslogin"
+                >https://cloud.google.com/compute/docs/oslogin</a
+              >. Accessed 28 October 2026.
+            </li>
+            <li id="ref-22">
+              Google Cloud. 2026. <em>Signed URLs</em>.
+              <a
+                href="https://cloud.google.com/storage/docs/access-control/signed-urls"
+                >https://cloud.google.com/storage/docs/access-control/signed-urls</a
+              >. Accessed 28 October 2026.
+            </li>
+            <li id="ref-23">
+              Charles E. Forsyth III. 2026.
+              <em>One Day on the Research Stack</em>. Field Note.
+              <a
+                href="https://charles-forsyth.github.io/papers/2026-10-03-one-day-on-the-research-stack.html"
+                >https://charles-forsyth.github.io/papers/2026-10-03-one-day-on-the-research-stack.html</a
+              >
+            </li>
+          </ol>
+          <h2 id="sources">Sources</h2>
+          <p>Public repositories and pages:</p>
+          <ul>
+            <li>
+              <a
+                href="https://github.com/UCR-Research-Computing/ursa-bifrost"
+                target="_blank"
+                rel="noopener"
+                >UCR-Research-Computing/ursa-bifrost</a
+              >, the MCP server and CLI for Ursa Major: code, tags, releases,
+              changelog and security notes
+            </li>
+            <li>
+              <a
+                href="https://github.com/UCR-Research-Computing/ursa-bifrost/blob/main/docs/SPEC.md"
+                target="_blank"
+                rel="noopener"
+                >ursa-bifrost docs/SPEC.md</a
+              >, the specification (Draft 8), including section 9 on approval
+              and untrusted content, section 18 on files and section 21 on
+              program clients
+            </li>
+            <li>
+              <a
+                href="https://github.com/UCR-Research-Computing/ursa-bifrost/blob/main/scripts/mutation_check.sh"
+                target="_blank"
+                rel="noopener"
+                >ursa-bifrost scripts/mutation_check.sh</a
+              >, the mutation guard script
+            </li>
+            <li>
+              <a
+                href="https://github.com/UCR-Research-Computing/clusterwand"
+                target="_blank"
+                rel="noopener"
+                >UCR-Research-Computing/clusterwand</a
+              >, the public SSH-only fork, and its
+              <a
+                href="https://github.com/UCR-Research-Computing/clusterwand/releases/tag/v0.1.0"
+                target="_blank"
+                rel="noopener"
+                >v0.1.0 release</a
+              >
+            </li>
+            <li>
+              <a
+                href="https://github.com/UCR-Research-Computing/clusterwand/blob/main/docs/SSH.md"
+                target="_blank"
+                rel="noopener"
+                >ClusterWand docs/SSH.md</a
+              >, SSH setup and the known session-limit gap
+            </li>
+            <li>
+              <a
+                href="https://github.com/charles-forsyth/deep-research"
+                target="_blank"
+                rel="noopener"
+                >charles-forsyth/deep-research</a
+              >, the research engine whose Lab submits through bifrost
+            </li>
+            <li>
+              <a
+                href="https://modelcontextprotocol.io/"
+                target="_blank"
+                rel="noopener"
+                >Model Context Protocol</a
+              >, the protocol both tools speak
+            </li>
+          </ul>
+          <p>Private records used, by name:</p>
+          <ul>
+            <li>
+              The 20 October adversarial review report of bifrost v0.9.15 and
+              the cluster configuration (25 reviews)
+            </li>
+            <li>My local bifrost audit log, 27 and 28 October</li>
+            <li>
+              The 27 October survey of lab cloud projects for Ursa migration
+            </li>
+            <li>
+              The 28 October ClusterWand plan (Draft 4) and the F0 build log,
+              including mutation runs
+            </li>
+            <li>
+              The Ursa Major cluster repository and the cluster operations
+              specification and change log
+            </li>
+          </ul>
+          <nav class="doc-pager" aria-label="Field notes navigation">
+            <a class="pager-prev" href="index.html"
+              ><span>Back</span>All Field Notes</a
+            ><span></span>
+          </nav>
+        </article>
+      </div>
+    </main>
+
+    <footer class="section-dark">
+      <div class="container text-center">
+        <p class="footer-note">
+          Field Notes |
+          <a href="index.html" class="subtle-link">All notes</a> |
+          <a href="../index.html" class="subtle-link"
+            >charles-forsyth.github.io</a
+          >
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>
