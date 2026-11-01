@@ -761,3 +761,54 @@ footer h3 {
 .project-card .card-links .btn-link {
   margin-top: 0;
 }
+
+/* Currently promoted project band */
+.promoted {
+  padding: 56px 20px;
+}
+.promoted-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 40px;
+  align-items: center;
+}
+.promoted-media {
+  position: relative;
+  display: block;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--accent);
+  box-shadow: 0 0 40px var(--accent-glow);
+}
+.promoted-media img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.promoted-play {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(10, 17, 13, 0.85);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.promoted-kicker {
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin: 0 0 6px;
+}
+.promoted-text h3 {
+  margin-top: 0;
+  text-align: left;
+}
+@media (max-width: 860px) {
+  .promoted-grid {
+    grid-template-columns: 1fr;
+  }
+}
