@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sensitive Data, Shared Cloud | Field Notes</title>
+    <meta
+      name="description"
+      content="Checking a written plan for a shared Google Cloud environment for HIPAA and FERPA research data against peers, regulations, vendor documentation and code: four lessons that transfer."
+    />
+    <link
+      rel="canonical"
+      href="https://charles-forsyth.github.io/papers/2026-11-02-sensitive-data-shared-cloud.html"
+    />
+    <meta property="og:type" content="article" />
+    <meta
+      property="og:url"
+      content="https://charles-forsyth.github.io/papers/2026-11-02-sensitive-data-shared-cloud.html"
+    />
+    <meta
+      property="og:title"
+      content="Sensitive Data, Shared Cloud: Reviewing a Plan for a P3-P4 Research Environment | Field Notes"
+    />
+    <meta
+      property="og:description"
+      content="A paper and a companion book that check a plan for a shared Google Cloud environment for HIPAA and FERPA research data, claim by claim. Nothing is built yet."
+    />
+    <meta
+      property="og:image"
+      content="https://charles-forsyth.github.io/assets/og-share.jpg"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="../handbook/handbook.css" />
+    <link rel="stylesheet" href="papers.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+    <meta
+      name="citation_title"
+      content="Sensitive Data, Shared Cloud: Reviewing a Plan for a P3-P4 Research Environment on Google Cloud"
+    />
+    <meta name="citation_author" content="Forsyth III, Charles E." />
+    <meta name="citation_publication_date" content="2026/11/02" />
+    <meta name="citation_doi" content="10.5281/zenodo.23890329" />
+    <meta
+      name="citation_pdf_url"
+      content="https://charles-forsyth.github.io/papers/pdf/2026-11-02-sensitive-data-shared-cloud-paper.pdf"
+    />
+  </head>
+  <body>
+    <header class="hero doc-hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="doc-kicker">
+            <i class="fas fa-flask"></i> Field Notes | 2 November 2026
+          </p>
+          <h1>Sensitive Data, Shared Cloud</h1>
+          <h2>
+            Reviewing a plan for a shared Google Cloud environment for HIPAA and
+            FERPA research data, claim by claim, before anything is built
+          </h2>
+          <div class="cta-buttons">
+            <a
+              href="pdf/2026-11-02-sensitive-data-shared-cloud-paper.pdf"
+              class="btn btn-primary"
+              ><i class="fas fa-file-pdf"></i> Paper (PDF, 23 pages)</a
+            >
+            <a
+              href="pdf/2026-11-02-sensitive-data-shared-cloud-book.pdf"
+              class="btn btn-secondary"
+              ><i class="fas fa-book"></i> Companion book (PDF, 208 pages)</a
+            >
+            <a href="index.html" class="btn btn-secondary"
+              ><i class="fas fa-file-alt"></i> All Field Notes</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+    <main class="section-light">
+      <div class="container doc-layout">
+        <aside class="doc-toc">
+          <h4><i class="fas fa-list"></i> On this page</h4>
+          <ul>
+            <li><a href="#abstract">Abstract</a></li>
+            <li><a href="#cite">Cite this note</a></li>
+            <li><a href="#lessons">Four lessons</a></li>
+            <li><a href="#documents">The two documents</a></li>
+            <li><a href="#author-note">Author note</a></li>
+          </ul>
+        </aside>
+        <article class="doc-content">
+          <h2 id="abstract">Abstract</h2>
+          <p>
+            UC Riverside has no shared place to compute on non-CUI research data
+            at UC Protection Level 3 or 4, such as HIPAA data under agreements
+            and FERPA records. Our plan puts a hardened VM per study in a Google
+            Cloud project with no internet route, campus sign-on,
+            steward-approved export and audit logs held by the campus security
+            office. Nothing has been built. I checked the plan and its offline
+            Terraform claim by claim against 19 peer offerings, HIPAA, FERPA, UC
+            policy, Google's documentation, upstream source code and selected
+            literature. Of 35 open items in the resulting register, 14 close by
+            a decision or a document rather than by code.
+          </p>
+
+          <h2 id="cite">Cite this note</h2>
+          <p>
+            Charles E. Forsyth III. 2026. Sensitive Data, Shared Cloud:
+            Reviewing a Plan for a P3-P4 Research Environment on Google Cloud.
+            Zenodo.
+            <a href="https://doi.org/10.5281/zenodo.23890329"
+              >https://doi.org/10.5281/zenodo.23890329</a
+            >
+          </p>
+          <p>
+            Companion book: Charles E. Forsyth III. 2026. Sensitive Data, Shared
+            Cloud: Planning a P3-P4 Secure Research Environment for HIPAA and
+            FERPA Data on Google Cloud. Zenodo.
+            <a href="https://doi.org/10.5281/zenodo.23890331"
+              >https://doi.org/10.5281/zenodo.23890331</a
+            >
+          </p>
+
+          <h2 id="lessons">Four lessons</h2>
+          <ol>
+            <li>
+              <strong
+                >The defects that matter most are inherited defaults.</strong
+              >
+              Perimeter API names, edition-gated application options, storage
+              soft delete and live package mirrors. Two single-shot AI review
+              panels that saw only the repository found none of them; AI agents
+              given the same code plus the vendor and upstream pages did.
+            </li>
+            <li>
+              <strong>Isolation lives in the administrator plane.</strong> In a
+              shared cloud project, separation between studies is decided by who
+              can act as the deployer, not by the researcher's path. From
+              Google's documentation, per-study customer-managed keys don't
+              change that, because one service agent holds every key.
+            </li>
+            <li>
+              <strong>A folder perimeter makes project-per-study cheap.</strong>
+              With the perimeter on a folder, a new study project joins it with
+              no edit to the perimeter.
+            </li>
+            <li>
+              <strong>FERPA needs its own intake question.</strong> On my
+              reading, FERPA's studies exception does not cover research a
+              faculty member starts unless the institution commissions or adopts
+              the study, so intake has to record which route applies; the campus
+              FERPA officer decides.
+            </li>
+          </ol>
+
+          <h2 id="documents">The two documents</h2>
+          <p>
+            The
+            <a href="pdf/2026-11-02-sensitive-data-shared-cloud-paper.pdf"
+              >paper</a
+            >
+            (23 pages) gives the method, the findings in ten areas, an
+            inherited-default checklist other campuses can reuse, a table of how
+            each defect was found, and the decisions only campus leadership can
+            make. The
+            <a href="pdf/2026-11-02-sensitive-data-shared-cloud-book.pdf"
+              >companion book</a
+            >
+            (208 pages) carries the full evidence: the rules, peer practice and
+            related frameworks, the planned architecture, data in and out,
+            software supply, the researcher's day, logging, the operating model,
+            cost, GPUs and AI, a 15-test fake-data pilot and the 35-item
+            register. Both are public editions: campus systems, offices and
+            roles appear by function, and design weaknesses are described by
+            kind.
+          </p>
+
+          <h2 id="author-note">Author note</h2>
+          <p>
+            The plan, the design decisions and the conclusions are mine and my
+            team's. I used AI writing agents to draft chapters from my brief and
+            AI reviewer panels to check the drafts against primary sources; I am
+            responsible for every claim. The views and readings here are my own
+            and do not represent the University of California, Riverside or the
+            University of California. The campus security office, systems team
+            and leadership have not reviewed or approved these documents, and
+            nothing in them is UC policy or a commitment by UCR.
+          </p>
+          <nav class="doc-pager" aria-label="Field notes navigation">
+            <a class="pager-prev" href="index.html"
+              ><span>Back</span>All Field Notes</a
+            ><span></span>
+          </nav>
+        </article>
+      </div>
+    </main>
+    <footer class="section-dark">
+      <div class="container text-center">
+        <p class="footer-note">
+          Field Notes |
+          <a href="index.html" class="subtle-link">All notes</a> |
+          <a href="../index.html" class="subtle-link"
+            >charles-forsyth.github.io</a
+          >
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>
