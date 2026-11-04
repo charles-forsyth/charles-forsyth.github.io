@@ -322,6 +322,26 @@ h4 {
   transform: translateX(5px);
 }
 
+/* Systems by Family */
+.section-intro {
+  max-width: 760px;
+  margin: 0 auto 30px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.family-list {
+  margin: 0 0 25px;
+  padding-left: 18px;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  flex-grow: 1;
+}
+
+.family-list li {
+  margin-bottom: 6px;
+}
+
 /* GitHub Repos Section */
 #github-repos h3 {
   color: var(--accent);
