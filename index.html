@@ -77,6 +77,7 @@
           </p>
           <div class="cta-buttons">
             <a href="#portfolio" class="btn btn-primary">View Innovations</a>
+            <a href="#systems" class="btn btn-secondary">Systems</a>
             <a href="cv.html" class="btn btn-secondary">CV</a>
             <a href="#field-manual" class="btn btn-secondary">Field Manual</a>
             <a href="papers/index.html" class="btn btn-secondary"
@@ -275,6 +276,208 @@
               Auditors to build software from a single prompt.
               <em>It built itself.</em>
             </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="systems" class="section-light">
+        <div class="container">
+          <h3>Systems by Family</h3>
+          <p class="section-intro">
+            Most of what I build fits together. Each family below is one system
+            with several ways in: an MCP server for AI assistants, a web or
+            desktop front end, and a command line. Internal services are named
+            but not linked.
+          </p>
+          <div class="project-grid">
+            <div class="project-card">
+              <div class="card-icon"><i class="fas fa-server"></i></div>
+              <h4>Ursa Major HPC</h4>
+              <p>
+                One Slurm cluster in Google Cloud, reachable every way a
+                researcher works.
+              </p>
+              <ul class="family-list">
+                <li>
+                  <strong>ursa-bifrost</strong>: MCP server and CLI, the safe
+                  door for AI assistants
+                </li>
+                <li>
+                  <strong>Ursa Major Assistant</strong>: web dashboard and chat
+                  (internal)
+                </li>
+                <li>
+                  <strong>Bifrost Studio</strong>: native Windows app (internal)
+                </li>
+                <li>
+                  <strong>ClusterWand</strong>: the open-source version for any
+                  Slurm cluster
+                </li>
+                <li>
+                  <strong>Deep Research</strong> Lab runs: report claims tested
+                  as real cluster jobs
+                </li>
+              </ul>
+              <div class="card-links">
+                <a
+                  href="https://ucr-research-computing.github.io/ursa-bifrost/"
+                  class="btn-link"
+                  >bifrost <i class="fas fa-arrow-right"></i
+                ></a>
+                <a
+                  href="https://github.com/UCR-Research-Computing/clusterwand"
+                  class="btn-link"
+                  >ClusterWand <i class="fab fa-github"></i
+                ></a>
+              </div>
+            </div>
+            <div class="project-card">
+              <div class="card-icon"><i class="fas fa-chart-line"></i></div>
+              <h4>Cloud FinOps and Security</h4>
+              <p>
+                Read-only spend, budget and risk visibility across the research
+                cloud fleet.
+              </p>
+              <ul class="family-list">
+                <li>
+                  <strong>Skywalker</strong>: audit CLI and MCP server that acts
+                  as the signed-in person
+                </li>
+                <li>
+                  <strong>Telescope</strong>: Mac desktop viewer built on
+                  Skywalker
+                </li>
+              </ul>
+              <div class="card-links">
+                <a
+                  href="https://charles-forsyth.github.io/Skywalker/"
+                  class="btn-link"
+                  >Skywalker <i class="fas fa-arrow-right"></i
+                ></a>
+                <a
+                  href="https://charles-forsyth.github.io/telescope/"
+                  class="btn-link"
+                  >Telescope <i class="fas fa-arrow-right"></i
+                ></a>
+              </div>
+            </div>
+            <div class="project-card">
+              <div class="card-icon"><i class="fas fa-satellite-dish"></i></div>
+              <h4>National Platforms</h4>
+              <p>Bringing national research computing to campus researchers.</p>
+              <ul class="family-list">
+                <li>
+                  <strong>nrp-mcp</strong>: run work on NRP Nautilus GPUs from
+                  plain language
+                </li>
+                <li>
+                  Guides for OSG, NSF ACCESS and Jetstream2 on the Research
+                  Computing site
+                </li>
+              </ul>
+              <div class="card-links">
+                <a
+                  href="https://ucr-research-computing.github.io/nrp-mcp/"
+                  class="btn-link"
+                  >nrp-mcp <i class="fas fa-arrow-right"></i
+                ></a>
+              </div>
+            </div>
+            <div class="project-card">
+              <div class="card-icon"><i class="fas fa-database"></i></div>
+              <h4>Research Storage</h4>
+              <p>Getting data in and out of campus research storage.</p>
+              <ul class="family-list">
+                <li>
+                  <strong>rds-cli</strong>: parallel, traversal-safe client for
+                  CephRDS (S3)
+                </li>
+                <li>
+                  <strong>ceph-rds-agent</strong>: storage helper agent
+                  (internal)
+                </li>
+              </ul>
+              <div class="card-links">
+                <a
+                  href="https://github.com/UCR-Research-Computing/rds-cli"
+                  class="btn-link"
+                  >rds-cli <i class="fab fa-github"></i
+                ></a>
+              </div>
+            </div>
+            <div class="project-card">
+              <div class="card-icon"><i class="fas fa-brain"></i></div>
+              <h4>Knowledge and Research</h4>
+              <p>
+                Tools that remember, read and reason for a one-person research
+                computing shop.
+              </p>
+              <ul class="family-list">
+                <li>
+                  <strong>Nexus</strong>: knowledge graph of people, labs,
+                  projects and services (private)
+                </li>
+                <li>
+                  <strong>Deep Research</strong>: cited reports, annotated and
+                  checked
+                </li>
+                <li>
+                  <strong>Lyceum</strong>: searchable library of research
+                  computing talks (private)
+                </li>
+                <li>
+                  <strong>Ultra</strong>: one workstation for mail, calendar,
+                  chat and the work ledger
+                </li>
+              </ul>
+              <div class="card-links">
+                <a
+                  href="https://charles-forsyth.github.io/deep-research/"
+                  class="btn-link"
+                  >Deep Research <i class="fas fa-arrow-right"></i
+                ></a>
+                <a
+                  href="https://charles-forsyth.github.io/ultra-workstation/"
+                  class="btn-link"
+                  >Ultra <i class="fas fa-arrow-right"></i
+                ></a>
+              </div>
+            </div>
+            <div class="project-card">
+              <div class="card-icon"><i class="fas fa-flask"></i></div>
+              <h4>Experiments</h4>
+              <p>Small builds that test an idea fast.</p>
+              <ul class="family-list">
+                <li>
+                  <strong>Jev Decision Wall</strong>: 200 AI judgments as a live
+                  heatmap
+                </li>
+                <li>
+                  <strong>Pulse</strong>: WinUI 3 system monitor for Windows
+                </li>
+                <li>
+                  <strong>DungeonMind</strong>: a roguelike hero that learns by
+                  Q-learning
+                </li>
+              </ul>
+              <div class="card-links">
+                <a
+                  href="https://charles-forsyth.github.io/jev-decision-wall/"
+                  class="btn-link"
+                  >Jev <i class="fas fa-arrow-right"></i
+                ></a>
+                <a
+                  href="https://charles-forsyth.github.io/pulse-windows/"
+                  class="btn-link"
+                  >Pulse <i class="fas fa-arrow-right"></i
+                ></a>
+                <a
+                  href="https://charles-forsyth.github.io/dungeonmind-rs/"
+                  class="btn-link"
+                  >DungeonMind <i class="fas fa-arrow-right"></i
+                ></a>
+              </div>
+            </div>
           </div>
         </div>
       </section>
