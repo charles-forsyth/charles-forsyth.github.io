@@ -1,11 +1,11 @@
 # charles-forsyth.github.io: Site Specification
 
-Status: describes the site as built on 2026-10-04 (Field Notes added in PR #5)
+Status: describes the site as built on 2026-11-04 (through PR #33, Systems by Family); spec 1.1
 Repo: `charles-forsyth/charles-forsyth.github.io` (public), branch `main`
 Live: https://charles-forsyth.github.io/
 Engine: none. Hand-written static HTML and CSS, served as-is (`.nojekyll`)
 Deploy: GitHub Actions `Deploy` workflow uploads the repo root to GitHub Pages on every push to `main`
-Last updated: 2026-10-04
+Last updated: 2026-11-04 (1.0 was 2026-10-04)
 
 This is Charles (Chuck) Forsyth's professional site: who he is, what he has built,
 his CV, a long-form technical manual and dated technical reports. It may name him,
@@ -187,29 +187,33 @@ surface `#132219`, accent `#d4b886`, green `#3c6e47`, text `#e4ebe6`.
 
 ### 6.1 Home (`index.html`)
 
-Top to bottom:
+Top to bottom (re-read 2026-11-04):
 
-1. `<head>`: title "Charles Forsyth | Architect of Agentic Ecosystems", description,
-   keywords, Open Graph and Twitter card tags (image
-   `assets/camp_tioga_sigint_arch.png`), canonical URL.
-2. Hero: name, "Director of Research Computing & Architect of Sovereign Edge
-   Ecosystems", a one-line lead, buttons: View Innovations, CV, Field Manual, Field
-   Notes, All Repos, Contact Me.
-3. `#about` (light): "From the Deckplates to the Data Center" (Navy radar to UC
-   research computing), CV link, and four stat cards (Director, Architect, Educator,
-   Outdoorsman).
-4. `#vision` (dark): Directed Agentic Engineering and Squad Manager.
-5. `#portfolio` (light): Flagship Innovations, 8 project cards (Aura, OmNet with the
-   architecture image, Squad Manager, Deep Research, The Scientific Nexus, Skywalker,
-   ESP32 Firmware Suite, Dodge Ram Daytona).
-6. `#experiments` (dark): Applied Research & Experiments, 17 experiment cards linking
-   to the `lordivxx.github.io` sandbox.
-7. `#field-manual` (light): the manual teaser, a strip of 9 chapter links, buttons to
-   the manual and to Field Notes.
-8. `#github-repos` (dark): search box `#repo-search` and `#repo-list`, filled by
-   `index.js` from the GitHub API (unauthenticated: 60 requests per hour per visitor
-   IP; if it fails the section stays empty and logs to the console).
-9. `#contact` footer: Nordhaven Chronicle, GitHub, LinkedIn, X, email, copyright.
+1. `<head>`: title "Charles Forsyth | Research Computing and AI Leader", description,
+   canonical URL, Open Graph card with a 1200x630 share image (name and title on it, PR #29) and
+   X card tags (`twitter:card/creator/title/description/image/url`).
+2. Hero: "Director of Research Computing, UC Riverside", "AI and HPC Leader", a one-line lead
+   (the cloud, cluster, storage, security and AI services behind about 1,000 researchers), buttons:
+   View Innovations, Systems, CV, Field Manual, Field Notes, All Repos, Videos, Contact Me.
+3. `#promoted`: "Currently promoted" band, now Jev Decision Wall (PR #26-#28; DOI and Cite link).
+4. `#about` (light): "From the Deckplates to the Data Center" and stat cards (Director,
+   Architect, Educator, Past Chair).
+5. `#ai-timeline`: "Building with AI since GPT-2", dated entries from 2019 with repo links.
+6. `#vision` (dark): Directed Agentic Engineering and Squad Manager.
+7. `#systems` (light): Systems by Family (PR #33), six cards: Ursa Major HPC, Cloud FinOps and
+   Security, National Platforms, Research Storage, Knowledge and Research, Experiments. Each lists
+   its member tools (`ul.family-list`) and links public ones only; internal tools are named, not
+   linked, and the AI gateway, Atrium and DSP tools are not named.
+8. `#portfolio`: Flagship Innovations, 11 project cards (ursa-bifrost, the MCP server family,
+   Ursa Major HPC on Google Cloud, Governed AI Gateway, Nexus, Ultra, Squad Manager, Deep Research,
+   The Scientific Nexus, Skywalker, UCR HPCC 2017-2019).
+9. `#experiments` (dark): Applied Research & Experiments, 17 cards linking to the
+   `lordivxx.github.io` sandbox.
+10. `#field-manual` (light): the manual teaser, chapter strip, buttons to the manual and Field Notes.
+11. `#videos`: five narrated YouTube tours (Decision Wall x2, OmNet x2, Nexus + ursa-bifrost; PR #30).
+12. `#github-repos` (dark): search box `#repo-search` and `#repo-list`, filled by `index.js` from
+    the GitHub API (unauthenticated: 60 requests per hour per visitor IP).
+13. `#contact` footer: Nordhaven Chronicle, GitHub, LinkedIn, X, email, copyright.
 
 Tests in `tests/repos.test.js` require the repos section, the search input, the list
 container, a nav link to `#github-repos` and the fetch code. Keep those ids.
@@ -268,7 +272,13 @@ container, a nav link to `#github-repos` and the fetch code. Keep those ids.
   `~/.hermes/state.db`, `git log` and tags per repo, the specs and changelogs, live
   checks). Chart only real numbers. Link public repos only; name private ones without
   links and say so. Always include what went wrong.
-- `papers/index.html` lists reports newest first in a `<ul class="notes-list">`.
+- `papers/index.html` lists reports newest first in a `<ul class="notes-list">`. 11 reports on
+  2026-11-04: 2026-10-03 One Day on the Research Stack; 10-06 A Road to Nautilus in One Day; 10-27
+  Directing a Fleet of AI Builders; seven on 10-29 (campus petabyte, seneschal for the RC desk, AI
+  gateway for research labs, governing research cloud projects, Nexus, OmNet, read-mostly AI on
+  Slurm); 11-02 Sensitive Data, Shared Cloud (paper + companion book, public edition).
+- Since PR #23/#24 (2026-10-28) each report has a web page plus an ACM-style PDF/A-2b edition in
+  `papers/pdf/`, a Zenodo DOI, a cite block and citation meta tags.
 
 ### 6.5 Project deep dives
 
@@ -281,6 +291,15 @@ container, a nav link to `#github-repos` and the fetch code. Keep those ids.
 - These pages predate the current lint rules. `html-validate` reports 3 errors on the
   SIGINT page, 37 on the ESP32 page and 2 on the boat page; CI does not check them
   (only `index.html` is validated). Fix them when touching those pages.
+
+### 6.5a Other pages added after 1.0
+
+- `software/index.html`: Citable Software (PR #25, 2026-10-29): 27 entries with Zenodo DOIs
+  (21 at launch), one per public repo release line.
+- `weather/`: Google Weather Insights test pages (PR #21, 2026-10-20): `index.html`,
+  `us_heat_day.html`, `socal_heat_day.html`, `omstead_season.html`. Interactive tests, not linked
+  from the home page.
+- `sitemap.xml` now exists (fixes the old robots.txt 404, item 4 below).
 
 ### 6.6 Shared head and page conventions
 
@@ -418,6 +437,12 @@ Regenerate any chart whose colours should follow.
 - 2026-09-24: legacy HPC site consolidated into the Field Manual; first green CI since
   at least 09-11; CV page and PDF (PR #3); the 2026 AI + HPC Field Manual (PR #4).
 - 2026-10-04: Field Notes section and its first report (PR #5).
+- 2026-10-20: Weather Insights test pages (#21). 10-27/28: Field Notes on AI builders and seven
+  29-Oct papers with PDF editions and Zenodo DOIs (#22-#24). 10-29: Citable Software (#25).
+- 2026-11-01/02: Decision Wall promoted band, card and DOI (#26-#28); share card (#29); Videos
+  (#30); Nautilus note edit (#31); Sensitive Data, Shared Cloud (#32).
+- 2026-11-04: Systems by Family section and hero button (#33), pushed straight to live at Chuck's
+  request (CI and Deploy passed; revert #33 to roll back).
 
 ## 12. Known issues and open items
 
@@ -434,8 +459,7 @@ Ordered by how much they matter.
 3. **The footer links Nordhaven by name.** "Nordhaven Chronicle" in the contact
    footer ties the pseudonymous site to this one. Nordhaven's privacy rule assumes the
    two are not linked. The steward's call whether to keep it.
-4. `robots.txt` names `sitemap.xml`, which returns 404. Add a hand-written sitemap or
-   remove the line.
+4. **Done:** `sitemap.xml` exists, so robots.txt's Sitemap line resolves.
 5. Font Awesome 6.0.0 has no `fa-x-twitter`, so the X link in the footer shows no
    icon. Use `fab fa-twitter` or move the CDN to 6.5.x site-wide (58 references).
 6. CI validates only `index.html`. Extend `lint:html` to `html-validate "**/*.html"`
@@ -445,7 +469,9 @@ Ordered by how much they matter.
 8. The Field Manual build script is gone; adding a chapter means editing the strip in
    15 files by hand (9.4). If chapters change often, write a small script that rebuilds
    the strip, sidebar and pager from the h2 ids.
-9. Only the home page has Open Graph tags; the CV, the manual and Field Notes share
-   poorly on social sites.
+9. Open Graph: the home page has a full share card (PR #29) and Field Notes carry citation meta;
+   the CV and the manual still share poorly.
 10. `README.md` is a public architecture write-up, not a developer guide; this spec is
     the developer guide.
+11. `#experiments` still points at the old `lordivxx.github.io` sandbox; several cards there
+    predate the current site and its privacy rules. Review when convenient.
