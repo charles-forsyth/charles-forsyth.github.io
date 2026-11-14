@@ -1,0 +1,1669 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Decreasing Time-to-Science with Cloud TPUs | Field Notes</title>
+    <meta
+      name="description"
+      content="Compiler-matched GPU vs. Cloud TPU v5e and v6e benchmarks across eight scientific workloads on Slurm: Roofline bounds, XLA cliffs and break-even rules."
+    />
+    <link
+      rel="canonical"
+      href="https://charles-forsyth.github.io/papers/2026-11-14-decreasing-time-to-science-with-cloud-tpus.html"
+    />
+    <meta property="og:type" content="article" />
+    <meta
+      property="og:url"
+      href="https://charles-forsyth.github.io/papers/2026-11-14-decreasing-time-to-science-with-cloud-tpus.html"
+    />
+    <meta
+      property="og:title"
+      content="Decreasing Time-to-Science with Cloud TPUs on a Campus Slurm Cluster | Field Notes"
+    />
+    <meta
+      property="og:description"
+      content="Compiler-matched empirical benchmarks of NVIDIA V100, NVIDIA L4, Cloud TPU v5e and Cloud TPU v6e Trillium across eight scientific workloads on a Google Cloud Slurm cluster."
+    />
+    <meta
+      property="og:image"
+      content="https://charles-forsyth.github.io/assets/og-tpu-time-to-science.jpg"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="../handbook/handbook.css" />
+    <link rel="stylesheet" href="papers.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+    <meta
+      name="citation_title"
+      content="Decreasing Time-to-Science with Cloud TPUs on a Campus Slurm Cluster"
+    />
+    <meta name="citation_author" content="Forsyth III, Charles E." />
+    <meta name="citation_publication_date" content="2026/11/14" />
+    <meta name="citation_doi" content="10.5281/zenodo.24224726" />
+    <meta
+      name="citation_pdf_url"
+      content="https://charles-forsyth.github.io/papers/pdf/2026-11-14-decreasing-time-to-science-with-cloud-tpus.pdf"
+    />
+  </head>
+  <body>
+    <header class="hero doc-hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="doc-kicker">
+            <i class="fas fa-flask"></i> Field Notes | 14 November 2026
+          </p>
+          <h1>
+            Decreasing Time-to-Science with Cloud TPUs on a Campus Slurm Cluster
+          </h1>
+          <h2>
+            Roofline, compiler and cost measurements across NVIDIA V100, NVIDIA
+            L4, Cloud TPU v5e and Cloud TPU v6e Trillium
+          </h2>
+          <div class="cta-buttons">
+            <a
+              href="pdf/2026-11-14-decreasing-time-to-science-with-cloud-tpus.pdf"
+              class="btn btn-primary"
+              ><i class="fas fa-file-pdf"></i> Download PDF (10 pages)</a
+            >
+            <a href="index.html" class="btn btn-secondary"
+              ><i class="fas fa-file-alt"></i> All Field Notes</a
+            >
+            <a href="../index.html" class="btn btn-secondary"
+              ><i class="fas fa-home"></i> Main Site</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+    <main class="section-light">
+      <div class="container doc-layout">
+        <aside class="doc-toc">
+          <h4><i class="fas fa-list"></i> On this page</h4>
+          <ul>
+            <li><a href="#abstract">Abstract</a></li>
+            <li><a href="#cite">Cite this note</a></li>
+            <li><a href="#context">Context</a></li>
+            <li><a href="#related-work">Related Work</a></li>
+            <li><a href="#architecture">Containers and Protocol</a></li>
+            <li><a href="#roofline">Roofline and Power</a></li>
+            <li><a href="#workloads">Training, Cliffs and Science</a></li>
+            <li><a href="#what-went-wrong">What Went Wrong</a></li>
+            <li><a href="#lessons">Lessons</a></li>
+            <li><a href="#next">What's Next</a></li>
+            <li><a href="#references">References</a></li>
+            <li><a href="#sources">Sources</a></li>
+          </ul>
+        </aside>
+        <article class="doc-content">
+          <h2 id="abstract">Abstract</h2>
+          <p>
+            Campus Slurm clusters face long NVIDIA GPU queues while cloud
+            providers hold Spot Tensor Processing Unit (TPU) pools at lower
+            hourly rates. Peak FLOP sheets hide whether moving CUDA code to
+            OpenXLA finishes finite batch jobs sooner, because wall time sums
+            porting, queue wait, boot, compilation, and step execution. On UC
+            Riverside's Google Cloud Slurm cluster, I built a TPU software
+            stack, static script checks, and Apptainer recipes, benchmarking
+            eight workloads across V100 (16 GiB), L4 (24 GiB, 72 W), TPU v5e (16
+            GiB), and TPU v6e Trillium (32 GiB).
+          </p>
+          <p>
+            Against compiler-matched and concurrency-tuned L4 baselines
+            (<code>torch.compile</code>, XLA-GPU <code>jax.lax.scan</code>, and
+            saturated vLLM), TPU v5e and v6e speed up steady-state runs by 2.6x
+            and 2.8x on ColabFold (9.1x on AlphaFold2 model inference), 2.1x and
+            3.6x on vLLM Qwen2.5-3B, 2.6x and 5.2x on 336M Transformer training,
+            3.6x and 4.7x on JAX Lorenz-96, 6.0x and 9.7x on ESM-2 650M, and
+            21.0x and 20.5x on JAX Hamiltonian Monte Carlo, delivering 3.0x to
+            8.1x more work per dollar than Spot L4 (7.6x to 20.3x vs. on-demand
+            L4). Persistent XLA caches, power-of-2 bucketing, and
+            <code>lax.scan</code> loops eliminate 14.8x to 224x naive-port
+            slowdowns.
+          </p>
+          <p>
+            The work was directed by me and carried out with AI agents under
+            written briefs, Crossref and adversarial verification checks, and
+            explicit approval steps. Figures come from the recorded JSONL, CSV,
+            and NPY telemetry and container manifests. This note was drafted
+            with AI assistance from those records and reviewed by me; views here
+            are my own, not UC policy.
+          </p>
+
+          <h2 id="cite">Cite this note</h2>
+          <p>
+            C. E. Forsyth III. 2026. Decreasing Time-to-Science with Cloud TPUs
+            on a Campus Slurm Cluster. Field Notes.
+            <a
+              href="https://doi.org/10.5281/zenodo.24224726"
+              target="_blank"
+              rel="noopener"
+              >doi:10.5281/zenodo.24224726</a
+            >
+          </p>
+
+          <h2 id="context">Context</h2>
+          <p>
+            Graduate students running protein models, physics integrators, or
+            batch large language model (LLM) annotation wait behind congested
+            single-GPU queues while cloud projects hold preemptible TPU quotas
+            at $0.36 to $0.55 per chip-hour.<sup class="cite"
+              ><a href="#ref-1">[1]</a>, <a href="#ref-2">[2]</a>,
+              <a href="#ref-3">[3]</a></sup
+            >
+            On Ursa Major, the Google Cloud Slurm cluster I direct at UC
+            Riverside (14 partitions, 137 node slots; 14 November 2026
+            operational snapshot, not campus allocation policy),
+            <code>us-central1</code> quota allowed 1,536 preemptible TPU v6e
+            chips and 128 TPU v5e chips versus 8 on-demand L4 GPUs
+            (<code>gpul4</code>) and 4 legacy V100 GPUs (<code>gpu1v1</code>).
+            Note the hardware scope: V100 and 72 W PCIe L4 represent this campus
+            cluster's actual GPU partitions rather than 400 to 700 W datacenter
+            A100 or H100 SXM nodes. Adding a TPU partition alone did not move
+            jobs off GPUs: when changing <code>device="cuda"</code> to
+            <code>device="xla"</code> triggered a three-minute startup stall or
+            twenty-minute recompilation loop, researchers returned to the GPU
+            queue.
+          </p>
+          <p>
+            Industry benchmarks such as MLPerf isolate steady-state step time
+            <code>t_step</code> after warmup.<sup class="cite"
+              ><a href="#ref-4">[4]</a></sup
+            >
+            Domain scientists care instead about end-to-end wall-clock
+            time-to-science for a finite batch of <code>N</code> training steps,
+            folded structures, or generated tokens:
+            <code
+              >T_science(N) = T_port + T_queue + T_boot + T_compile + N *
+              t_step</code
+            >, paired with cloud expenditure
+            <code
+              >C(N) = (p_hr / 3600) * (T_boot + T_compile + N * t_step) +
+              C_stage + C_retry</code
+            >. On CUDA GPUs, existing PyTorch scripts run unmodified (<code
+              >T_port = 0</code
+            >) and pre-compiled cuBLAS or FlashAttention-2 kernels launch in
+            milliseconds (or 6 to 56 s under <code>torch.compile</code>). On
+            Cloud TPUs, OpenXLA lowers whole graphs through StableHLO, assigns
+            tiled layouts for 128x128 (v5e) or 256x256 (v6e) systolic Matrix
+            Multiply Units (MXUs), and fuses elementwise chains into on-chip
+            Vector Memory (VMEM).<sup class="cite"
+              ><a href="#ref-5">[5]</a>, <a href="#ref-6">[6]</a></sup
+            >
+            Even under static shapes (<code>T_port = T_queue = 0</code>), a TPU
+            beats a GPU in wall time only above the critical volume
+            <code
+              >N* = ((T_boot,TPU + T_compile,TPU) - (T_boot,GPU +
+              T_compile,GPU)) / (t_step,GPU - t_step,TPU)</code
+            >. Table 1 compares the four single-chip nodes across hardware,
+            Roofline ridge points, fused and eager STREAM triad bandwidth,
+            active board power, and US Google Cloud rates.
+          </p>
+
+          <p class="table-caption">
+            Table 1. Hardware architecture, memory hierarchy, Roofline ridge
+            points, measured STREAM triad bandwidth (both fused
+            <code>torch.compile</code>/XLA and eager PyTorch), active board
+            power, and US Google Cloud node-hour rates (14 Nov 2026).
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Specification / Metric</th>
+                  <th class="num">NVIDIA V100 (<code>gpu1v1</code>)</th>
+                  <th class="num">NVIDIA L4 (<code>gpul4</code>)</th>
+                  <th class="num">TPU v5e (<code>tpuspot</code>)</th>
+                  <th class="num">TPU v6e (<code>tpu6spot</code>)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>GCE machine type</td>
+                  <td class="num"><code>n1-standard-8</code> + V100</td>
+                  <td class="num"><code>g2-standard-16</code> (PCIe)</td>
+                  <td class="num"><code>ct5lp-hightpu-1t</code></td>
+                  <td class="num"><code>ct6e-standard-1t</code></td>
+                </tr>
+                <tr>
+                  <td>Host vCPUs / Host RAM</td>
+                  <td class="num">8 vCPU / 30 GiB</td>
+                  <td class="num">16 vCPU / 64 GiB</td>
+                  <td class="num">24 vCPU / 48 GiB</td>
+                  <td class="num">44 vCPU / 172 GiB</td>
+                </tr>
+                <tr>
+                  <td>Matrix engine per chip</td>
+                  <td class="num">640 Volta TC</td>
+                  <td class="num">240 Ada TC</td>
+                  <td class="num">4x(128x128) MXU</td>
+                  <td class="num">2x(256x256) MXU</td>
+                </tr>
+                <tr>
+                  <td>Peak dense half TFLOP/s</td>
+                  <td class="num">125.0 (FP16)</td>
+                  <td class="num">60.5 (BF16)</td>
+                  <td class="num">197.0 (BF16)</td>
+                  <td class="num">918.0 (BF16)</td>
+                </tr>
+                <tr>
+                  <td>Peak dense FP8 TFLOP/s</td>
+                  <td class="num">Unsupported</td>
+                  <td class="num">121.0</td>
+                  <td class="num">Upcast to BF16</td>
+                  <td class="num">1,836.0</td>
+                </tr>
+                <tr>
+                  <td>Device memory &amp; peak BW</td>
+                  <td class="num">16 GiB (900 GB/s)</td>
+                  <td class="num">24 GiB (300 GB/s)</td>
+                  <td class="num">16 GiB (819 GB/s)</td>
+                  <td class="num">32 GiB (1,638 GB/s)</td>
+                </tr>
+                <tr>
+                  <td>Half-precision ridge point</td>
+                  <td class="num">138.9 FLOP/B</td>
+                  <td class="num">201.7 FLOP/B</td>
+                  <td class="num">240.5 FLOP/B</td>
+                  <td class="num">560.4 FLOP/B</td>
+                </tr>
+                <tr>
+                  <td>Fused STREAM triad BW</td>
+                  <td class="num">843.8 +/- 0.6 GB/s</td>
+                  <td class="num">234.4 +/- 0.2 GB/s</td>
+                  <td class="num">617.9 +/- 0.3 GB/s</td>
+                  <td class="num">1,152.1 +/- 11.4 GB/s</td>
+                </tr>
+                <tr>
+                  <td>Eager PyTorch STREAM BW</td>
+                  <td class="num">473.3 +/- 45.4 GB/s</td>
+                  <td class="num">133.5 +/- 12.1 GB/s</td>
+                  <td class="num">XLA-fused</td>
+                  <td class="num">XLA-fused</td>
+                </tr>
+                <tr>
+                  <td>Measured active board power</td>
+                  <td class="num">265.6 W (311.3 W pk)</td>
+                  <td class="num">71.0 W (72 W cap)</td>
+                  <td class="num">Not guest-exposed</td>
+                  <td class="num">Not guest-exposed</td>
+                </tr>
+                <tr>
+                  <td>US On-Demand / Spot (USD/h)</td>
+                  <td class="num">$2.86 / $0.86</td>
+                  <td class="num">$1.15 / $0.46</td>
+                  <td class="num">$1.20 / $0.36</td>
+                  <td class="num">$2.70 / $0.55</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="table-note">
+            Notes: Each v6e chip holds one TensorCore with two 256x256 MXUs
+            performing 128K BF16 MACs (256K FLOPs) per MXU per cycle (~1.75
+            GHz). NVIDIA L4 datasheets quote 121 TFLOP/s BF16 and 242 TFLOP/s
+            FP8 with 2:4 structured sparsity; dense ceilings are 60.5 and 121.0
+            TFLOP/s. On STREAM triad (768 MiB, crediting 12 B/element),
+            <code>torch.compile</code> fuses GPU kernels to 12 B/element (663.9
+            and 227.6 GB/s under XLA-GPU JAX), whereas eager PyTorch launches
+            two kernels moving 20 B/element physically. Cloud TPU VMs omit guest
+            Watt counters.<sup class="cite"><a href="#ref-7">[7]</a></sup>
+            Fallback Spot rates were $0.425/h (<code>us-south1</code> v5e) and
+            $0.605/h (<code>europe-west4</code> v6e).
+          </p>
+
+          <h2 id="related-work">Related Work</h2>
+          <p>
+            Google's architectural papers document four generations of
+            systolic-array specialization. Jouppi et al. showed that
+            inference-only TPU v1 reached 92 INT8 TOPS with 15x to 30x speedups
+            over contemporary CPUs and K80 GPUs by replacing scalar register
+            files and caches with a 256x256 MAC array.<sup class="cite"
+              ><a href="#ref-8">[8]</a></sup
+            >
+            TPU v2 and v3 added high-bandwidth memory (HBM), vector/scalar
+            coprocessors, and hardware <code>bfloat16</code> (<code>bf16</code>)
+            multiply with <code>float32</code> accumulation across 1,024-chip
+            pods.<sup class="cite"
+              ><a href="#ref-9">[9]</a>, <a href="#ref-10">[10]</a></sup
+            >
+            TPU v4 introduced optical circuit switches and SparseCores,
+            outperforming NVIDIA A100 by 1.2x to 1.7x at lower power.<sup
+              class="cite"
+              ><a href="#ref-7">[7]</a></sup
+            >
+            Cloud TPU v5e targets single-chip and small-slice cost efficiency
+            (197 BF16 TFLOP/s, 819 GB/s HBM), while sixth-generation Cloud TPU
+            v6e (Trillium) expands MXUs from 128x128 to 256x256, doubles HBM
+            capacity and bandwidth to 32 GiB and 1,638 GB/s, and adds native FP8
+            support reaching 918 BF16 and 1,836 FP8 TFLOP/s per chip.<sup
+              class="cite"
+              ><a href="#ref-1">[1]</a>, <a href="#ref-2">[2]</a></sup
+            >
+            Prior TPU studies focus on pod-scale pretraining rather than
+            single-chip campus batch jobs where elastic VM boot and cold XLA
+            compilation compete directly against runtime.
+          </p>
+          <p>
+            On the compiler side, the Roofline model of Williams, Waterman, and
+            Patterson bounds kernel throughput by
+            <code>min(Peak_FLOPs, Peak_BW * I)</code>, placing the ridge point
+            at <code>I* = Peak_FLOPs / Peak_BW</code>.<sup class="cite"
+              ><a href="#ref-11">[11]</a></sup
+            >
+            Mixed-precision FP16 training requires dynamic loss scaling to
+            prevent subnormal gradient underflow,<sup class="cite"
+              ><a href="#ref-12">[12]</a></sup
+            >
+            whereas BF16 retains FP32's 8-bit exponent.<sup class="cite"
+              ><a href="#ref-10">[10]</a></sup
+            >
+            Dao's FlashAttention and FlashAttention-2 tile attention blocks in
+            GPU SRAM to eliminate quadratic HBM traffic;<sup class="cite"
+              ><a href="#ref-13">[13]</a>, <a href="#ref-14">[14]</a></sup
+            >
+            on TPUs, OpenXLA fuses reduction and elementwise subgraphs through
+            StableHLO,<sup class="cite"
+              ><a href="#ref-15">[15]</a>, <a href="#ref-5">[5]</a>,
+              <a href="#ref-6">[6]</a></sup
+            >
+            while custom block-tiled online softmax uses Pallas SplashAttention
+            kernels.<sup class="cite"><a href="#ref-16">[16]</a></sup> Ansel et
+            al. built PyTorch 2 (<code>TorchDynamo</code> and
+            <code>TorchInductor</code>) for Python bytecode capture and Triton
+            kernel fusion on CUDA,<sup class="cite"
+              ><a href="#ref-17">[17]</a></sup
+            >
+            contrasting with <code>torch_xla</code>'s lazy tensor tracing.
+          </p>
+          <p>
+            In scientific workloads and cloud-bursting, AlphaFold2,<sup
+              class="cite"
+              ><a href="#ref-18">[18]</a></sup
+            >
+            ColabFold,<sup class="cite"><a href="#ref-19">[19]</a></sup>
+            ESM-2,<sup class="cite"><a href="#ref-20">[20]</a></sup>
+            differentiable integrators in JAX-MD and Diffrax,<sup class="cite"
+              ><a href="#ref-21">[21]</a>, <a href="#ref-22">[22]</a>,
+              <a href="#ref-23">[23]</a></sup
+            >
+            Hamiltonian Monte Carlo,<sup class="cite"
+              ><a href="#ref-24">[24]</a></sup
+            >
+            and vLLM PagedAttention<sup class="cite"
+              ><a href="#ref-25">[25]</a></sup
+            >
+            provide my application baselines. Hybrid Slurm bursting tools such
+            as Skyway,<sup class="cite"
+              ><a href="#ref-26">[26]</a>, <a href="#ref-27">[27]</a></sup
+            >
+            multi-cloud preemptible GPU pools,<sup class="cite"
+              ><a href="#ref-28">[28]</a></sup
+            >
+            and Singularity/Apptainer containers<sup class="cite"
+              ><a href="#ref-29">[29]</a></sup
+            >
+            assume homogeneous x86/CUDA targets (<code>T_port = 0</code>). I
+            measure and mitigate the cross-architecture boundary when a Slurm
+            cluster bursts GPU-authored science onto Cloud TPUs.
+          </p>
+
+          <h2 id="architecture">Containers and Experimental Protocol</h2>
+          <p>
+            To expose Cloud TPUs as standard Slurm partitions rather than
+            standalone VMs, I deployed three software layers on Ursa Major prior
+            to benchmarking. First, I isolated TPU modules under
+            <code>/apps/modulefiles-tpu</code> (prepended automatically on
+            <code>tpu</code>, <code>tpuspot</code>, and
+            <code>tpu6spot</code> nodes). Auditing initial TPU Python installs
+            uncovered 9.11 GiB of dead <code>nvidia-*-cu12</code> and
+            <code>triton</code> wheels pulled transitively by scientific
+            libraries; purging them and installing native OpenXLA wheels
+            produced seven modules: <code>python-tpu/2026.10</code> (JAX 0.12.0,
+            Flax 0.12.10 NNX, Optax 0.2.8, Orbax 0.12.7, Diffrax, BlackJAX),
+            <code>pytorch-tpu/2026.10</code> (PyTorch 2.9.1+cpu,
+            <code>torch_xla</code> 2.9.0, Transformers, Fair-ESM 2.0.0),
+            <code>vllm-tpu/2026.11</code>, <code>colabfold-tpu/1.5.5</code>,
+            <code>python-ts-tpu/2026.11</code>, <code>jax-sci/2026.11</code>,
+            and <code>r-keras-tpu/2026.11</code>. Second, because Compute Engine
+            rejects bulk MIG inserts on TPU machine types, I patched
+            <code>slurm-gcp</code>'s <code>resume.py</code> to issue per-node
+            <code>instances.insert</code> calls with sequential multi-zone
+            fallback across <code>us-central1-b/a/c</code>, updated Ursa Major's
+            MCP assistant (<code>ursa-bifrost</code> <code>v0.10.10</code>,
+            covered in an
+            <a href="2026-10-29-read-mostly-ai-on-slurm.html"
+              >earlier Field Note</a
+            >) to validate partition-scoped TPU modules in
+            <code>script_check</code>, and published a campus porting guide
+            (KB053).
+          </p>
+          <p>
+            Third, to document exact provenance, I recorded SHA-256 digests and
+            <code>pip freeze</code> manifests across all runtimes. Primary GPU
+            PyTorch runs used <code>python-ml/2026.09</code> (PyTorch
+            2.5.1+cu124) and <code>vllm-0.6.4-cuda12.4.sif</code> (4.84 GiB,
+            <code>2e95aeda</code>, TorchInductor + Triton 3.1.0 for
+            <code>torch.compile</code> and W7 GPU vLLM); GPU XLA-JAX controls
+            and W5 ColabFold ran inside
+            <code>alphafold-colabfold.sif</code> (2.69 GiB,
+            <code>ee874d9f</code>, CUDA JAX 0.4.20 + ColabFold 1.5.5). Primary
+            TPU runs used <code>python-tpu/2026.10</code> (JAX W1-W3, W6),
+            <code>pytorch-tpu/2026.10</code> (PyTorch/XLA W1-W4, W6, W8),
+            <code>colabfold-tpu/1.5.5</code> (W5), and
+            <code>vllm-tpu.sif</code> (2.15 GiB, <code>861b0279</code>, vLLM V1
+            OpenXLA engine for W7). I also built standalone Apptainer images
+            from repository <code>.def</code> files,
+            <code>ursa-bench-gpu.sif</code> (4.35 GiB, <code>b646a76f</code>)
+            and <code>ursa-bench-tpu.sif</code> (493 MiB,
+            <code>78d87384</code>), verifying container-versus-module parity
+            across W1 GEMM/STREAM (-0.22% V100, +0.84% L4, 0.002% to 0.25% v5e),
+            W4 650M ESM-2 (-0.001% BF16 and -0.010% FP16 on L4), and W6a/W6b
+            (0.002% and 1.57% on v5e), bounding Apptainer overhead at &lt;=
+            1.57%. Every run staged weights (13.4 to 16.4 GiB) onto node-local
+            SSD (<code>/tmp</code>) via dereferenced <code>cp -rL</code> before
+            timing began, separating compilation from <code>N = 5</code> timed
+            trials (<code>N = 3</code> on TPU ColabFold and W3 sweeps) with
+            10,000-resample bootstrap 95% CIs and exact permutation Mann-Whitney
+            U p-values.
+          </p>
+
+          <h2 id="roofline">Empirical Roofline, Precision and Power</h2>
+          <p>
+            Workload W1 measures memory bandwidth and matrix multiplication
+            throughput across precisions and aspect ratios (Figure 1 and Table
+            2). On the 768 MiB STREAM triad (<code>a = b + 2c</code>), eager
+            PyTorch on NVIDIA L4 reports 133.5 +/- 12.1 GB/s because two unfused
+            CUDA kernels move 20 B/element physically across GDDR6 (232.7 GB/s
+            physical traffic). Compiling the triad with
+            <code>torch.compile</code> fuses both ops into one 12 B/element
+            Triton kernel, lifting L4 to 234.4 +/- 0.2 GB/s (78.1% of its 300
+            GB/s peak) and V100 to 843.8 +/- 0.6 GB/s (93.8% of 900 GB/s). Even
+            against fused <code>torch.compile</code> L4, TPU v5e (617.9 +/- 0.3
+            GB/s) and TPU v6e Trillium (1,152.1 +/- 11.4 GB/s, 70.3% of 1,638
+            GB/s) deliver 2.64x and 4.91x higher HBM bandwidth (8.63x [8.24,
+            9.41] over eager L4).
+          </p>
+
+          <figure class="doc-figure">
+            <img
+              src="img/2026-11-14/fig1_roofline.png"
+              width="1680"
+              height="696"
+              alt="Two-panel chart showing empirical log-log Roofline curves across V100, L4, TPU v5e and TPU v6e on the left, and matched-compiler horizontal speedup bars relative to NVIDIA L4 across seven workloads on the right."
+            />
+            <figcaption>
+              Figure 1. (a) Empirical Roofline across NVIDIA V100 (FP16), NVIDIA
+              L4 (BF16), Cloud TPU v5e (BF16), and Cloud TPU v6e Trillium (BF16
+              and native FP8). At M=1 decode (1.00 FLOP/B), all four chips drop
+              below 0.6 TFLOP/s. (b) Steady-state speedup over compiler-matched
+              and concurrency-tuned NVIDIA L4 (1.0x) across seven scientific
+              workloads.
+            </figcaption>
+          </figure>
+
+          <p class="table-caption">
+            Table 2. Steady-state performance (mean +/- SD, N=5 trials; N=3 on
+            TPU W5), cold/warm compilation latency, compiler-matched TPU v6e
+            speedup over NVIDIA L4 with 95% bootstrap CIs and Mann-Whitney U
+            p-values, Spot-vs.-Spot work per dollar (vs. L4 Spot at $0.46/h),
+            and absolute best Spot output per dollar.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Workload</th>
+                  <th>Metric / Mode</th>
+                  <th class="num">V100 (16G)</th>
+                  <th class="num">L4 (24G)</th>
+                  <th class="num">TPU v5e (16G)</th>
+                  <th class="num">TPU v6e (32G)</th>
+                  <th class="num">v6e vs. L4 [95% CI] (p)</th>
+                  <th class="num">Spot/$ vs. L4</th>
+                  <th class="num">Best Spot Output/$</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>W1 STREAM</td>
+                  <td>Fused BW (GB/s)</td>
+                  <td class="num">843.8 +/- 0.6</td>
+                  <td class="num">234.4 +/- 0.2</td>
+                  <td class="num">617.9 +/- 0.3</td>
+                  <td class="num">1,152.1 +/- 11.4</td>
+                  <td class="num">4.91x [4.87, 4.95] (.008)</td>
+                  <td class="num">4.11x (v6e)</td>
+                  <td class="num">v6e: 7.54 TB/$</td>
+                </tr>
+                <tr>
+                  <td>W1 GEMM 16k</td>
+                  <td>Half TFLOP/s</td>
+                  <td class="num">95.5 +/- 0.2</td>
+                  <td class="num">52.8 +/- 0.3</td>
+                  <td class="num">189.9 +/- 0.02</td>
+                  <td class="num">705.0 +/- 19.9</td>
+                  <td class="num">13.35x [13.01, 13.59] (.008)</td>
+                  <td class="num">11.16x (v6e)</td>
+                  <td class="num">v6e: 4.61 EFLOP/$</td>
+                </tr>
+                <tr>
+                  <td>W1 GEMM 16k</td>
+                  <td>FP8 TFLOP/s</td>
+                  <td class="num">Unsupported</td>
+                  <td class="num">95.5 +/- 0.4</td>
+                  <td class="num">183.3 +/- 0.02</td>
+                  <td class="num">612.9 +/- 0.3</td>
+                  <td class="num">6.42x [6.40, 6.44] (.008)</td>
+                  <td class="num">5.37x (v6e)</td>
+                  <td class="num">v6e: 4.01 EFLOP/$</td>
+                </tr>
+                <tr>
+                  <td>W2 LLM (<code>bs=8</code>)</td>
+                  <td>Compiled ktok/s</td>
+                  <td class="num">OOM (16G)</td>
+                  <td class="num">13.13 +/- 0.15</td>
+                  <td class="num">34.27 +/- 0.21</td>
+                  <td class="num">65.85 +/- 0.89</td>
+                  <td class="num">5.01x [4.95, 5.09] (.008)</td>
+                  <td class="num">4.19x (v6e)</td>
+                  <td class="num">v6e: 431 Mtok/$</td>
+                </tr>
+                <tr>
+                  <td>W2 LLM (peak)</td>
+                  <td>Max-bs ktok/s</td>
+                  <td class="num">19.82 +/- 0.01</td>
+                  <td class="num">13.13 +/- 0.15</td>
+                  <td class="num">34.27 +/- 0.21</td>
+                  <td class="num">68.75 +/- 0.45</td>
+                  <td class="num">5.24x [5.18, 5.29] (.008)</td>
+                  <td class="num">4.38x (v6e)</td>
+                  <td class="num">v6e: 450 Mtok/$</td>
+                </tr>
+                <tr>
+                  <td>W2 Init Cache</td>
+                  <td>Cold / Warm (s)</td>
+                  <td class="num">34.3 / 0.58</td>
+                  <td class="num">55.8 / 0.69</td>
+                  <td class="num">20.33 / 2.74</td>
+                  <td class="num">22.18 / 2.13</td>
+                  <td class="num">10.4x XLA cache gain</td>
+                  <td class="num">-</td>
+                  <td class="num">-</td>
+                </tr>
+                <tr>
+                  <td>W4 ESM-2 650M</td>
+                  <td>Embed prot/s</td>
+                  <td class="num">46.69 +/- 0.01</td>
+                  <td class="num">16.82 +/- 0.03</td>
+                  <td class="num">100.2 +/- 0.35</td>
+                  <td class="num">163.2 +/- 0.16</td>
+                  <td class="num">9.70x [9.69, 9.72] (.016)</td>
+                  <td class="num">8.12x (v6e)</td>
+                  <td class="num">v6e: 1.07M prot/$</td>
+                </tr>
+                <tr>
+                  <td>W5 ColabFold</td>
+                  <td>238-aa GFP warm (s)</td>
+                  <td class="num">43.17 +/- 0.13</td>
+                  <td class="num">50.03 +/- 0.36</td>
+                  <td class="num">19.16 +/- 0.01</td>
+                  <td class="num">18.12 +/- 0.64</td>
+                  <td class="num">2.76x [2.66, 2.83] (.036)</td>
+                  <td class="num">3.34x (v5e)</td>
+                  <td class="num">v5e: 522 folds/$</td>
+                </tr>
+                <tr>
+                  <td>W6a Lorenz-96</td>
+                  <td>JAX scan GUpd/s</td>
+                  <td class="num">10.00 +/- 0.03</td>
+                  <td class="num">4.14 +/- 0.02</td>
+                  <td class="num">14.88 +/- 0.00</td>
+                  <td class="num">19.39 +/- 0.06</td>
+                  <td class="num">4.69x [4.67, 4.71] (.008)</td>
+                  <td class="num">4.59x (v5e)</td>
+                  <td class="num">v5e: 149 TUpd/$</td>
+                </tr>
+                <tr>
+                  <td>W6b HMC 128D</td>
+                  <td>JAX scan MGrad/s</td>
+                  <td class="num">7.11 +/- 0.03</td>
+                  <td class="num">7.74 +/- 0.03</td>
+                  <td class="num">162.9 +/- 2.91</td>
+                  <td class="num">158.9 +/- 3.79</td>
+                  <td class="num">20.52x [20.07, 20.80] (.008)</td>
+                  <td class="num">26.88x (v5e)</td>
+                  <td class="num">v5e: 1.63 TGrad/$</td>
+                </tr>
+                <tr>
+                  <td>W7 vLLM 3B</td>
+                  <td>Saturated tok/s</td>
+                  <td class="num">3,907 +/- 55</td>
+                  <td class="num">2,562 +/- 27</td>
+                  <td class="num">5,360 +/- 68</td>
+                  <td class="num">9,303 +/- 195</td>
+                  <td class="num">3.63x [3.56, 3.69] (.008)</td>
+                  <td class="num">3.04x (v6e)</td>
+                  <td class="num">v6e: 60.9 Mtok/$</td>
+                </tr>
+                <tr>
+                  <td>W7 Engine Init</td>
+                  <td>Cold / Warm init (s)</td>
+                  <td class="num">22.5 / 18.1</td>
+                  <td class="num">22.2 / 17.7</td>
+                  <td class="num">224.5 / 97.2</td>
+                  <td class="num">193.7 / 83.2</td>
+                  <td class="num">2.33x v6e (2.31x v5e)</td>
+                  <td class="num">-</td>
+                  <td class="num">-</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="table-note">
+            Notes: W1/W2 GPU columns report <code>torch.compile</code> (vs.
+            eager PyTorch L4: STREAM is 8.63x [8.24, 9.41], W2 peak is 5.87x).
+            W5 uses N=5 GPU and N=3 TPU warm runs; isolated AlphaFold2 model
+            inference is 3.80 s on v6e vs. 34.48 s on L4 (9.07x). W6a/W6b report
+            identical <code>jax.lax.scan</code> across CUDA XLA-GPU and TPU
+            (<code>torch.compile</code> reaches 13.09 on L4 and 21.39 GUpd/s on
+            V100 for W6a, and 4.29 MGrad/s on L4 for W6b; eager PyTorch on L4 is
+            1.14 GUpd/s and 0.41 MGrad/s). W7 reports peak concurrency (<code
+              >mseqs=256</code
+            >
+            on L4, <code>128</code> on V100, <code>64</code> on vLLM-TPU V1; at
+            matched <code>mseqs=64</code>, L4 is 1,682 +/- 12 tok/s and v6e is
+            5.53x). Dividing Spot TPU output/$ by On-Demand L4 ($1.15/h)
+            multiplies the Spot/$ column by 2.50x (7.59x to 20.29x across
+            W2/W4/W5/W7).
+          </p>
+
+          <p>
+            At <code>N = 16,384</code> square GEMM, NVIDIA L4 sustains 52.8 +/-
+            0.3 TFLOP/s in BF16 because board power pins against its 72 W PCIe
+            thermal limit (71.0 W active mean at 82 C, Figure 5a), while native
+            Ada FP8 (<code>torch._scaled_mm</code> on
+            <code>float8_e4m3fn</code>) reaches 95.5 +/- 0.4 TFLOP/s. TPU v5e
+            sustains 189.90 +/- 0.02 TFLOP/s in BF16 (96.4% of its 197 TFLOP/s
+            peak), and TPU v6e sustains 705.0 +/- 19.9 TFLOP/s on square 16k
+            BF16 GEMM and 771.1 TFLOP/s median (84.0% of its 918 TFLOP/s peak)
+            on rectangular LLM prefill projections. Multi-pass IEEE
+            <code>Precision.HIGHEST</code> FP32 emulation yields 31.2 TFLOP/s on
+            v5e and 118.2 TFLOP/s on v6e (2.2x and 8.1x V100 FP32). For
+            <code>float8_e4m3fn</code> inputs with a BF16 output buffer (1+1+2
+            vs. 2+2+2 bytes/element), OpenXLA HLO
+            <code>cost_analysis()</code> records a 33.3% HBM byte reduction
+            (1.074 GB vs. 1.611 GB) and 612.9 +/- 0.3 TFLOP/s. Conversely, at
+            <code>M = 1</code> single-token LLM decode (<code
+              >(1, 4096) x (4096, 12288)</code
+            >
+            in BF16: 100.66M FLOPs over 100.70M bytes = 1.00 FLOP/B, far left of
+            Trillium's 560.4 FLOP/B ridge point), every chip drops below 0.6
+            TFLOP/s (0.22 on L4, 0.59 on V100, 0.39 on v5e, 0.51 TFLOP/s on
+            v6e). Batching to <code>M = 256</code> lifts intensity to 190
+            FLOP/B, raising v5e to 164.2 and v6e to 293.8 TFLOP/s.
+          </p>
+
+          <h2 id="workloads">
+            Training, Compiler Cliffs and Scientific Applications
+          </h2>
+          <p>
+            Workload W2 trains a 24-layer, 16-head (<code>d_model = 1,024</code
+            >, <code>S = 1,024</code>) causal Transformer decoder with AdamW
+            (336.23M non-embedding/tied parameters; 368.67M untied, Figure 2).
+            Under eager PyTorch with FlashAttention-2 SDPA at <code>bs=4</code>,
+            CUDA profiling shows L4 spending 58.0% of device time in
+            bandwidth-bound LayerNorm, GELU, and AdamW kernels versus 37.4% on
+            V100. Enabling <code>torch.compile</code> fuses those elementwise
+            kernels into Triton, lifting V100 (<code>bs=4</code>) by 15.8% to
+            19.82 +/- 0.01 ktok/s (34.3 s compile) and L4 (<code>bs=8</code>) by
+            12.2% from 11.71 +/- 0.02 to 13.13 +/- 0.15 ktok/s (55.8 s compile,
+            17,666 MiB VRAM). At matched <code>bs=8</code>, 16 GiB TPU v5e runs
+            both <code>torch_xla</code> SDPA (30.71 ktok/s) and Flax NNX (34.27
+            +/- 0.21 ktok/s, 7,725 MiB; 2.61x compiled L4). Running identical
+            pure-JAX <code>matmul_softmax</code> code on XLA-GPU vs. XLA-TPU
+            isolates why: XLA-GPU retains all 24 layers'
+            <code>f32[B,16,1024,1024]</code> softmax buffers for backward and
+            OOMs both 16 GiB V100 and 24 GiB L4 even at <code>bs=4</code> (11.17
+            GiB buffer request), whereas XLA-TPU fuses scale/mask/softmax
+            reductions and rematerializes intermediates within 7.73 GiB (longer
+            contexts <code>S &gt;= 4,096</code> still require Pallas
+            SplashAttention online-softmax tiling<sup class="cite"
+              ><a href="#ref-16">[16]</a></sup
+            >). On 32 GiB TPU v6e, matched <code>bs=8</code> reaches 65.85 +/-
+            0.89 ktok/s (5.01x compiled L4) and <code>bs=16</code> reaches 68.75
+            +/- 0.45 ktok/s (5.24x compiled L4, 5.87x eager L4). Setting
+            <code>JAX_COMPILATION_CACHE_DIR</code> cuts first-step compile time
+            by 7.4x on v5e (20.33 to 2.74 s) and 10.4x to 10.8x on v6e (22.18 to
+            2.13 s at <code>bs=16</code>), beating GPU
+            <code>torch.compile</code> cold startup (34 to 56 s).
+          </p>
+
+          <figure class="doc-figure">
+            <img
+              src="img/2026-11-14/fig2_transformer_memory_cache.png"
+              width="1680"
+              height="660"
+              loading="lazy"
+              alt="Two-panel bar chart showing 336M Transformer training throughput with torch.compile and HBM OOM boundaries across batch sizes 4, 8 and 16 on the left, and persistent XLA cache startup speedups on the right."
+            />
+            <figcaption>
+              Figure 2. (a) W2 336M Transformer training throughput (including
+              GPU <code>torch.compile</code>) and HBM OOM limits across V100,
+              L4, TPU v5e, and 32 GiB TPU v6e. (b) Cold vs. warm persistent XLA
+              cache startup latency on JAX 336M training and vLLM Qwen2.5-3B
+              serving.
+            </figcaption>
+          </figure>
+
+          <p>
+            Workloads W3, W6, and W8 isolate three OpenXLA compiler cliffs and
+            decompose compiler fusion from TPU silicon (Figure 3 and Table 3).
+            In W3, padding 48 variable-length sequence batches (<code>L</code>
+            in 96..1024) to batch multiples of 8 creates 17 shapes: GPUs finish
+            in 11.49 s (V100) and 17.56 s (L4), whereas TPUs recompile 17 times
+            and stall for 204.7 to 358.3 s. Rounding lengths to three power-of-2
+            buckets (<code>256, 512, 1024</code>) cuts first-epoch v6e wall time
+            by 14.8x (312.60 s down to 21.17 s cold, 4.11 s warm). In W6a
+            (65,536 chaotic 64-D Lorenz-96 trajectories, pure FP32 vector ops
+            with zero MXU matmuls), running all three GPU compiler stacks
+            clarifies why naive comparisons mislead: L4 rises from 1.14
+            GUpdates/s (eager) to 4.14 +/- 0.02 (XLA-GPU
+            <code>jax.lax.scan</code>, over which TPU v5e and v6e achieve 3.60x
+            and 4.69x) and 13.09 GUpdates/s (<code>torch.compile</code>), while
+            900 GB/s HBM2 V100 under <code>torch.compile</code> hits 21.39
+            GUpdates/s, slightly ahead of v6e (19.39 GUpdates/s) on pure vector
+            streaming. For reverse-mode autodiff across
+            <code>H = 200</code> steps, unrolling Python loops in
+            <code>torch_xla</code> takes 45.58 s to compile on v6e, whereas
+            <code>jax.lax.scan</code> + <code>@jax.checkpoint</code> holds
+            compile time flat at 0.58 to 1.03 s across L4 and TPUs while running
+            <code>H = 200</code> backward in 16.67 ms on v6e (2.55x faster than
+            L4 JAX's 42.52 ms). On 128-chain, 128-D Rosenbrock HMC (4,000
+            leapfrog steps = 5.12M gradient evaluations), L4 rises from 0.41
+            MGradEvals/s (eager) to 4.29 (<code>torch.compile</code>) and 7.74
+            +/- 0.03 MGradEvals/s (XLA-GPU <code>jax.lax.scan</code>, 367.5k
+            ESS/s), while identical <code>jax.lax.scan</code> code on TPU v5e
+            and v6e reaches 162.9 and 158.9 MGradEvals/s (~7.6M ESS/s, verified
+            identically from off-mode <code>q0 = -1</code>), a genuine 21.0x and
+            20.5x VMEM silicon speedup. In W8, enforcing
+            <code>torch_xla.sync()</code> +
+            <code>drop_last=True</code> eliminates 55 GiB host-RAM DAG
+            accumulation and speeds up Epoch 1 ViT training on v6e by 107.3x
+            (1,964.3 s down to 18.30 s; on L4, 4-arm ablation confirms
+            <code>loss.item()</code> adds &lt;1% overhead, 0.736 s vs. 0.733 s),
+            while static <code>torch.where</code> speeds up masked projection by
+            224x (18.14 s down to 0.081 s).
+          </p>
+
+          <figure class="doc-figure">
+            <img
+              src="img/2026-11-14/fig3_traps_and_cures.png"
+              width="1680"
+              height="612"
+              loading="lazy"
+              alt="Three-panel chart showing dynamic shape recompilation cliff versus bucketing in panel a, linear versus constant autodiff compile scaling across GPU and TPU in panel b, and naive versus KB053 porting wall times in panel c."
+            />
+            <figcaption>
+              Figure 3. OpenXLA compiler cliffs and structural cures: (a) W3
+              dynamic sequence padding vs. 3-bucket padding; (b) W6a O(H) Python
+              loop unrolling vs. O(1) jax.lax.scan + checkpoint compilation
+              across L4, v5e, and v6e; (c) W8 naive cuda-to-xla ports vs. KB053
+              idiomatic ports on TPU v6e.
+            </figcaption>
+          </figure>
+
+          <p class="table-caption">
+            Table 3. Controlled ablation of GPU-style patterns versus
+            OpenXLA-idiomatic cures across NVIDIA L4, TPU v5e, and TPU v6e.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Case / Pattern</th>
+                  <th>Variant</th>
+                  <th class="num">L4 (s)</th>
+                  <th class="num">TPU v5e (s)</th>
+                  <th class="num">TPU v6e (s)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>W3 48-batch NLP</td>
+                  <td>Dynamic batch-max (17 shapes, ep. 1)</td>
+                  <td class="num">17.56</td>
+                  <td class="num">358.34</td>
+                  <td class="num">312.60</td>
+                </tr>
+                <tr>
+                  <td>W3 48-batch NLP</td>
+                  <td>Bucketed 256/512/1024 (ep. 1 / warm)</td>
+                  <td class="num">18.25</td>
+                  <td class="num">26.58 / 8.02</td>
+                  <td class="num">21.17 / 4.11</td>
+                </tr>
+                <tr>
+                  <td>W6a Autodiff H=200</td>
+                  <td>Unrolled Python loop (compile / step)</td>
+                  <td class="num">0.34 / 0.33</td>
+                  <td class="num">51.83 / 0.30</td>
+                  <td class="num">45.58 / 0.23</td>
+                </tr>
+                <tr>
+                  <td>W6a Autodiff H=200</td>
+                  <td>
+                    <code>jax.lax.scan + checkpoint</code> (compile / step)
+                  </td>
+                  <td class="num">0.61 / 0.043</td>
+                  <td class="num">0.64 / 0.028</td>
+                  <td class="num">0.75 / 0.017</td>
+                </tr>
+                <tr>
+                  <td>W6b HMC 4k-leapfrog</td>
+                  <td>Eager / <code>compile</code> / JAX <code>scan</code></td>
+                  <td class="num">0.93 / 0.12 / 0.066</td>
+                  <td class="num">- / 0.0031</td>
+                  <td class="num">1.45 / 0.0032</td>
+                </tr>
+                <tr>
+                  <td>W8 ViT host sync</td>
+                  <td>
+                    Naive per-step <code>loss.item()</code> (ep. 1 / warm)
+                  </td>
+                  <td class="num">0.74 / 0.74</td>
+                  <td class="num">1,583.1 / 4.51</td>
+                  <td class="num">1,964.3 / 3.18</td>
+                </tr>
+                <tr>
+                  <td>W8 ViT host sync</td>
+                  <td>KB053 <code>drop_last + sync()</code> (ep. 1 / warm)</td>
+                  <td class="num">0.70 / 0.70</td>
+                  <td class="num">25.44 / 1.20</td>
+                  <td class="num">18.30 / 0.88</td>
+                </tr>
+                <tr>
+                  <td>W8 Boolean mask</td>
+                  <td>
+                    Naive <code>x[m]</code> / KB053 <code>torch.where</code>
+                  </td>
+                  <td class="num">0.27 / 0.25</td>
+                  <td class="num">16.73 / 0.108</td>
+                  <td class="num">18.14 / 0.081</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            Across domain applications (Figure 4 and Figure 5), ESM-2 650M
+            throughput scales from 16.82 prot/s on L4 and 46.69 prot/s on V100
+            to 100.2 prot/s on v5e (5.96x L4) and 163.2 prot/s on v6e (9.70x
+            L4). Testing both 16 curated natural UniProt proteins and synthetic
+            510-aa uniform-random sequences against exact FP32 exposed a sharp
+            distribution effect (Table 4): on natural evolutionary proteins,
+            both FP16 (<code>cos = 0.9999998</code>) and BF16 (<code
+              >cos = 0.9999875</code
+            >) match FP32 closely, whereas high-entropy uniform sequences push
+            33 pre-norm layers into FP16's 5-bit exponent ceiling (<code
+              >cos = 0.9830</code
+            >
+            on V100 FP16 vs. <code>0.999937</code> across L4, v5e, and v6e
+            BF16). On ColabFold 1.5.5 (<code
+              >--msa-mode single_sequence --num-models 1</code
+            >, 3 recycles unrelaxed to eliminate external MMseqs2 API variance,
+            intentionally yielding single-sequence pLDDTs of 27 to 50), 238-aa
+            GFP wall time drops across <code>N = 5</code> GPU and
+            <code>N = 3</code> TPU warm runs (<code>p = .036</code>) from 50.03
+            +/- 0.36 s on L4 and 43.17 +/- 0.13 s on V100 to 19.16 +/- 0.01 s on
+            v5e (2.61x L4) and 18.12 +/- 0.64 s on v6e (2.76x L4): isolated
+            3-recycle JAX model inference drops 9.07x (34.48 s on L4 to 3.80 s
+            on v6e), leaving 14.32 s of Python/Biopython host wrapper overhead
+            so Spot v5e ($0.36/h, 522 folds/$) beats Spot v6e per dollar. On
+            offline vLLM batch generation (<code>Qwen2.5-3B-Instruct</code>, 128
+            unique-prefix prompts x 256 tokens,
+            <code>enable_prefix_caching=False</code>, comparing deployed CUDA
+            <code>vllm 0.6.4</code> vs. <code>vllm-tpu</code> V1), raising GPU
+            concurrency from <code>mseqs=64</code> to <code>256</code> lifts L4
+            by 52.7% (1,682 to 2,562 +/- 27 tok/s; V100 reaches 3,907 +/- 55
+            tok/s at <code>mseqs=128</code>), yet TPU v5e (5,360 tok/s) and v6e
+            (9,303 tok/s) still run 2.09x and 3.63x faster. Warm
+            <code>VLLM_XLA_CACHE_PATH</code> cuts v6e init from 193.7 to 83.2 s,
+            yielding break-even at <code>N* = 134,580</code> tokens (97.7 s) vs.
+            <code>mseqs=64</code> L4 and <code>N* = 202,550</code> tokens (105.0
+            s; 174,267 including Spot boot) vs. saturated
+            <code>mseqs=256</code> L4, with Spot v6e delivering 60.9 Mtok/$
+            (3.04x Spot L4 and 7.59x on-demand L4).
+          </p>
+
+          <figure class="doc-figure">
+            <img
+              src="img/2026-11-14/fig4_breakeven_tts.png"
+              width="1680"
+              height="672"
+              loading="lazy"
+              alt="Two-panel plot showing vLLM wall-clock completion time versus generated tokens across mseqs=64 and mseqs=256 GPU baselines on the left, and Spot-normalized work done per dollar across four workloads on the right."
+            />
+            <figcaption>
+              Figure 4. (a) End-to-end vLLM Qwen2.5-3B wall time versus
+              generated output tokens, marking warm XLA cache break-even at N* =
+              134.6k tokens (97.7 s) vs. mseqs=64 L4 and N* = 202.6k tokens
+              (105.0 s) vs. saturated mseqs=256 L4. (b) Steady-state work per
+              dollar normalized to Spot NVIDIA L4 ($0.46/h = 1.0x; On-Demand L4
+              $1.15/h = 0.40x).
+            </figcaption>
+          </figure>
+
+          <figure class="doc-figure">
+            <img
+              src="img/2026-11-14/fig5_power_and_parity.png"
+              width="1680"
+              height="636"
+              loading="lazy"
+              alt="Two-panel plot showing 1 Hz board power traces for V100 and L4 on the left, and a 4x4 cosine similarity heatmap of out-of-distribution ESM-2 650M embeddings on the right."
+            />
+            <figcaption>
+              Figure 5. (a) Live 1 Hz nvidia-smi power traces showing V100-SXM2
+              at 265.6 W active mean versus L4 pinned at its 72 W PCIe TDP cap.
+              (b) Pairwise cosine similarity on out-of-distribution 510-aa
+              uniform-random ESM-2 650M layer-33 embeddings; on natural UniProt
+              proteins, both FP16 and BF16 exceed 0.99998 vs. FP32.
+            </figcaption>
+          </figure>
+
+          <p class="table-caption">
+            Table 4. Cross-silicon numerical parity on layer-33 ESM-2 650M
+            embeddings under out-of-distribution uniform 510-aa stress: cosine
+            similarity (upper triangle) and relative L2 difference (lower
+            triangle). On natural UniProt sequences, both FP16 and BF16 achieve
+            cos &gt;= 0.999988 vs. exact FP32.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Accelerator (Format)</th>
+                  <th class="num">V100 (FP16)</th>
+                  <th class="num">L4 (BF16)</th>
+                  <th class="num">TPU v5e (BF16)</th>
+                  <th class="num">TPU v6e (BF16)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>NVIDIA V100 (FP16)</td>
+                  <td class="num">1.000000</td>
+                  <td class="num">0.983234</td>
+                  <td class="num">0.982948</td>
+                  <td class="num">0.982962</td>
+                </tr>
+                <tr>
+                  <td>NVIDIA L4 (BF16)</td>
+                  <td class="num">0.18407</td>
+                  <td class="num">1.000000</td>
+                  <td class="num">0.999937</td>
+                  <td class="num">0.999937</td>
+                </tr>
+                <tr>
+                  <td>Cloud TPU v5e (BF16)</td>
+                  <td class="num">0.18567</td>
+                  <td class="num">0.01132</td>
+                  <td class="num">1.000000</td>
+                  <td class="num">0.999998</td>
+                </tr>
+                <tr>
+                  <td>Cloud TPU v6e (BF16)</td>
+                  <td class="num">0.18560</td>
+                  <td class="num">0.01128</td>
+                  <td class="num">0.00191</td>
+                  <td class="num">1.000000</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h2 id="what-went-wrong">What Went Wrong</h2>
+          <p>Four operational failures surfaced during the campaign:</p>
+          <ol>
+            <li>
+              <strong>Multi-hour regional TPU stockouts despite quota.</strong>
+              On 14 November 2026 at 02:10 UTC and again 13 hours later at 15:08
+              UTC, GPU nodes booted in <code>us-central1</code> on the first
+              attempt (136.0 s on <code>gpul4</code>, 166.0 s on
+              <code>gpu1v1</code>), whereas <code>tpuspot</code>,
+              <code>tpu6spot</code>, and on-demand <code>tpu</code> all returned
+              HTTP 503
+              <code>ZONE_RESOURCE_POOL_EXHAUSTED_WITH_DETAILS</code> across
+              <code>us-central1-a/b/c</code> despite 1,536-chip regional quota.
+              Cloud quota caps billing rather than reserving physical capacity.
+              Bursting to <code>us-south1-a</code> (76.6 s v5e Spot boot) and
+              <code>europe-west4-a</code> (128.0 s v6e Spot boot) bypassed the
+              outage; staging 16.4 GiB of weights once per regional cache incurs
+              $0.33 to $1.31 in inter-region egress ($0.02 to $0.08/GiB), so
+              multi-region fallback must cache weights regionally rather than
+              re-copying per job.
+            </li>
+            <li>
+              <strong>Spot preemption at 8.7 minutes.</strong> Compute Engine
+              reclaimed my first Spot <code>ct6e-standard-1t</code> VM in
+              <code>europe-west4-a</code> 524.3 s (8.7 min) after boot.
+              Persistent XLA caches cut restart compile waste from 194 to 224 s
+              down to 2 to 83 s, but cache persistence alone does not prevent
+              training progress loss: Spot training scripts must also pair
+              periodic Orbax or PyTorch checkpointing to regional storage with
+              Slurm <code>--requeue</code>.
+            </li>
+            <li>
+              <strong
+                >55 GiB host-RAM exhaustion from un-synced
+                <code>loss.item()</code>.</strong
+              >
+              In W8 Case 1, polling <code>loss.item()</code> without
+              <code>torch_xla.sync()</code> accumulated 55 GiB of unexecuted
+              optimizer IR on the host, requiring a 32 GiB NVMe swapfile on the
+              48 GiB v5e host simply to finish the naive baseline without Linux
+              OOM-kill.
+            </li>
+            <li>
+              <strong
+                >VFIO exclusive locks, Apptainer <code>MS_NODEV</code>, and
+                wheel shadowing.</strong
+              >
+              Linux <code>/dev/vfio/0</code> permits only one open process
+              handle: calling <code>jax.devices()</code> in a parent Python
+              coordinator caused child worker subprocesses to fail with
+              <code>EBUSY</code>. Under unprivileged Apptainer 1.5.4, passing
+              explicit <code>-B /dev/vfio:/dev/vfio</code> attached
+              <code>nodev</code> (<code>MS_NODEV</code>) to the sub-mount and
+              blocked PJRT initialization, whereas omitting the flag let default
+              <code>/dev</code> passthrough expose
+              <code>/dev/vfio/0</code> cleanly. Adding a GPU
+              <code>site-packages</code> path for <code>fair-esm</code> also
+              shadowed CPU <code>torch 2.9</code> with
+              <code>torch+cu124</code> until pure-Python packages were isolated.
+            </li>
+          </ol>
+
+          <h2 id="lessons">Lessons</h2>
+          <p>
+            Table 5 distills the measured <code>T_science(N)</code> crossovers
+            into Slurm routing rules, followed by six operational guidelines.
+          </p>
+
+          <p class="table-caption">
+            Table 5. Operational Slurm routing rules from measured
+            Time-to-Science crossover boundaries.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Workload Profile</th>
+                  <th>Target Partition</th>
+                  <th>Measured Basis</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    Debug &lt;2 min; vLLM &lt;135k warm (&lt;593k cold vs. sat.
+                    L4)
+                  </td>
+                  <td><code>gpul4</code> or <code>gpu1v1</code></td>
+                  <td>
+                    &lt;1 s eager CUDA startup beats 83 to 225 s vLLM-TPU
+                    compile overhead
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    Unbucketed dynamic shapes; pure FP32 vector PDEs
+                    (<code>compile</code>)
+                  </td>
+                  <td><code>gpul4</code> or <code>gpu1v1</code></td>
+                  <td>
+                    Avoids 15x to 224x XLA recompile; V100
+                    <code>compile</code> hits 21.4 GUpd/s
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    ColabFold monomers, JAX <code>lax.scan</code> HMC (&lt;=16
+                    GiB)
+                  </td>
+                  <td><code>tpuspot</code> (v5e, $0.36/h Spot)</td>
+                  <td>
+                    2.6x fold, 21x JAX HMC; highest Spot efficiency: 522 GFP
+                    folds/$
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    LLM train, ESM-2, vLLM &gt;=203k warm (&gt;=593k cold)
+                  </td>
+                  <td><code>tpu6spot</code> (v6e, $0.55/h Spot)</td>
+                  <td>
+                    32G fits 2x batch; 3.6x to 9.7x tuned L4; 60.9 Mtok/$, 1.07M
+                    prot/$
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <ol>
+            <li>
+              <strong
+                >Mount shared persistent XLA caches and checkpoint Spot
+                state.</strong
+              >
+              Pre-populated <code>/apps/cache/xla</code> directories with
+              per-user write-through cut JAX first-step latency by 7.4x to 10.8x
+              and save 110 to 127 s on vLLM startup; pair them with periodic
+              model checkpoints so 8-minute Spot preemptions do not discard
+              work.
+            </li>
+            <li>
+              <strong
+                >Enforce power-of-2 bucketing and
+                <code>drop_last=True</code>.</strong
+              >
+              Three length buckets (<code>256, 512, 1024</code>) eliminate 14.8x
+              dynamic-shape recompilation cliffs and tail-batch graph rebuilds.
+            </li>
+            <li>
+              <strong
+                >Compile GPU baselines before claiming accelerator wins, and use
+                <code>lax.scan</code> for iterative science.</strong
+              >
+              Enabling <code>torch.compile</code> and XLA-GPU
+              <code>lax.scan</code> speeds up L4/V100 elementwise and loop
+              workloads by 7x to 19x (allowing V100 HBM2 to match TPUs on pure
+              vector Lorenz-96 RK4), while TPU VMEM still delivers a 20.5x to
+              21.0x silicon advantage on 128-chain HMC.
+            </li>
+            <li>
+              <strong
+                >Replace per-step <code>.item()</code> reads with step-synced
+                closures.</strong
+              >
+              Calling <code>torch_xla.sync()</code> each batch and logging every
+              K steps prevents 55 GiB host-RAM DAG accumulation (107x cold
+              speedup).
+            </li>
+            <li>
+              <strong
+                >Distinguish in-distribution vs. out-of-distribution numerical
+                precision.</strong
+              >
+              On natural UniProt proteins, both FP16 and BF16 match FP32 (<code
+                >cos &gt;= 0.999988</code
+              >); on high-entropy synthetic sequences, BF16 preserves four-nines
+              cross-vendor parity (<code>cos = 0.999937</code>) where FP16
+              drifts (<code>cos = 0.983</code>).
+            </li>
+            <li>
+              <strong
+                >Cache weights regionally when bursting Spot containers across
+                regions.</strong
+              >
+              Self-contained <code>.sif</code> images
+              (<code>ursa-bench-*.sif</code>, &lt;= 1.57% overhead) recover from
+              regional HTTP 503 stockouts in 77 to 128 s without per-job
+              cross-region egress penalties.
+            </li>
+          </ol>
+
+          <h2 id="next">What's Next</h2>
+          <p>
+            I am taking three follow-on steps on Ursa Major. First, I am adding
+            static <code>ursa-bifrost</code> warnings whenever a TPU batch
+            script omits persistent XLA cache variables or Spot checkpoint
+            flags, while pre-warming common Qwen, Llama, and ColabFold XLA
+            executables under <code>/apps/cache/xla</code>. Second, I held
+            accelerator count at one chip per job here to match single-GPU
+            campus queues; extending the suite to multi-chip
+            <code>v6e-4</code> and <code>v6e-8</code> slices over 800 GB/s
+            Inter-Chip Interconnect and against modern H100 GPUs will map
+            multi-device scaling for 7B to 32B training. Third, when
+            seventh-generation <code>TPU7x</code> (Ironwood) Spot quota lands,
+            running the same <code>ursa-bench-tpu.def</code> container will
+            extend this Roofline dataset across three TPU generations.
+          </p>
+
+          <h2 id="references">References</h2>
+          <ol class="sources">
+            <li id="ref-1">
+              Google Cloud. 2023. TPU v5e. <em>Google Cloud Documentation</em>.
+              Accessed 13 November 2026.
+              <a
+                href="https://docs.cloud.google.com/tpu/docs/v5e"
+                target="_blank"
+                rel="noopener"
+                >https://docs.cloud.google.com/tpu/docs/v5e</a
+              >
+            </li>
+            <li id="ref-2">
+              Google Cloud. 2024. TPU v6e.
+              <em>Google Cloud Documentation (Trillium Architecture)</em>.
+              Accessed 13 November 2026.
+              <a
+                href="https://docs.cloud.google.com/tpu/docs/v6e"
+                target="_blank"
+                rel="noopener"
+                >https://docs.cloud.google.com/tpu/docs/v6e</a
+              >
+            </li>
+            <li id="ref-3">
+              Google Cloud. 2026. Spot VMs and Compute Engine Resource Quotas.
+              <em>Google Cloud Documentation</em>. Accessed 14 November 2026.
+              <a
+                href="https://docs.cloud.google.com/compute/docs/instances/spot"
+                target="_blank"
+                rel="noopener"
+                >https://docs.cloud.google.com/compute/docs/instances/spot</a
+              >
+            </li>
+            <li id="ref-4">
+              Peter Mattson, Vijay Janapa Reddi, Christine Cheng, Cody Coleman,
+              Greg Diamos, David Kanter, et al. 2020. MLPerf: An Industry
+              Standard Benchmark Suite for Machine Learning Performance.
+              <em>IEEE Micro</em> 40, 2 (2020), 8–16.
+              <a
+                href="https://doi.org/10.1109/MM.2020.2974843"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1109/MM.2020.2974843</a
+              >
+            </li>
+            <li id="ref-5">
+              Amit Sabne. 2020. XLA : Compiling Machine Learning for Peak
+              Performance. <em>Google Research</em>. Accessed 13 November 2026.
+              <a
+                href="https://research.google/pubs/xla-compiling-machine-learning-for-peak-performance/"
+                target="_blank"
+                rel="noopener"
+                >https://research.google/pubs/xla-compiling-machine-learning-for-peak-performance/</a
+              >
+            </li>
+            <li id="ref-6">
+              OpenXLA Project. 2024. StableHLO Specification.
+              <em>OpenXLA Project Documentation</em>. Accessed 13 November 2026.
+              <a
+                href="https://openxla.org/stablehlo/spec"
+                target="_blank"
+                rel="noopener"
+                >https://openxla.org/stablehlo/spec</a
+              >
+            </li>
+            <li id="ref-7">
+              Norm Jouppi, George Kurian, Sheng Li, Peter Ma, Rahul Nagarajan,
+              Lifeng Nai, et al. 2023. TPU v4: An Optically Reconfigurable
+              Supercomputer for Machine Learning with Hardware Support for
+              Embeddings. In
+              <em
+                >Proceedings of the 50th Annual International Symposium on
+                Computer Architecture</em
+              >
+              (ISCA &#x27;23). ACM, New York, NY, USA, 1–14.
+              <a
+                href="https://doi.org/10.1145/3579371.3589350"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1145/3579371.3589350</a
+              >
+            </li>
+            <li id="ref-8">
+              Norman P. Jouppi, Cliff Young, Nishant Patil, David Patterson,
+              Gaurav Agrawal, Raminder Bajwa, et al. 2017. In-Datacenter
+              Performance Analysis of a Tensor Processing Unit. In
+              <em
+                >Proceedings of the 44th Annual International Symposium on
+                Computer Architecture</em
+              >
+              (ISCA &#x27;17). ACM, New York, NY, USA, 1–12.
+              <a
+                href="https://doi.org/10.1145/3079856.3080246"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1145/3079856.3080246</a
+              >
+            </li>
+            <li id="ref-9">
+              Norman P. Jouppi, Doe Hyun Yoon, George Kurian, Sheng Li, Nishant
+              Patil, James Laudon, Cliff Young, and David Patterson. 2020. A
+              Domain-Specific Supercomputer for Training Deep Neural Networks.
+              <em>Communications of the ACM</em> 63, 7 (2020), 67–78.
+              <a
+                href="https://doi.org/10.1145/3360307"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1145/3360307</a
+              >
+            </li>
+            <li id="ref-10">
+              Dhiraj Kalamkar, Dheevatsa Mudigere, Naveen Mellempudi, Dipankar
+              Das, Kunal Banerjee, Sasikanth Avancha, et al. 2019. A Study of
+              BFLOAT16 for Deep Learning Training.
+              <em>arXiv preprint arXiv:1905.12322</em>.
+              <a
+                href="https://doi.org/10.48550/arXiv.1905.12322"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.48550/arXiv.1905.12322</a
+              >
+            </li>
+            <li id="ref-11">
+              Samuel Williams, Andrew Waterman, and David Patterson. 2009.
+              Roofline: An Insightful Visual Performance Model for Multicore
+              Architectures. <em>Communications of the ACM</em> 52, 4 (2009),
+              65–76.
+              <a
+                href="https://doi.org/10.1145/1498765.1498785"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1145/1498765.1498785</a
+              >
+            </li>
+            <li id="ref-12">
+              Paulius Micikevicius, Sharan Narang, Jonah Alben, Gregory Diamos,
+              Erich Elsen, David Garcia, et al. 2018. Mixed Precision Training.
+              <em
+                >Sixth International Conference on Learning Representations
+                (ICLR 2018)</em
+              >.
+              <a
+                href="https://doi.org/10.48550/arXiv.1710.03740"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.48550/arXiv.1710.03740</a
+              >
+            </li>
+            <li id="ref-13">
+              Tri Dao, Dan Fu, Stefano Ermon, Atri Rudra, and Christopher Ré.
+              2022. FlashAttention: Fast and Memory-Efficient Exact Attention
+              with IO-Awareness. In
+              <em>Advances in Neural Information Processing Systems 35</em>
+              (NeurIPS &#x27;22). Neural Information Processing Systems
+              Foundation, Inc., San Diego, CA, USA, 16344–16359.
+              <a
+                href="https://doi.org/10.52202/068431-1189"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.52202/068431-1189</a
+              >
+            </li>
+            <li id="ref-14">
+              Tri Dao. 2024. FlashAttention-2: Faster Attention with Better
+              Parallelism and Work Partitioning.
+              <em
+                >Twelfth International Conference on Learning Representations
+                (ICLR 2024)</em
+              >.
+              <a
+                href="https://doi.org/10.48550/arXiv.2307.08691"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.48550/arXiv.2307.08691</a
+              >
+            </li>
+            <li id="ref-15">
+              James Bradbury, Roy Frostig, Peter Hawkins, Matthew James Johnson,
+              Yash Katariya, Chris Leary, et al. 2018. JAX: Composable
+              Transformations of Python+NumPy Programs.
+              <em>Open-source software</em>. Accessed 13 November 2026.
+              <a
+                href="https://github.com/jax-ml/jax"
+                target="_blank"
+                rel="noopener"
+                >https://github.com/jax-ml/jax</a
+              >
+            </li>
+            <li id="ref-16">
+              JAX Authors. 2024. Pallas: A JAX Kernel Language for TPU and GPU.
+              <em>JAX Official Documentation</em>. Accessed 14 November 2026.
+              <a
+                href="https://docs.jax.dev/en/latest/pallas/index.html"
+                target="_blank"
+                rel="noopener"
+                >https://docs.jax.dev/en/latest/pallas/index.html</a
+              >
+            </li>
+            <li id="ref-17">
+              Jason Ansel, Edward Yang, Horace He, Natalia Gimelshein, Animesh
+              Jain, Michael Voznesensky, et al. 2024. PyTorch 2: Faster Machine
+              Learning Through Dynamic Python Bytecode Transformation and Graph
+              Compilation. In
+              <em
+                >Proceedings of the 29th ACM International Conference on
+                Architectural Support for Programming Languages and Operating
+                Systems, Volume 2</em
+              >
+              (ASPLOS &#x27;24). ACM, New York, NY, USA, 929–947.
+              <a
+                href="https://doi.org/10.1145/3620665.3640366"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1145/3620665.3640366</a
+              >
+            </li>
+            <li id="ref-18">
+              John Jumper, Richard Evans, Alexander Pritzel, Tim Green, Michael
+              Figurnov, Olaf Ronneberger, et al. 2021. Highly Accurate Protein
+              Structure Prediction with AlphaFold. <em>Nature</em> 596, 7873
+              (2021), 583–589.
+              <a
+                href="https://doi.org/10.1038/s41586-021-03819-2"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1038/s41586-021-03819-2</a
+              >
+            </li>
+            <li id="ref-19">
+              Milot Mirdita, Konstantin Schütze, Yoshitaka Moriwaki, Lim Heo,
+              Sergey Ovchinnikov, and Martin Steinegger. 2022. ColabFold: Making
+              Protein Folding Accessible to All. <em>Nature Methods</em> 19, 6
+              (2022), 679–682.
+              <a
+                href="https://doi.org/10.1038/s41592-022-01488-1"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1038/s41592-022-01488-1</a
+              >
+            </li>
+            <li id="ref-20">
+              Zeming Lin, Halil Akin, Roshan Rao, Brian Hie, Zhongkai Zhu,
+              Wenting Lu, et al. 2023. Evolutionary-Scale Prediction of
+              Atomic-Level Protein Structure with a Language Model.
+              <em>Science</em> 379, 6637 (2023), 1123–1130.
+              <a
+                href="https://doi.org/10.1126/science.ade2574"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1126/science.ade2574</a
+              >
+            </li>
+            <li id="ref-21">
+              Samuel Schoenholz and Ekin Dogus Cubuk. 2020. JAX MD: A Framework
+              for Differentiable Physics. In
+              <em>Advances in Neural Information Processing Systems</em>. Curran
+              Associates, Inc., Red Hook, NY, USA, 11428–11441.
+              <a
+                href="https://proceedings.neurips.cc/paper_files/paper/2020/file/83d3d4b6c9579515e1679aca8cbc8033-Paper.pdf"
+                target="_blank"
+                rel="noopener"
+                >https://proceedings.neurips.cc/paper_files/paper/2020/file/83d3d4b6c9579515e1679aca8cbc8033-Paper.pdf</a
+              >
+            </li>
+            <li id="ref-22">
+              Edward N. Lorenz. 1996. Predictability: A Problem Partly Solved.
+              In <em>Proceedings of the Seminar on Predictability</em>. European
+              Centre for Medium-Range Weather Forecasts (ECMWF), Reading, UK,
+              1–18.
+              <a
+                href="https://www.ecmwf.int/sites/default/files/elibrary/1995/10829-predictability-problem-partly-solved.pdf"
+                target="_blank"
+                rel="noopener"
+                >https://www.ecmwf.int/sites/default/files/elibrary/1995/10829-predictability-problem-partly-solved.pdf</a
+              >
+            </li>
+            <li id="ref-23">
+              Patrick Kidger. 2021. On Neural Differential Equations. Ph.D.
+              Dissertation. University of Oxford, Oxford, UK.
+              <a
+                href="https://doi.org/10.48550/arXiv.2202.02435"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.48550/arXiv.2202.02435</a
+              >
+            </li>
+            <li id="ref-24">
+              Matthew D. Hoffman and Andrew Gelman. 2014. The No-U-Turn Sampler:
+              Adaptively Setting Path Lengths in Hamiltonian Monte Carlo.
+              <em>Journal of Machine Learning Research</em> 15, 47 (2014),
+              1593–1623.
+              <a
+                href="https://jmlr.org/papers/v15/hoffman14a.html"
+                target="_blank"
+                rel="noopener"
+                >https://jmlr.org/papers/v15/hoffman14a.html</a
+              >
+            </li>
+            <li id="ref-25">
+              Woosuk Kwon, Zhuohan Li, Siyuan Zhuang, Ying Sheng, Lianmin Zheng,
+              Cody Hao Yu, Joseph Gonzalez, Hao Zhang, and Ion Stoica. 2023.
+              Efficient Memory Management for Large Language Model Serving with
+              PagedAttention. In
+              <em
+                >Proceedings of the 29th Symposium on Operating Systems
+                Principles</em
+              >
+              (SOSP &#x27;23). ACM, New York, NY, USA, 611–626.
+              <a
+                href="https://doi.org/10.1145/3600006.3613165"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1145/3600006.3613165</a
+              >
+            </li>
+            <li id="ref-26">
+              Andy B. Yoo, Morris A. Jette, and Mark Grondona. 2003. SLURM:
+              Simple Linux Utility for Resource Management. In
+              <em>Job Scheduling Strategies for Parallel Processing</em>
+              (Lecture Notes in Computer Science). Springer, Berlin, Heidelberg,
+              44–60.
+              <a
+                href="https://doi.org/10.1007/10968987_3"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1007/10968987_3</a
+              >
+            </li>
+            <li id="ref-27">
+              Yuxing Peng, Jonathan Skone, Callista Christ, and Hakizumwami
+              Runesha. 2021. Skyway: A Seamless Solution for Bursting Workloads
+              from On-Premises HPC Clusters to Commercial Clouds. In
+              <em>Practice and Experience in Advanced Research Computing</em>
+              (PEARC &#x27;21). ACM, New York, NY, USA, 1–5.
+              <a
+                href="https://doi.org/10.1145/3437359.3465607"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1145/3437359.3465607</a
+              >
+            </li>
+            <li id="ref-28">
+              Igor Sfiligoi, David Schultz, Benedikt Riedel, Frank Wuerthwein,
+              Steve Barnet, and Vladimir Brik. 2020. Demonstrating a
+              Pre-Exascale, Cost-Effective Multi-Cloud Environment for
+              Scientific Computing: Producing a fp32 ExaFLOP Hour Worth of
+              IceCube Simulation Data in a Single Workday. In
+              <em>Practice and Experience in Advanced Research Computing</em>
+              (PEARC &#x27;20). ACM, New York, NY, USA, 85–90.
+              <a
+                href="https://doi.org/10.1145/3311790.3396625"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1145/3311790.3396625</a
+              >
+            </li>
+            <li id="ref-29">
+              Gregory M. Kurtzer, Vanessa Sochat, and Michael W. Bauer. 2017.
+              Singularity: Scientific Containers for Mobility of Compute.
+              <em>PLOS ONE</em> 12, 5 (2017), e0177459.
+              <a
+                href="https://doi.org/10.1371/journal.pone.0177459"
+                target="_blank"
+                rel="noopener"
+                >https://doi.org/10.1371/journal.pone.0177459</a
+              >
+            </li>
+          </ol>
+
+          <h2 id="sources">Sources</h2>
+          <p>Public repositories and artifacts:</p>
+          <ul>
+            <li>
+              <a
+                href="https://github.com/charles-forsyth/tpu-time-to-science"
+                target="_blank"
+                rel="noopener"
+                >charles-forsyth/tpu-time-to-science</a
+              >, public benchmark harness, Apptainer recipes, plotting pipeline,
+              and scrubbed JSONL/CSV/NPY telemetry (MIT / CC-BY-4.0)
+            </li>
+            <li>
+              <a
+                href="https://ucr-research-computing.github.io/kb/kb053-porting-gpu-code-to-tpus/"
+                target="_blank"
+                rel="noopener"
+                >UCR Research Computing KB053: Porting GPU Code to Cloud TPUs</a
+              >, the researcher and AI-assistant porting guide evaluated in
+              Workload W8
+            </li>
+            <li>
+              <a
+                href="https://charles-forsyth.github.io/papers/2026-10-29-read-mostly-ai-on-slurm.html"
+                target="_blank"
+                rel="noopener"
+                >Read-Mostly: Letting AI Assistants Run Real Slurm Jobs
+                Safely</a
+              >, companion Field Note on <code>ursa-bifrost</code>
+            </li>
+          </ul>
+          <p>Private cluster records referenced, by name:</p>
+          <ul>
+            <li>
+              The Ursa Major cluster configuration repository (<code
+                >SPEC.md</code
+              >
+              v2.7, PRs #36-#39) and <code>ursa-bifrost</code> repository
+              (<code>v0.10.10</code>, PR #24)
+            </li>
+          </ul>
+
+          <nav class="doc-pager" aria-label="Field notes navigation">
+            <a class="pager-prev" href="index.html"
+              ><span>Back</span>All Field Notes</a
+            ><span></span>
+          </nav>
+        </article>
+      </div>
+    </main>
+
+    <footer class="section-dark">
+      <div class="container text-center">
+        <p class="footer-note">
+          Field Notes |
+          <a href="index.html" class="subtle-link">All notes</a> |
+          <a href="../index.html" class="subtle-link"
+            >charles-forsyth.github.io</a
+          >
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>
