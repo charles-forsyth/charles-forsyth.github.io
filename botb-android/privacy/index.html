@@ -1,67 +1,225 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Hedge Almanac - Privacy Policy</title><meta name="robots" content="index,follow">
-<style>body{font:16px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;max-width:760px;margin:0 auto;padding:32px 20px;background:#05070D;color:#E6E9F0}
-h1,h2,h3{color:#fff;font-family:Georgia,serif}a{color:#4C8DFF}table{border-collapse:collapse}td,th{border:1px solid #2a3348;padding:6px 10px}code{background:#121826;padding:1px 4px;border-radius:3px}</style></head><body>
-<h1>Privacy Policy for Hedge Almanac</h1>
-<p><strong>Effective Date:</strong> November 7, 2026<br />
-<strong>Last Updated:</strong> November 7, 2026<br />
-<strong>App Name:</strong> Hedge Almanac<br />
-<strong>Package Name:</strong> <code>com.backonthebroomstick.hedge</code><br />
-<strong>Publisher:</strong> Back on the Broomstick (Laylla &amp; Chelle)<br />
-<strong>Contact:</strong> backonthebroomstick@gmail.com  </p>
-<p>Hedge Almanac is a private, offline-first companion application for the <em>Back on the Broomstick</em> witchcraft podcast. We believe your spiritual practice, reading habits, thoughts, and listening history are strictly your own business. </p>
-<p>Hedge Almanac is designed so that <strong>we do not collect, transmit, store, or sell any of your personal data</strong>.</p>
-<hr />
-<h2>1. No Accounts, No Registration, No Profiles</h2>
-<p>Hedge Almanac requires no user registration, no login, and no profile creation. You can use all features of the application without providing your name, email address, phone number, or any other personally identifying information.</p>
-<hr />
-<h2>2. No Analytics, Telemetry, or Advertising Trackers</h2>
-<p>We do not bundle any third-party advertising SDKs, analytics frameworks, behavioral trackers, or crash-reporting services (such as Google Analytics, Firebase, Crashlytics, AppsFlyer, or Facebook SDK). </p>
-<p>The application contains zero third-party advertising, zero cross-app tracking, and zero telemetry.</p>
-<hr />
-<h2>3. Network Connections &amp; Data Transmission</h2>
-<p>Hedge Almanac is fundamentally an offline-first app. The complete episode index, full-text transcript search database, astronomical calculation tables, tarot cards, and moon imagery are bundled directly into the application download.</p>
-<p>The app only connects to the internet for the following direct, user-expected functions:</p>
-<ol>
-<li><strong>Podcast Audio Streaming &amp; Downloads:</strong>
-   When you stream or download an episode, the application connects directly to the podcast hosting service (Buzzsprout CDN: <code>rss.buzzsprout.com</code> or <code>feeds.buzzsprout.com</code>). These network requests transmit only standard HTTP headers (such as the app User-Agent: <code>HedgeAlmanac/&lt;version&gt; (Android; podcast app)</code>) required by web servers to serve the audio file. No user identifiers, device IDs, or tracking parameters are sent.</li>
-<li><strong>Episode Feed Refresh:</strong>
-   The application periodically checks the podcast's public RSS XML feed to discover newly released episodes. This is a standard read-only HTTP GET request for the public XML feed.</li>
-<li><strong>Optional Weekly Index Updates:</strong>
-   If enabled in Settings (disabled by default on metered connections), the app checks an index manifest (<code>https://botb-mcp-dsfh6rrlia-uc.a.run.app/app/manifest.json</code>) once a week over Wi-Fi to check if an updated episode database is available. If an update exists, it downloads the database file. No personal identifiers or usage stats are transmitted.</li>
-<li><strong>External Web Links:</strong>
-   The app provides links to external websites (such as the show's website, Etsy shop, social media profiles, and booking pages). Tapping these links opens them in your default web browser or external apps via standard Android system intents. Those external sites are governed by their own respective privacy policies.</li>
-</ol>
-<hr />
-<h2>4. Device Location Data</h2>
-<p>The app includes an optional Sky Finder and local astronomical chart feature. </p>
-<ul>
-<li><strong>Optional and User-Initiated:</strong> The app does not request location permission upon installation or launch. Location permission (<code>ACCESS_COARSE_LOCATION</code> / <code>ACCESS_FINE_LOCATION</code>) is requested <strong>only</strong> if you explicitly tap the "Use my location" button.</li>
-<li><strong>100% On-Device Processing:</strong> Location coordinates obtained from the device's hardware sensors are processed exclusively on your device by the local astronomical math engine (<code>com.backonthebroomstick.hedge.astro</code>) to compute topocentric planetary azimuths and moon phases for your local horizon, and to select the nearest city name from a bundled offline city table.</li>
-<li><strong>Never Transmitted:</strong> Your location data is <strong>never sent off your device</strong>, never transmitted to our servers or any third party, and never logged externally.</li>
-<li><strong>User Control:</strong> You can clear your saved location and birth chart data at any time directly inside the app (under the Chart / Sky settings).</li>
-</ul>
-<hr />
-<h2>5. Local Storage and Data Retention</h2>
-<p>All user-generated content and preferences are stored strictly on your device's local private storage:
-- <strong>Hearthside Journal Entries:</strong> Your personal notes, thoughts, and saved passages are stored locally in the app's SQLite database.
-- <strong>Downloaded Audio:</strong> Downloaded podcast episodes are stored in your device's private app storage. You can delete individual downloads or use the "Delete all downloads" button in Settings at any time to free storage space.
-- <strong>App Preferences:</strong> Your settings (such as Look selection and the optional 18+ content toggle) are stored locally in Android DataStore preferences.
-- <strong>Exporting Data:</strong> If you use the Journal export feature or Quote Card share feature, the app invokes the standard Android system share sheet. Data is only shared with the destination you explicitly select.</p>
-<hr />
-<h2>6. Children's Privacy</h2>
-<p>Hedge Almanac is intended for general adult audiences (18 and over) interested in witchcraft, pagan spirituality, and folklore. It contains an optional 18+ toggle for adult content and discussions from <em>The Stoned Witches Hour</em>. We do not knowingly collect any personal information from children under the age of 13.</p>
-<hr />
-<h2>7. Data Deletion and Your Rights</h2>
-<p>Because Hedge Almanac does not collect or transmit any personal data to external servers, we hold no user data to delete or modify. 
-- You retain complete control over your data.
-- Uninstalling the application or clearing the application's storage in Android Settings instantly and permanently deletes all locally stored journal entries, downloaded audio files, and settings.</p>
-<hr />
-<h2>8. Changes to This Policy</h2>
-<p>If we ever update this Privacy Policy, the revised version will be posted at this URL with an updated effective date.</p>
-<hr />
-<h2>9. Contact Us</h2>
-<p>If you have any questions or feedback regarding this Privacy Policy or Hedge Almanac's privacy practices, please contact:</p>
-<p><strong>Back on the Broomstick</strong><br />
-Email: backonthebroomstick@gmail.com<br />
-Website: <a href="https://www.backonthebroomstick.com">backonthebroomstick.com</a></p></body></html>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Hedge Almanac - Privacy Policy</title>
+    <meta name="robots" content="index,follow" />
+    <style>
+      body {
+        font:
+          16px/1.6 -apple-system,
+          Segoe UI,
+          Roboto,
+          sans-serif;
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 32px 20px;
+        background: #05070d;
+        color: #e6e9f0;
+      }
+      h1,
+      h2,
+      h3 {
+        color: #fff;
+        font-family: Georgia, serif;
+      }
+      a {
+        color: #4c8dff;
+      }
+      table {
+        border-collapse: collapse;
+      }
+      td,
+      th {
+        border: 1px solid #2a3348;
+        padding: 6px 10px;
+      }
+      code {
+        background: #121826;
+        padding: 1px 4px;
+        border-radius: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Privacy Policy for Hedge Almanac</h1>
+    <p>
+      <strong>Effective Date:</strong> November 7, 2026<br />
+      <strong>Last Updated:</strong> November 7, 2026<br />
+      <strong>App Name:</strong> Hedge Almanac<br />
+      <strong>Package Name:</strong> <code>com.backonthebroomstick.hedge</code
+      ><br />
+      <strong>Publisher:</strong> Back on the Broomstick (Laylla &amp;
+      Chelle)<br />
+      <strong>Contact:</strong> backonthebroomstick@gmail.com
+    </p>
+    <p>
+      Hedge Almanac is a private, offline-first companion application for the
+      <em>Back on the Broomstick</em> witchcraft podcast. We believe your
+      spiritual practice, reading habits, thoughts, and listening history are
+      strictly your own business.
+    </p>
+    <p>
+      Hedge Almanac is designed so that
+      <strong
+        >we do not collect, transmit, store, or sell any of your personal
+        data</strong
+      >.
+    </p>
+    <hr />
+    <h2>1. No Accounts, No Registration, No Profiles</h2>
+    <p>
+      Hedge Almanac requires no user registration, no login, and no profile
+      creation. You can use all features of the application without providing
+      your name, email address, phone number, or any other personally
+      identifying information.
+    </p>
+    <hr />
+    <h2>2. No Analytics, Telemetry, or Advertising Trackers</h2>
+    <p>
+      We do not bundle any third-party advertising SDKs, analytics frameworks,
+      behavioral trackers, or crash-reporting services (such as Google
+      Analytics, Firebase, Crashlytics, AppsFlyer, or Facebook SDK).
+    </p>
+    <p>
+      The application contains zero third-party advertising, zero cross-app
+      tracking, and zero telemetry.
+    </p>
+    <hr />
+    <h2>3. Network Connections &amp; Data Transmission</h2>
+    <p>
+      Hedge Almanac is fundamentally an offline-first app. The complete episode
+      index, full-text transcript search database, astronomical calculation
+      tables, tarot cards, and moon imagery are bundled directly into the
+      application download.
+    </p>
+    <p>
+      The app only connects to the internet for the following direct,
+      user-expected functions:
+    </p>
+    <ol>
+      <li>
+        <strong>Podcast Audio Streaming &amp; Downloads:</strong> When you
+        stream or download an episode, the application connects directly to the
+        podcast hosting service (Buzzsprout CDN:
+        <code>rss.buzzsprout.com</code> or <code>feeds.buzzsprout.com</code>).
+        These network requests transmit only standard HTTP headers (such as the
+        app User-Agent:
+        <code>HedgeAlmanac/&lt;version&gt; (Android; podcast app)</code>)
+        required by web servers to serve the audio file. No user identifiers,
+        device IDs, or tracking parameters are sent.
+      </li>
+      <li>
+        <strong>Episode Feed Refresh:</strong> The application periodically
+        checks the podcast's public RSS XML feed to discover newly released
+        episodes. This is a standard read-only HTTP GET request for the public
+        XML feed.
+      </li>
+      <li>
+        <strong>Optional Weekly Index Updates:</strong> If enabled in Settings
+        (disabled by default on metered connections), the app checks an index
+        manifest
+        (<code>https://botb-mcp-dsfh6rrlia-uc.a.run.app/app/manifest.json</code>)
+        once a week over Wi-Fi to check if an updated episode database is
+        available. If an update exists, it downloads the database file. No
+        personal identifiers or usage stats are transmitted.
+      </li>
+      <li>
+        <strong>External Web Links:</strong> The app provides links to external
+        websites (such as the show's website, Etsy shop, social media profiles,
+        and booking pages). Tapping these links opens them in your default web
+        browser or external apps via standard Android system intents. Those
+        external sites are governed by their own respective privacy policies.
+      </li>
+    </ol>
+    <hr />
+    <h2>4. Device Location Data</h2>
+    <p>
+      The app includes an optional Sky Finder and local astronomical chart
+      feature.
+    </p>
+    <ul>
+      <li>
+        <strong>Optional and User-Initiated:</strong> The app does not request
+        location permission upon installation or launch. Location permission
+        (<code>ACCESS_COARSE_LOCATION</code> /
+        <code>ACCESS_FINE_LOCATION</code>) is requested <strong>only</strong> if
+        you explicitly tap the "Use my location" button.
+      </li>
+      <li>
+        <strong>100% On-Device Processing:</strong> Location coordinates
+        obtained from the device's hardware sensors are processed exclusively on
+        your device by the local astronomical math engine
+        (<code>com.backonthebroomstick.hedge.astro</code>) to compute
+        topocentric planetary azimuths and moon phases for your local horizon,
+        and to select the nearest city name from a bundled offline city table.
+      </li>
+      <li>
+        <strong>Never Transmitted:</strong> Your location data is
+        <strong>never sent off your device</strong>, never transmitted to our
+        servers or any third party, and never logged externally.
+      </li>
+      <li>
+        <strong>User Control:</strong> You can clear your saved location and
+        birth chart data at any time directly inside the app (under the Chart /
+        Sky settings).
+      </li>
+    </ul>
+    <hr />
+    <h2>5. Local Storage and Data Retention</h2>
+    <p>
+      All user-generated content and preferences are stored strictly on your
+      device's local private storage: -
+      <strong>Hearthside Journal Entries:</strong> Your personal notes,
+      thoughts, and saved passages are stored locally in the app's SQLite
+      database. - <strong>Downloaded Audio:</strong> Downloaded podcast episodes
+      are stored in your device's private app storage. You can delete individual
+      downloads or use the "Delete all downloads" button in Settings at any time
+      to free storage space. - <strong>App Preferences:</strong> Your settings
+      (such as Look selection and the optional 18+ content toggle) are stored
+      locally in Android DataStore preferences. -
+      <strong>Exporting Data:</strong> If you use the Journal export feature or
+      Quote Card share feature, the app invokes the standard Android system
+      share sheet. Data is only shared with the destination you explicitly
+      select.
+    </p>
+    <hr />
+    <h2>6. Children's Privacy</h2>
+    <p>
+      Hedge Almanac is intended for general adult audiences (18 and over)
+      interested in witchcraft, pagan spirituality, and folklore. It contains an
+      optional 18+ toggle for adult content and discussions from
+      <em>The Stoned Witches Hour</em>. We do not knowingly collect any personal
+      information from children under the age of 13.
+    </p>
+    <hr />
+    <h2>7. Data Deletion and Your Rights</h2>
+    <p>
+      Because Hedge Almanac does not collect or transmit any personal data to
+      external servers, we hold no user data to delete or modify. - You retain
+      complete control over your data. - Uninstalling the application or
+      clearing the application's storage in Android Settings instantly and
+      permanently deletes all locally stored journal entries, downloaded audio
+      files, and settings.
+    </p>
+    <hr />
+    <h2>8. Changes to This Policy</h2>
+    <p>
+      If we ever update this Privacy Policy, the revised version will be posted
+      at this URL with an updated effective date.
+    </p>
+    <hr />
+    <h2>9. Contact Us</h2>
+    <p>
+      If you have any questions or feedback regarding this Privacy Policy or
+      Hedge Almanac's privacy practices, please contact:
+    </p>
+    <p>
+      <strong>Back on the Broomstick</strong><br />
+      Email: backonthebroomstick@gmail.com<br />
+      Website:
+      <a href="https://www.backonthebroomstick.com">backonthebroomstick.com</a>
+    </p>
+  </body>
+</html>
