@@ -317,6 +317,14 @@
                   <strong>Deep Research</strong> Lab runs: report claims tested
                   as real cluster jobs
                 </li>
+                <li>
+                  <strong>Cloud TPU Benchmarks</strong>: Roofline, OpenXLA and
+                  cost study across V100, L4, TPU v5e and v6e
+                </li>
+                <li>
+                  <strong>3D Gaussian Splatting</strong>: reconstruction, Cesium
+                  3D Tiles export and V100 Slurm client (private)
+                </li>
               </ul>
               <div class="card-links">
                 <a
@@ -328,6 +336,11 @@
                   href="https://github.com/UCR-Research-Computing/clusterwand"
                   class="btn-link"
                   >ClusterWand <i class="fab fa-github"></i
+                ></a>
+                <a
+                  href="https://charles-forsyth.github.io/tpu-time-to-science/"
+                  class="btn-link"
+                  >TPU Lab <i class="fas fa-arrow-right"></i
                 ></a>
               </div>
             </div>
@@ -475,6 +488,85 @@
                   href="https://charles-forsyth.github.io/dungeonmind-rs/"
                   class="btn-link"
                   >DungeonMind <i class="fas fa-arrow-right"></i
+                ></a>
+              </div>
+            </div>
+            <div class="project-card">
+              <div class="card-icon"><i class="fas fa-compass"></i></div>
+              <h4>Field, Weather &amp; Cyber-Physical</h4>
+              <p>
+                Offline-first mobile tools, environmental data studies and edge
+                hardware.
+              </p>
+              <ul class="family-list">
+                <li>
+                  <strong>Field Journal</strong>: offline-first Android notebook
+                  for land, wildlife and agronomy
+                </li>
+                <li>
+                  <strong>Google Weather Insights</strong>: three interactive
+                  heat, wet-bulb and season comparisons
+                </li>
+                <li>
+                  <strong>ESP32 Firmware Suite</strong> &amp;
+                  <strong>OmNet</strong>: edge sensor and radio-mesh
+                  architecture
+                </li>
+              </ul>
+              <div class="card-links">
+                <a
+                  href="https://charles-forsyth.github.io/field-journal/"
+                  class="btn-link"
+                  >Field Journal <i class="fas fa-arrow-right"></i
+                ></a>
+                <a href="weather/index.html" class="btn-link"
+                  >Weather <i class="fas fa-arrow-right"></i
+                ></a>
+                <a href="esp32-firmware-gallery.html" class="btn-link"
+                  >ESP32 <i class="fas fa-arrow-right"></i
+                ></a>
+              </div>
+            </div>
+            <div class="project-card">
+              <div class="card-icon"><i class="fas fa-cubes"></i></div>
+              <h4>3D, Games &amp; Creative Builds</h4>
+              <p>
+                Real-time 3D engines, digital twins and full-stack media apps.
+              </p>
+              <ul class="family-list">
+                <li>
+                  <strong>Ironwake</strong>: steampunk naval sailing game in
+                  Unreal Engine 5.8
+                </li>
+                <li>
+                  <strong>Skyjoust</strong>: 2.5D aerial jousting game in Godot
+                  4.7 Forward+ with WebGL showcase
+                </li>
+                <li>
+                  <strong>Back on the Broomstick Stack</strong>: Jekyll site,
+                  Hedge Almanac Android app, MCP archive and Spellcast audio
+                  studio
+                </li>
+                <li>
+                  <strong>3D &amp; Sim Prototypes</strong>: OmsteadLive UE 5.8
+                  digital twin, Dungeon Party, Driftline and Verdance (local)
+                </li>
+              </ul>
+              <div class="card-links">
+                <a
+                  href="https://charles-forsyth.github.io/ironwake/"
+                  class="btn-link"
+                  >Ironwake <i class="fas fa-arrow-right"></i
+                ></a>
+                <a
+                  href="https://charles-forsyth.github.io/skyjoust/"
+                  class="btn-link"
+                  >Skyjoust <i class="fas fa-arrow-right"></i
+                ></a>
+                <a
+                  href="https://charles-forsyth.github.io/backonthebroomstick/"
+                  class="btn-link"
+                  >BotB <i class="fas fa-arrow-right"></i
                 ></a>
               </div>
             </div>
@@ -725,6 +817,227 @@
                   >Repo <i class="fab fa-github"></i
                 ></a>
               </div>
+            </div>
+
+            <!-- Cloud TPU Time-to-Science -->
+            <div class="project-card">
+              <div class="card-icon"><i class="fas fa-microchip"></i></div>
+              <h4>Decreasing Time-to-Science with Cloud TPUs</h4>
+              <p>
+                <strong
+                  >Empirical Roofline, OpenXLA and cost benchmarks on a campus
+                  Slurm cluster.</strong
+                >
+                Side-by-side measurements across NVIDIA V100, NVIDIA L4, Cloud
+                TPU v5e and Cloud TPU v6e Trillium, paired with an interactive
+                web explorer, reproducible code and a Zenodo-archived technical
+                report.
+              </p>
+              <div class="card-links">
+                <a
+                  href="https://charles-forsyth.github.io/tpu-time-to-science/"
+                  class="btn-link"
+                  >Interactive Lab <i class="fas fa-arrow-right"></i
+                ></a>
+                <a
+                  href="papers/2026-11-14-decreasing-time-to-science-with-cloud-tpus.html"
+                  class="btn-link"
+                  >Field Note <i class="fas fa-flask"></i
+                ></a>
+                <a
+                  href="https://github.com/charles-forsyth/tpu-time-to-science"
+                  class="btn-link"
+                  >Repo <i class="fab fa-github"></i
+                ></a>
+              </div>
+            </div>
+
+            <!-- 3D Gaussian Splatting Stack -->
+            <div class="project-card">
+              <div class="card-icon"><i class="fas fa-cube"></i></div>
+              <h4>3D Gaussian Splatting (3DGS) Stack</h4>
+              <p>
+                <strong>End-to-end 3D reconstruction on campus GPUs.</strong>
+                Format converters, single-image metric splatting, offscreen
+                NumPy ellipsoid rasterizer, georeferenced Cesium 3D Tiles export
+                and a Slurm client targeting Ursa Major V100 nodes.
+              </p>
+              <span class="btn-link"
+                >Private Architecture <i class="fas fa-lock"></i
+              ></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="creative-builds" class="section-light">
+        <div class="container">
+          <h3>
+            <i class="fas fa-cubes"></i> 3D, Games, Field &amp; Creative Builds
+          </h3>
+          <p class="section-intro">
+            Independent builds in Unreal Engine 5.8, Godot 4.7, Kotlin, Android
+            and embedded hardware — shipped showcases alongside active local
+            prototypes.
+          </p>
+          <div class="project-grid">
+            <!-- Ironwake -->
+            <div class="project-card">
+              <div class="card-icon"><i class="fas fa-ship"></i></div>
+              <h4>Ironwake</h4>
+              <p>
+                <strong
+                  >Steampunk naval sailing game in Unreal Engine 5.8.</strong
+                >
+                Steam frigates, merchant brigs and ironclads sailing an
+                archipelago with buoyancy waves, airships and weather. Live
+                showcase includes 18 web GLB models, a 25-sound mixer, a Kelvin
+                wake lab and three video cuts.
+              </p>
+              <div class="card-links">
+                <a
+                  href="https://charles-forsyth.github.io/ironwake/"
+                  class="btn-link"
+                  >Showcase <i class="fas fa-arrow-right"></i
+                ></a>
+                <a
+                  href="https://github.com/charles-forsyth/ironwake"
+                  class="btn-link"
+                  >Repo <i class="fab fa-github"></i
+                ></a>
+              </div>
+            </div>
+
+            <!-- Skyjoust -->
+            <div class="project-card">
+              <div class="card-icon"><i class="fas fa-feather-alt"></i></div>
+              <h4>Skyjoust</h4>
+              <p>
+                <strong
+                  >Open-source 2.5D aerial jousting game in Godot 4.7
+                  Forward+.</strong
+                >
+                Sky islands over lava with custom 3D models and audio, paired
+                with a live WebGL 3D model viewer and interactive SFX
+                soundboard.
+              </p>
+              <div class="card-links">
+                <a
+                  href="https://charles-forsyth.github.io/skyjoust/"
+                  class="btn-link"
+                  >WebGL Showcase <i class="fas fa-arrow-right"></i
+                ></a>
+                <a
+                  href="https://github.com/charles-forsyth/skyjoust"
+                  class="btn-link"
+                  >Repo <i class="fab fa-github"></i
+                ></a>
+              </div>
+            </div>
+
+            <!-- Field Journal -->
+            <div class="project-card">
+              <div class="card-icon"><i class="fas fa-book"></i></div>
+              <h4>Field Journal</h4>
+              <p>
+                <strong
+                  >Offline-first Android notebook for land, wildlife and
+                  agronomy.</strong
+                >
+                Built in Kotlin and Jetpack Compose with SQLite, osmdroid
+                offline maps, CameraX and MQTT sync; archived on Zenodo with a
+                DOI.
+              </p>
+              <div class="card-links">
+                <a
+                  href="https://charles-forsyth.github.io/field-journal/"
+                  class="btn-link"
+                  >Showcase <i class="fas fa-arrow-right"></i
+                ></a>
+                <a
+                  href="https://github.com/charles-forsyth/field-journal"
+                  class="btn-link"
+                  >Repo <i class="fab fa-github"></i
+                ></a>
+              </div>
+            </div>
+
+            <!-- Google Weather Insights -->
+            <div class="project-card">
+              <div class="card-icon"><i class="fas fa-cloud-sun"></i></div>
+              <h4>Google Weather Insights</h4>
+              <p>
+                <strong>Three interactive environmental data studies.</strong>
+                Hour-by-hour US heat and wet-bulb analysis, inland heat contrast
+                between UC Riverside and Santa Monica, and a full-season
+                comparison against local OmNet weather sensors.
+              </p>
+              <div class="card-links">
+                <a href="weather/index.html" class="btn-link"
+                  >Explore Studies <i class="fas fa-arrow-right"></i
+                ></a>
+              </div>
+            </div>
+
+            <!-- ESP32 & OmNet Cyber-Physical Gallery -->
+            <div class="project-card">
+              <div class="card-icon"><i class="fas fa-microchip"></i></div>
+              <h4>ESP32 Firmware Suite &amp; OmNet Architecture</h4>
+              <p>
+                <strong>Sovereign cyber-physical edge hardware.</strong>
+                Gallery of custom ESP32 firmware builds (multi-scanner HUD,
+                packet scythe, PSRAM wardriver) and the OmNet telemetry and
+                radio-mesh data-lake architecture.
+              </p>
+              <div class="card-links">
+                <a href="esp32-firmware-gallery.html" class="btn-link"
+                  >ESP32 Gallery <i class="fas fa-arrow-right"></i
+                ></a>
+                <a href="sigint-data-lake.html" class="btn-link"
+                  >Architecture <i class="fas fa-arrow-right"></i
+                ></a>
+              </div>
+            </div>
+
+            <!-- Back on the Broomstick Stack -->
+            <div class="project-card">
+              <div class="card-icon"><i class="fas fa-podcast"></i></div>
+              <h4>Back on the Broomstick Engineering Stack</h4>
+              <p>
+                <strong>Full-stack media platform for a weekly podcast.</strong>
+                Jekyll episode archive site, offline-first Kotlin/Compose
+                Android app (Hedge Almanac), SQLite + FTS5 + Gemini-embeddings
+                searchable transcript MCP server, and Spellcast Studio
+                multitrack AI audio mastering.
+              </p>
+              <div class="card-links">
+                <a
+                  href="https://charles-forsyth.github.io/backonthebroomstick/"
+                  class="btn-link"
+                  >Site <i class="fas fa-arrow-right"></i
+                ></a>
+                <a
+                  href="https://github.com/charles-forsyth/backonthebroomstick"
+                  class="btn-link"
+                  >Repo <i class="fab fa-github"></i
+                ></a>
+              </div>
+            </div>
+
+            <!-- Local 3D & Simulation Prototypes -->
+            <div class="project-card">
+              <div class="card-icon"><i class="fas fa-vr-cardboard"></i></div>
+              <h4>Digital Twins &amp; 3D Simulation Prototypes</h4>
+              <p>
+                <strong>Active local engine builds on Apple Silicon.</strong>
+                Includes OmsteadLive (standalone UE 5.8 Metal SM6 property
+                digital twin), Dungeon Party (4-hero isometric ARPG in Godot 4.7
+                with embedded 20 Hz Python sim core), Driftline (industrial
+                spacecraft prototype) and Verdance (nature builder).
+              </p>
+              <span class="btn-link"
+                >Local Prototypes <i class="fas fa-laptop-code"></i
+              ></span>
             </div>
           </div>
         </div>
